@@ -30,30 +30,27 @@ M3. Catalog and learning plans, with M4 work running beside it. (M2 closed with 
 
 ## In flight
 
-**Session 3 (2026-11-25).** Merged so far this session: the stats rules (`db6b465`). Only `main` is on the remote; every branch below is local.
+**Session 3 (2026-11-25).** Merged so far this session: the stats rules (`db6b465`), SAN-134 the lost "Settings…" request (`89c87ab`), and the M3 core, SAN-120 to SAN-123 (`ea88274`, three review rounds). Only `main` is on the remote; every branch below is local.
 
 | Issue | What | Branch (worktree) | State |
 | --- | --- | --- | --- |
-| SAN-134 | Lead: "Settings…" right after "Open ParaLeet" left the window on Today (a lost request while the window opens; in main since M2) | `lead/navigate-race` at `c08da91` (`.claude/worktrees/agent-ab3ac71efafc0b677`), off main | 959 unit tests pass; the new end-to-end test failed before the fix and passes after. UI and end-to-end suites running; with a fresh reviewer. **Merge first: the M3 branch is rebased on it** |
-| SAN-120 to SAN-123 (M3 core) | Lead: plan rules, migration 003, `llm`, plan services, the sealed API key, bridge methods, plain errors across the bridge | `lead/m3-plan-core` at `7286b10` (`.claude/worktrees/lead-m3`) | Review round 1 **blocked** on one defect: the launch check gave the graduation cap for a plan finished with Again. Fixed in `7286b10` with tests (a finished plan stores `finished_from_attempt`; migration 003 changed, which is allowed because it is not in main). 1056 unit tests pass. **To do: rebase on main after SAN-134 merges; run check, UI and end-to-end; fresh reviewer (round 2); merge** |
-| SAN-124, step 2 | Lead: the `getStats` bridge method, service, mock scenarios `stats-year` and `stats-fails`; a day's count is now different problems, not attempts | `lead/san-124-stats-bridge` at `8dce8f6` (`.claude/worktrees/lead-m4`), stacked on M3 core | 1059 unit tests pass. **To do after M3 core merges: rebase, suites, fresh reviewer, merge** |
-| SAN-124, step 3 | Worker: the Stats screen | `worker/san-124-stats-screen`, based on `lead/san-124-stats-bridge` `8dce8f6` | Worker running |
-| SAN-130 | Worker: the Plan screen | `worker/san-130-plan-screen`, based on `lead/m3-plan-core` `f443f0e` | Worker running |
-| SAN-131 | Worker: "Learning plans" in Settings (the key, the model); the same worker gets the "Data" group next | `worker/san-131-settings-plans`, based on `lead/m3-plan-core` `f443f0e` | Worker running |
-| SAN-132 | Lead: export and import, data layer only (`src/data/transfer.ts`) | `lead/san-132-export-import` at `3d137c5`, stacked on M3 core `f443f0e`, checked out nowhere | Not ready: services, bridge, main wiring, mock, end-to-end test and decision 0017 are still to do (see Cold start) |
+| SAN-124, step 2 | Lead: the `getStats` bridge method, service, mock scenarios | `lead/san-124-stats-bridge` at `1099cfd` (`.claude/worktrees/lead-m4`), on main | **Review passed.** Suites running. Merge when green |
+| SAN-131 | Worker: "Learning plans" in Settings (the key, the model) | `worker/san-131-settings-plans` at `f168456` (`.claude/worktrees/agent-a1872a23e2bd011b5`), stacked on the stats bridge | **Review passed (round 2).** Suites running. Merge after the stats bridge. The same worker gets the "Data" group next |
+| SAN-124, step 3 | Worker: the Stats screen | `worker/san-124-stats-screen` at `bbf24f6` (`.claude/worktrees/agent-a50ce7a2eafcd8d45`), based on the old stats bridge `8dce8f6` | The screen passed review; keyboard use was added afterwards and is with a reviewer. To do: `git rebase --onto main 8dce8f6` in its worktree, suites, merge |
+| SAN-130 | Worker: the Plan screen | `worker/san-130-plan-screen` at `3cc7b40` (`.claude/worktrees/agent-a5a3d15bdbcd7d43f`), based on old M3 `f443f0e` | Round 1 blocked (activating a draft archived the active plan without asking); fixed; round 2 with a reviewer. To do: `git rebase --onto main f443f0e`, suites, merge |
+| SAN-123 (rest) | Worker: step 4 of the first-launch flow, the optional API key | `worker/san-123-onboarding-key`, on main `ea88274` | Worker running. It edits `tests/e2e/onboarding.spec.ts` without running it: the lead runs the end-to-end suite |
+| SAN-132 | Lead: export and import: services, six bridge methods, the launch-time swap, mock, tests, decision 0017 (data part) | `lead/san-132-export-import` at `2b84e9b`, checked out nowhere, based on the old stats bridge `cf49075` | 1093 unit tests and its two end-to-end tests pass. With a reviewer. To do: `git rebase --onto main cf49075` (in a worktree with it checked out), suites, merge; then brief the Settings worker for the "Data" group (mock scenarios `data-*` exist) |
+| SAN-125 | Lead: the `.dmg` (electron-builder, universal, ad hoc signed), the icon drawn from Para, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` at `23f0e2f` (`.claude/worktrees/agent-ab3ac71efafc0b677`), based on old M3 `e72f6de` | `npm run dist` builds `dist/ParaLeet-0.1.0.dmg`; `npm run dist:check` passed 14 of 14 on the packaged app. To do: start the Intel half under Rosetta once (give it 40 seconds, no test suite running); rebase on main; send the import-at-launch messages to the log too once SAN-132 is in; suites; reviewer; merge |
 
-Worker branches sit on lead branches that will be rebased. After a base merges: `git rebase --onto main <old base commit> <worker branch>`, run inside the worktree that has the branch checked out.
+After everything above: tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` for Plan, Stats, Settings and the first-launch flow; screenshot sheets on the Linear issues; a small polish branch for the M3 round 3 notes (an empty model answer; "did not accept the request" wording; `toPlanView` taking section progress from core).
 
-Leftovers that are not work in flight: `lead/m2-contract` (superseded; delete after a look), `worktree-agent-ab3ac71efafc0b677` and `worker/san-124-stats` (merged; delete).
+Leftovers that are not work in flight: `lead/m2-contract` (superseded; delete after a look), `worktree-agent-*` branches, and merged branches (`worker/san-124-stats`, `lead/navigate-race`, `lead/m3-plan-core`). The Plan screen worker left a preview server running once (`npm run dev:ui`, pid 45616) and later said it stopped it.
 
 ## Next
 
-1. Merge SAN-134, then M3 core (round 2 review), then the stats bridge. One end-to-end run at a time on this Mac.
-2. As workers report: go down the criteria, look at their screenshots, run the merge gate, fresh reviewer, merge. Rebase each worker branch on main first.
-3. The lead adds step 4 of the first-launch flow (the optional API key; design section 10), ticks the M3 checklist in `docs/PRD.md`, and updates `docs/design-references.md` ("as built" notes for Plan, Stats and Settings).
-4. Finish SAN-132 (export and import services), then send the Settings worker the "Data" group.
-5. SAN-125: the `.dmg`, the install note, the log file, and the checks in the packaged app.
-6. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; and the hand checks under "Notes for the owner".
+1. Merge in this order, one end-to-end run at a time: stats bridge, SAN-131, Stats screen, Plan screen, SAN-132, the onboarding key step, the "Data" group, SAN-125.
+2. For each worker branch: rebase on main inside its worktree, `npm ci` if dependencies changed, check, UI and end-to-end suites to log files with exit codes, a fresh reviewer after any change, then `git merge --no-ff` from the main checkout (check it is on `main` first).
+3. When everything is merged and the suites pass on main (run `npm ci` in the main checkout first: its `node_modules` predates the Anthropic SDK), write DONE at the top of this file with how to run and install. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; the packaged-app check switched a real login item on and off again; and the hand checks under "Notes for the owner".
 
 ## Cold start: what is not written down anywhere else
 
