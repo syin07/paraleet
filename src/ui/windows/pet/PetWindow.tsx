@@ -109,7 +109,7 @@ export function PetWindow() {
     const state = release();
     if (state && !state.dragging) {
       sawGreeting();
-      void api().showMainWindow({ screen: null });
+      void api().showCard({ anchor: 'pet' });
     }
   }
 
@@ -144,7 +144,7 @@ export function PetWindow() {
         type="button"
         data-hit
         data-testid="pet-bird"
-        aria-label="Para. Click to open ParaLeet, drag to move."
+        aria-label="Para. Click to open today's card, drag to move."
         className="block size-32 cursor-grab touch-none border-0 bg-transparent p-0 outline-none active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

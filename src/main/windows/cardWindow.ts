@@ -92,7 +92,7 @@ export class CardWindowController {
       show: false,
       frame: false,
       transparent: true,
-      hasShadow: false,
+      hasShadow: true,
       resizable: false,
       movable: false,
       minimizable: false,
