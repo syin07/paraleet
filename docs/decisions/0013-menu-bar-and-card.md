@@ -18,6 +18,8 @@ The PRD asks for a tiny bird head in the menu bar whose expression matches the m
 
 5. **The card takes the keyboard.** The user just clicked Para or the icon, and the report form needs typing, so the card is shown and focused like any menu bar popover. It closes when it loses focus, when its page asks (`hideCard`), or when it is asked for again from the same place. Asking from the other place moves it there.
 
+   A click on the icon while the card is open reaches macOS first as "the card lost focus" and the app second as "the icon was clicked". The card remembers that it just closed by losing focus, and a toggle from the same place within a third of a second does nothing, so the click closes the card instead of closing and reopening it.
+
 6. **Placement is pure geometry.** `placePopover` in `src/main/windows/placement.ts` centres the card on its anchor (the bird's box, or the icon's bounds), above the bird or below the icon, flips sides when it does not fit, and keeps it inside the work area of the screen the anchor is on.
 
 7. **Closing answers first.** `hideCard` destroys the window on the next turn of the event loop, so the page's own request gets its answer before the page is gone.

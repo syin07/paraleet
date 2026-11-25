@@ -16,6 +16,8 @@ import { placePopover, workAreaFor, type Rect, type Size } from './placement';
 
 /** The size the card opens at, before its page has measured itself. */
 export const CARD_DEFAULT_SIZE: Size = { width: CARD_WIDTH, height: 240 };
+/** A toggle this soon after the card closed by losing focus is the same click that closed it. */
+const REOPEN_GUARD_MS = 350;
 /** If the page never reports its size, show the card anyway after this long. */
 const SHOW_FALLBACK_MS = 600;
 
@@ -32,6 +34,8 @@ export class CardWindowController {
   private size: Size = CARD_DEFAULT_SIZE;
   private shown = false;
   private showTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Where and when the card last closed because it lost focus. */
+  private blurClose: { anchor: CardAnchor; at: number } | null = null;
 
   constructor(
     private readonly anchors: CardAnchors,
@@ -41,6 +45,15 @@ export class CardWindowController {
 
   /** Opens the card at `anchor`. Asking again from the same place closes it. */
   toggle(anchor: CardAnchor): void {
+    // A click on the menu bar icon or the bird while the card is open first takes the card's
+    // focus away, which closes it, and then arrives here. That click meant "close": do not
+    // open the card again.
+    const closedByThisClick =
+      this.blurClose !== null &&
+      this.blurClose.anchor === anchor &&
+      performance.now() - this.blurClose.at < REOPEN_GUARD_MS;
+    this.blurClose = null;
+    if (closedByThisClick) return;
     if (this.current() && this.anchor === anchor) this.hide();
     else this.show(anchor);
   }
@@ -81,7 +94,9 @@ export class CardWindowController {
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     // A popover: it goes away when the user clicks anywhere else.
     window.on('blur', () => {
-      if (this.window === window && this.shown) this.hide();
+      if (this.window !== window || !this.shown) return;
+      this.blurClose = { anchor, at: performance.now() };
+      this.hide();
     });
     window.on('closed', () => {
       if (this.window === window) this.forget();

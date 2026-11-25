@@ -160,7 +160,13 @@ function start(): void {
       showPetMenu: () => pet.showMenu(),
       showCard: (anchor) => card.toggle(anchor),
       // Closed a moment later, so the card's own request is answered before its window is gone.
-      hideCard: () => void setTimeout(() => card.hide(), 0),
+      // It closes the card that asked, even if another one has been opened in the meantime.
+      hideCard: () => {
+        const asking = card.current();
+        setTimeout(() => {
+          if (asking !== null && card.current() === asking) card.hide();
+        }, 0);
+      },
       setCardSize: (width, height) => card.setSize(width, height),
     },
     notifyChanged: () => {
@@ -241,12 +247,21 @@ function start(): void {
   const dayWatcher = createDayWatcher(ctx);
   const moodWatcher = createMoodWatcher(ctx);
   // One tick does everything that depends on the clock. Long timers are not trusted (PRD section 9).
+  // Each step is guarded: one that fails is logged and must not stop the others, the next tick,
+  // or the main window from opening.
+  const step = (what: string, run: () => void): void => {
+    try {
+      run();
+    } catch (error) {
+      console.error(`ParaLeet could not ${what}:`, error);
+    }
+  };
   const tick = (): void => {
-    dayWatcher.check();
+    step('check the day', () => dayWatcher.check());
     // A reminder time passing, night falling or a celebration ending changes how Para looks.
-    moodWatcher.check();
-    pet.sync();
-    tray.sync();
+    step("check Para's mood", () => moodWatcher.check());
+    step('update the pet window', () => pet.sync());
+    step('update the menu bar icon', () => tray.sync());
   };
   tick();
   setInterval(tick, TICK_MS);

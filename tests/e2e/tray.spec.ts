@@ -107,7 +107,23 @@ test('the menu bar icon opens the compact card and offers a menu', async () => {
     await expect.poll(async () => (await running?.card())?.visible).toBe(true);
     await running.blurCard();
     await expect.poll(async () => (await running?.card())?.exists).toBe(false);
+    // A click on the icon while the card is open takes the card's focus first and reaches the app
+    // second. That click meant "close": the card must not pop straight back open.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    await running.blurCard();
+    await running.clickTray();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect((await running.card()).exists).toBe(false);
+    // The next click, a moment later, opens it as usual.
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.exists).toBe(false);
+
     // But losing focus before it has even appeared does not kill it: it still opens.
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await running.blurCard(true);
     await expect.poll(async () => (await running?.card())?.visible).toBe(true);
     await running.clickTray();
