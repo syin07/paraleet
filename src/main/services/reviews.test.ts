@@ -195,6 +195,17 @@ describe('retiring and resetting a card', () => {
     expect(candidates.reviews.map((item) => item.problem.id)).toEqual([id]);
   });
 
+  it('promises no next review on the report form for a retired card', async () => {
+    app = createTestApp();
+    const id = (await app.handlers.getToday(undefined)).assignment?.problem.id ?? 0;
+    await report(id, 'again');
+    expect((await app.handlers.getReportContext({ problemId: id })).nextReviewInDays).not.toBeNull();
+    await app.handlers.retireCard({ problemId: id });
+    expect((await app.handlers.getReportContext({ problemId: id })).nextReviewInDays).toBeNull();
+    app.clock.set(noonLA('2026-11-26'));
+    expect((await report(id, 'good')).nextReviewDay).toBeNull();
+  });
+
   it('says so when the problem has no card yet', async () => {
     app = createTestApp();
     const id = (await app.handlers.getToday(undefined)).assignment?.problem.id ?? 0;

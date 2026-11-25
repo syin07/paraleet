@@ -5,7 +5,18 @@ const UI_PORT = uiPort();
 
 // The browser-only UI server is needed by the `ui` project only. Skipping it for
 // `--project=e2e` keeps end-to-end runs fast and free of port clashes between worktrees.
-const onlyE2E = process.argv.includes('--project=e2e');
+function requestedProjects(argv: readonly string[]): string[] {
+  const names: string[] = [];
+  argv.forEach((arg, index) => {
+    if (arg.startsWith('--project=')) names.push(arg.slice('--project='.length));
+    else if (arg === '--project' && argv[index + 1]) names.push(argv[index + 1] as string);
+  });
+  return names;
+}
+const projects = requestedProjects(process.argv);
+// Skip the server only when e2e is the only project asked for. With no project named, or with
+// `ui` among them, it is started.
+const onlyE2E = projects.length > 0 && projects.every((name) => name === 'e2e');
 
 // Two projects:
 //   ui  - the renderer in a browser against the mock bridge (fast; used for screen work and screenshots)

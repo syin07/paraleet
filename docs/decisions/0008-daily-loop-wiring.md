@@ -14,7 +14,9 @@ M1's pieces were built separately: day and streak rules, the scheduler, the assi
 - **Swap rules.** A swap is allowed only to one of the offered candidates (the other due reviews, then the next plan problems), and not once today's problem is done. A swap is stored with the reason `user_swap`, which also breaks the run of three review days that gives the plan a turn. The app cannot tell a review-for-review swap from any other, and the reason list is fixed by the PRD.
 - **Any attempt feeds the pet.** Quick-logging a different problem marks the day fed but leaves today's assignment open as an optional extra.
 - **Reconcile at launch.** `reconcile()` runs once before any window opens. It recomputes the streak and totals from the attempts and corrects the stored values if they differ, and it rebuilds review cards for problems that have attempts but no card by replaying their attempts through the scheduler. It never changes attempts, and it does nothing when the data already agrees. It logs one line when it had to fix something.
-- **The scheduler uses the real ParaLeet day**, from the clock. The streak uses `effectiveToday`, which can hold the day at the last fed day after a move to an earlier time zone. The two can differ by a day in that one case, which only moves a due date by a day.
+- **The scheduler uses the real ParaLeet day**, from the clock. The streak uses `effectiveToday`, which can hold the day at the last fed day after a move to an earlier time zone. The two can differ by a day in that one case, which only moves a due date by a day: a problem rated Again right after such a move can show as due again on the app's same "today".
+- **A reconcile failure never blocks launch.** It runs in one transaction, so a failure changes nothing; the error is logged and the app opens with the data as stored.
+- **A retired card promises no review.** The report form shows no "next review" line for it.
 - **Links open by ID.** The UI asks main to open a problem or a saved solution link by problem ID; main opens the stored link.
 
 ## Alternatives rejected

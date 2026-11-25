@@ -32,11 +32,14 @@ export function schedulerOptions(moment: Moment): SchedulerOptions {
 export function getReportContext(ctx: AppContext, problemId: number): ReportContext {
   const problem = requireProblem(ctx.db, problemId);
   const moment = currentMoment(ctx);
+  const card = getCard(ctx.db, problemId);
   return {
     problem: toSummary(problem),
     kind: countAttemptsForProblem(ctx.db, problemId) === 0 ? 'first_solve' : 'review',
     hasKeyInsight: getNotes(ctx.db, problemId).keyInsight !== null,
-    nextReviewInDays: previewIntervals(getCard(ctx.db, problemId), moment.now, schedulerOptions(moment)),
+    // A retired card is never due again, so the form promises no next review for it.
+    nextReviewInDays:
+      card?.status === 'retired' ? null : previewIntervals(card, moment.now, schedulerOptions(moment)),
   };
 }
 

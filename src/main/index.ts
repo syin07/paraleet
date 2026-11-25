@@ -84,11 +84,17 @@ function start(): void {
 
   // Attempts are the source of truth: bring the stored streak, totals and review cards in line
   // with them before anything is shown.
-  const repaired = reconcile(ctx);
-  if (repaired.petFactsRepaired || repaired.cardsRebuilt > 0) {
-    console.warn(
-      `ParaLeet reconciled its data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt.`,
-    );
+  try {
+    const repaired = reconcile(ctx);
+    if (repaired.petFactsRepaired || repaired.cardsRebuilt > 0) {
+      console.warn(
+        `ParaLeet reconciled its data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt.`,
+      );
+    }
+  } catch (error) {
+    // The self-check runs in one transaction, so a failure changes nothing. The app is still
+    // usable with the data as stored; never leave the user with no window over this.
+    console.error('ParaLeet could not reconcile its data at launch:', error);
   }
 
   // The bridge answers only the main frame of the app's own windows, showing the app's own page.
