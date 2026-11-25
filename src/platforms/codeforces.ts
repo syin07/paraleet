@@ -21,11 +21,11 @@ export const CODEFORCES_HOSTS: readonly string[] = [
 const ID = /^([1-9]\d*)([A-Z]\d?)$/;
 const INDEX = '([A-Za-z]\\d?)';
 const PATHS = [
-  new RegExp(`^/problemset/problem/(\\d+)/${INDEX}/?$`),
-  new RegExp(`^/problemset/gymProblem/(\\d+)/${INDEX}/?$`),
-  new RegExp(`^/contest/(\\d+)/problem/${INDEX}/?$`),
-  new RegExp(`^/gym/(\\d+)/problem/${INDEX}/?$`),
-  new RegExp(`^/group/[^/]+/contest/(\\d+)/problem/${INDEX}/?$`),
+  new RegExp(`^/problemset/problem/(\\d+)/${INDEX}/*$`),
+  new RegExp(`^/problemset/gymProblem/(\\d+)/${INDEX}/*$`),
+  new RegExp(`^/contest/(\\d+)/problem/${INDEX}/*$`),
+  new RegExp(`^/gym/(\\d+)/problem/${INDEX}/*$`),
+  new RegExp(`^/group/[^/]+/contest/(\\d+)/problem/${INDEX}/*$`),
 ];
 
 /** Contest numbers from here up are gym contests, which have no problemset page. */

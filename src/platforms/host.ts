@@ -1,9 +1,18 @@
 /**
- * The URL's hostname without a single trailing dot. `URL` keeps "leetcode.com." as written, but it
- * is the same site, so every host check and the "Other" cleaning go through this one helper.
+ * The URL's hostname without any trailing dots. `URL` keeps "leetcode.com." (and even
+ * "leetcode.com..") as written, but it is the same site, so every host check and the "Other"
+ * cleaning go through this one helper.
  */
 export function hostnameOf(url: URL): string {
-  return url.hostname.endsWith('.') ? url.hostname.slice(0, -1) : url.hostname;
+  let end = url.hostname.length;
+  while (end > 0 && url.hostname[end - 1] === '.') end--;
+  return url.hostname.slice(0, end);
+}
+
+/** True when the host has no empty label (`a..b.com`, `.example.com`) and is not empty: such a link can never open. */
+export function hasWellFormedHost(url: URL): boolean {
+  const host = hostnameOf(url);
+  return host !== '' && host.split('.').every((label) => label !== '');
 }
 
 /** Strips leading zeros from a run of digits; null when the number is zero (no such problem). */

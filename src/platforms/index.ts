@@ -2,7 +2,7 @@
 import type { Platform } from '../core/types';
 import { CODEFORCES_HOSTS, codeforcesAdapter } from './codeforces';
 import { CSES_HOSTS, csesAdapter } from './cses';
-import { hostnameOf } from './host';
+import { hasWellFormedHost, hostnameOf } from './host';
 import { LEETCODE_HOSTS, leetcodeAdapter } from './leetcode';
 import { otherAdapter } from './other';
 import type { PlatformAdapter, RecognizedUrl } from './types';
@@ -44,7 +44,7 @@ const NOT_A_LINK: RecognizedUrl = { ok: false, reason: 'That does not look like 
  */
 function looksLikeAddress(text: string): boolean {
   let authority = (text.split(/[/?#]/)[0] ?? '').replace(/^.*@/, '').replace(/:\d*$/, '');
-  if (authority.endsWith('.')) authority = authority.slice(0, -1);
+  while (authority.endsWith('.')) authority = authority.slice(0, -1);
   const labels = authority.split('.');
   if (labels.some((label) => label === '')) return false;
   return /^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/i.test(labels[labels.length - 1]!);
@@ -69,6 +69,8 @@ export function recognizeUrl(text: string): RecognizedUrl {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return { ok: false, reason: 'Only http and https links are supported.' };
   }
+  // Applies with or without a scheme: a host with an empty label can never open.
+  if (!hasWellFormedHost(url)) return NOT_A_LINK;
   for (const { adapter } of REAL_PLATFORMS) {
     const platformId = adapter.parseUrl(url);
     if (platformId !== null) {

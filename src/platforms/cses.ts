@@ -8,7 +8,7 @@ export const CSES_HOSTS: readonly string[] = ['cses.fi', 'www.cses.fi'];
 // No leading zeros and not zero, so one task has one ID.
 const ID = /^[1-9]\d*$/;
 // The task page and its sibling pages (stats, submit, ...) all name the same task.
-const PATH = /^\/problemset\/(?:task|stats|submit|hack|model|view)\/(\d+)\/?$/;
+const PATH = /^\/problemset\/(?:task|stats|submit|hack|model|view)\/(\d+)\/*$/;
 
 // CSES's own section names (lower case), read from https://cses.fi/problemset/. "General",
 // "Advanced Techniques", "Interactive Problems" and the two "Additional Problems" sections have no
