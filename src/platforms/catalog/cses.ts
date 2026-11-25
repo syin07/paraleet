@@ -1,6 +1,5 @@
 // Turns the HTML of https://cses.fi/problemset/ into catalog entries. Pure.
 // Only the task list is read: section name, task link, title and the accepted count in the listing.
-import { z } from 'zod';
 import { csesAdapter } from '../cses';
 import { cleanTitle, type CatalogEntry, type CatalogTransform, type SkippedProblem } from './types';
 
@@ -16,7 +15,8 @@ function decodeEntities(text: string): string {
 
 /** Tasks in listing order: sections top to bottom, and each section's tasks in CSES's own order. */
 export function transformCses(listing: unknown): CatalogTransform {
-  const html = z.string().parse(listing);
+  if (typeof listing !== 'string') throw new Error('CSES did not send a page');
+  const html = listing;
   const skipped: SkippedProblem[] = [];
   const seen = new Set<string>();
   const entries: CatalogEntry[] = [];

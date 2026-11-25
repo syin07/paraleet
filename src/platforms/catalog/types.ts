@@ -29,6 +29,15 @@ export interface CatalogTransform {
   skipped: SkippedProblem[];
 }
 
+/** The transforms read untyped input by hand: `platforms` may not import a schema library. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function describeRow(row: unknown): string {
+  return JSON.stringify(row)?.slice(0, 60) ?? 'unreadable row';
+}
+
 /** Titles come from web pages and APIs; collapse runs of white space and trim. */
 export function cleanTitle(title: string): string {
   return title.replace(/\s+/g, ' ').trim();

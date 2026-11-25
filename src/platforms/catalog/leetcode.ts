@@ -1,25 +1,45 @@
 // Turns the question list from LeetCode's GraphQL endpoint into catalog entries. Pure.
 // The list carries no statement text and the script never asks for any.
-import { z } from 'zod';
 import { leetcodeAdapter } from '../leetcode';
-import { cleanTitle, type CatalogEntry, type CatalogTransform, type SkippedProblem } from './types';
+import {
+  cleanTitle,
+  describeRow,
+  isRecord,
+  type CatalogEntry,
+  type CatalogTransform,
+  type SkippedProblem,
+} from './types';
 
-const questionSchema = z.object({
-  questionFrontendId: z.string(),
-  title: z.string(),
-  titleSlug: z.string(),
-  difficulty: z.string(),
-  isPaidOnly: z.boolean(),
-  topicTags: z.array(z.object({ name: z.string() })),
-  // A JSON string such as {"totalAcceptedRaw": 24211566, ...}.
-  stats: z.string().nullish(),
-});
+interface Question {
+  questionFrontendId: string;
+  title: string;
+  titleSlug: string;
+  difficulty: string;
+  isPaidOnly: boolean;
+  tags: string[];
+  stats: unknown;
+}
 
-function acceptedCount(stats: string | null | undefined): number | null {
-  if (!stats) return null;
+function readQuestion(raw: unknown): Question | null {
+  if (!isRecord(raw)) return null;
+  const { questionFrontendId, title, titleSlug, difficulty, isPaidOnly, topicTags, stats } = raw;
+  if (typeof questionFrontendId !== 'string' || typeof title !== 'string' || typeof titleSlug !== 'string') return null;
+  if (typeof difficulty !== 'string' || typeof isPaidOnly !== 'boolean' || !Array.isArray(topicTags)) return null;
+  const tags: string[] = [];
+  for (const tag of topicTags as unknown[]) {
+    if (!isRecord(tag) || typeof tag.name !== 'string') return null;
+    tags.push(tag.name);
+  }
+  return { questionFrontendId, title, titleSlug, difficulty, isPaidOnly, tags, stats };
+}
+
+/** `stats` is a JSON string such as {"totalAcceptedRaw": 24211566, ...}. */
+function acceptedCount(stats: unknown): number | null {
+  if (typeof stats !== 'string') return null;
   try {
-    const parsed = z.object({ totalAcceptedRaw: z.number().int().min(0) }).safeParse(JSON.parse(stats));
-    return parsed.success ? parsed.data.totalAcceptedRaw : null;
+    const parsed: unknown = JSON.parse(stats);
+    const accepted = isRecord(parsed) ? parsed.totalAcceptedRaw : undefined;
+    return typeof accepted === 'number' && Number.isInteger(accepted) && accepted >= 0 ? accepted : null;
   } catch {
     return null;
   }
@@ -38,17 +58,17 @@ export function compareLeetcode(
 
 /** `listing` is the list of question objects from all pages, in any order. */
 export function transformLeetcode(listing: unknown): CatalogTransform {
-  const rows = z.array(z.unknown()).parse(listing);
+  if (!Array.isArray(listing)) throw new Error('LeetCode did not send a question list');
+  const rows = listing as unknown[];
   const skipped: SkippedProblem[] = [];
   const seen = new Set<string>();
   const entries: CatalogEntry[] = [];
   for (const raw of rows) {
-    const parsed = questionSchema.safeParse(raw);
-    if (!parsed.success) {
-      skipped.push({ what: JSON.stringify(raw).slice(0, 60), reason: 'unreadable row' });
+    const question = readQuestion(raw);
+    if (!question) {
+      skipped.push({ what: describeRow(raw), reason: 'unreadable row' });
       continue;
     }
-    const question = parsed.data;
     const slug = question.titleSlug;
     if (question.isPaidOnly) skipped.push({ what: slug, reason: 'paid-only' });
     else if (!leetcodeAdapter.isValidId(slug)) skipped.push({ what: slug, reason: 'malformed slug' });
@@ -58,7 +78,6 @@ export function transformLeetcode(listing: unknown): CatalogTransform {
     } else if (seen.has(slug)) skipped.push({ what: slug, reason: 'duplicate' });
     else {
       seen.add(slug);
-      const sourceTags = question.topicTags.map((tag) => tag.name);
       entries.push({
         platform: 'leetcode',
         platformId: slug,
@@ -67,8 +86,8 @@ export function transformLeetcode(listing: unknown): CatalogTransform {
         url: leetcodeAdapter.buildUrl(slug),
         difficultyRaw: question.difficulty,
         difficultyNorm: leetcodeAdapter.normalizeDifficulty(question.difficulty),
-        topics: leetcodeAdapter.mapTags(sourceTags),
-        sourceTags,
+        topics: leetcodeAdapter.mapTags(question.tags),
+        sourceTags: question.tags,
         solvedCount: acceptedCount(question.stats),
       });
     }

@@ -1,8 +1,11 @@
+import catalogCodeforces from '../../seed/catalog-codeforces.json';
+import catalogCses from '../../seed/catalog-cses.json';
+import catalogLeetcode from '../../seed/catalog-leetcode.json';
 import starterSeed from '../../seed/starter.json';
 import type { IsoInstant } from '../core/types';
 import { Db } from './db';
 import { migrate, type MigrationResult } from './migrate';
-import { loadStarterSeed } from './seed';
+import { loadCatalogSeed, loadStarterSeed } from './seed';
 
 export { Db } from './db';
 export { migrate, NewerDatabaseError } from './migrate';
@@ -21,6 +24,8 @@ export function openDatabase(path: string, now: IsoInstant): OpenResult {
   try {
     const migration = migrate(db);
     loadStarterSeed(db, starterSeed, now);
+    // Cheap on a normal launch: each file is skipped after one query unless it is newer.
+    for (const catalog of [catalogLeetcode, catalogCses, catalogCodeforces]) loadCatalogSeed(db, catalog, now);
     return { db, migration };
   } catch (error) {
     db.close();

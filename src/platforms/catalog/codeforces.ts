@@ -1,22 +1,14 @@
 // Turns the response of https://codeforces.com/api/problemset.problems into catalog entries.
 // Pure: no network, no clock. The app will reuse this to refresh its catalog on demand.
-import { z } from 'zod';
 import { codeforcesAdapter } from '../codeforces';
-import { cleanTitle, type CatalogEntry, type CatalogTransform, type SkippedProblem } from './types';
-
-const problemSchema = z.object({
-  contestId: z.number().int(),
-  index: z.string(),
-  name: z.string(),
-  type: z.string(),
-  rating: z.number().int().optional(),
-  tags: z.array(z.string()).default([]),
-});
-const statisticSchema = z.object({ contestId: z.number().int(), index: z.string(), solvedCount: z.number().int() });
-const responseSchema = z.object({
-  status: z.literal('OK'),
-  result: z.object({ problems: z.array(z.unknown()), problemStatistics: z.array(z.unknown()) }),
-});
+import {
+  cleanTitle,
+  describeRow,
+  isRecord,
+  type CatalogEntry,
+  type CatalogTransform,
+  type SkippedProblem,
+} from './types';
 
 /**
  * Only problems solved at least this many times are kept: the well-known ones. Chosen on
@@ -33,24 +25,60 @@ export function compareCodeforces(a: { platformId: string }, b: { platformId: st
   return Number(contestA) - Number(contestB) || (indexA < indexB ? -1 : indexA > indexB ? 1 : 0);
 }
 
-export function transformCodeforces(listing: unknown, minSolved: number = CODEFORCES_MIN_SOLVED): CatalogTransform {
-  const { result } = responseSchema.parse(listing);
+interface ListedProblem {
+  contestId: number;
+  index: string;
+  name: string;
+  type: string;
+  rating: number | undefined;
+  tags: string[];
+}
+
+function readProblem(raw: unknown): ListedProblem | null {
+  if (!isRecord(raw)) return null;
+  const { contestId, index, name, type, rating, tags } = raw;
+  if (typeof contestId !== 'number' || !Number.isInteger(contestId)) return null;
+  if (typeof index !== 'string' || typeof name !== 'string' || typeof type !== 'string') return null;
+  const tagList = tags === undefined ? [] : tags;
+  if (!Array.isArray(tagList) || !tagList.every((tag) => typeof tag === 'string')) return null;
+  return {
+    contestId,
+    index,
+    name,
+    type,
+    rating: typeof rating === 'number' && Number.isInteger(rating) ? rating : undefined,
+    tags: tagList as string[],
+  };
+}
+
+function readSolvedCounts(statistics: unknown[]): Map<string, number> {
   const solved = new Map<string, number>();
-  for (const raw of result.problemStatistics) {
-    const stat = statisticSchema.safeParse(raw);
-    if (stat.success) solved.set(`${stat.data.contestId}${stat.data.index}`, stat.data.solvedCount);
+  for (const raw of statistics) {
+    if (!isRecord(raw)) continue;
+    const { contestId, index, solvedCount } = raw;
+    if (typeof contestId === 'number' && typeof index === 'string' && typeof solvedCount === 'number' && solvedCount >= 0) {
+      solved.set(`${contestId}${index}`, Math.floor(solvedCount));
+    }
   }
+  return solved;
+}
+
+export function transformCodeforces(listing: unknown, minSolved: number = CODEFORCES_MIN_SOLVED): CatalogTransform {
+  const result = isRecord(listing) && listing.status === 'OK' ? listing.result : undefined;
+  if (!isRecord(result) || !Array.isArray(result.problems) || !Array.isArray(result.problemStatistics)) {
+    throw new Error('Codeforces did not send a problem list (expected status "OK" with problems and problemStatistics)');
+  }
+  const solved = readSolvedCounts(result.problemStatistics);
 
   const skipped: SkippedProblem[] = [];
   const seen = new Set<string>();
   const entries: CatalogEntry[] = [];
-  for (const raw of result.problems) {
-    const parsed = problemSchema.safeParse(raw);
-    if (!parsed.success) {
-      skipped.push({ what: JSON.stringify(raw).slice(0, 60), reason: 'unreadable row' });
+  for (const raw of result.problems as unknown[]) {
+    const problem = readProblem(raw);
+    if (!problem) {
+      skipped.push({ what: describeRow(raw), reason: 'unreadable row' });
       continue;
     }
-    const problem = parsed.data;
     const platformId = `${problem.contestId}${problem.index}`;
     if (problem.type !== 'PROGRAMMING') skipped.push({ what: platformId, reason: 'not a programming problem' });
     else if (problem.rating === undefined) skipped.push({ what: platformId, reason: 'no rating' });

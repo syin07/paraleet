@@ -148,24 +148,160 @@ export function listStarterQueue(db: Db): number[] {
     .map((row) => row.id);
 }
 
-/** Finds problems by title, display ID or platform ID. Problems the user has logged come first. */
+/**
+ * Finds problems by title, display ID or platform ID. Best matches first: the exact display or
+ * platform ID, then titles that start with the query, then problems the user has logged, then
+ * the better-known ones (by solved count), then A to Z. Needs `limit`: the catalog is thousands of rows.
+ */
 export function searchProblems(db: Db, query: string, limit: number): Problem[] {
   const trimmed = query.trim();
   if (trimmed === '') return [];
-  const like = `%${trimmed.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+  const escaped = trimmed.replace(/[\\%_]/g, (char) => `\\${char}`);
   return db
     .all<ProblemRow>(
       `SELECT ${prefixed('p')} FROM problems p
        WHERE p.title LIKE :like ESCAPE '\\' OR p.display_id = :exact OR p.platform_id LIKE :like ESCAPE '\\'
        ORDER BY
-         (p.display_id = :exact) DESC,
-         EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id) DESC,
+         -- IS, not =: a missing display ID must count as "no match", not as unknown (which sorts last).
+         (p.display_id IS :exact OR p.platform_id = :exact) DESC,
          (p.title LIKE :prefix ESCAPE '\\') DESC,
+         EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id) DESC,
+         p.solved_count DESC,
          p.title
        LIMIT :limit`,
-      { like, exact: trimmed, prefix: like.slice(1), limit },
+      { like: `%${escaped}%`, exact: trimmed, prefix: `${escaped}%`, limit },
     )
     .map(toProblem);
+}
+
+/** A row of the catalog as the loader sees it: just what it needs to decide between insert, update and fill. */
+export interface CatalogRow {
+  id: number;
+  platformId: string;
+  origin: ProblemOrigin;
+  displayId: string | null;
+  difficultyRaw: string | null;
+  difficultyNorm: DifficultyNorm | null;
+  topics: string[];
+  sourceTags: string[];
+  solvedCount: number | null;
+}
+
+/** Every problem of one platform, keyed by platform ID. One query for the whole catalog file. */
+export function loadCatalogRows(db: Db, platform: Platform): Map<string, CatalogRow> {
+  const rows = db.all<{
+    id: number;
+    platform_id: string;
+    origin: ProblemOrigin;
+    display_id: string | null;
+    difficulty_raw: string | null;
+    difficulty_norm: number | null;
+    topics: string;
+    source_tags: string;
+    solved_count: number | null;
+  }>(
+    `SELECT id, platform_id, origin, display_id, difficulty_raw, difficulty_norm, topics, source_tags, solved_count
+     FROM problems WHERE platform = ?`,
+    [platform],
+  );
+  return new Map(
+    rows.map((row) => [
+      row.platform_id,
+      {
+        id: row.id,
+        platformId: row.platform_id,
+        origin: row.origin,
+        displayId: row.display_id,
+        difficultyRaw: row.difficulty_raw,
+        difficultyNorm: row.difficulty_norm as DifficultyNorm | null,
+        topics: parseJsonArray(row.topics),
+        sourceTags: parseJsonArray(row.source_tags),
+        solvedCount: row.solved_count,
+      },
+    ]),
+  );
+}
+
+export function insertCatalogProblem(db: Db, problem: NewProblem, solvedCount: number | null, now: IsoInstant): void {
+  db.run(
+    `INSERT INTO problems (platform, platform_id, display_id, title, url, difficulty_raw, difficulty_norm,
+       topics, source_tags, solved_count, origin, starter_position, created_at)
+     VALUES (:platform, :platformId, :displayId, :title, :url, :difficultyRaw, :difficultyNorm,
+       :topics, :sourceTags, :solvedCount, 'seed', NULL, :now)`,
+    {
+      platform: problem.platform,
+      platformId: problem.platformId,
+      displayId: problem.displayId,
+      title: problem.title,
+      url: problem.url,
+      difficultyRaw: problem.difficultyRaw,
+      difficultyNorm: problem.difficultyNorm,
+      topics: JSON.stringify(problem.topics),
+      sourceTags: JSON.stringify(problem.sourceTags),
+      solvedCount,
+      now,
+    },
+  );
+}
+
+/** Refreshes a seed row from the catalog. Never touches id, origin, starter position or creation time. */
+export function updateCatalogProblem(db: Db, id: number, problem: NewProblem, solvedCount: number | null): void {
+  db.run(
+    `UPDATE problems SET display_id = :displayId, title = :title, url = :url, difficulty_raw = :difficultyRaw,
+       difficulty_norm = :difficultyNorm, topics = :topics, source_tags = :sourceTags, solved_count = :solvedCount
+     WHERE id = :id`,
+    {
+      id,
+      displayId: problem.displayId,
+      title: problem.title,
+      url: problem.url,
+      difficultyRaw: problem.difficultyRaw,
+      difficultyNorm: problem.difficultyNorm,
+      topics: JSON.stringify(problem.topics),
+      sourceTags: JSON.stringify(problem.sourceTags),
+      solvedCount,
+    },
+  );
+}
+
+/** Gives a user-added row the details it lacks. What the user typed is kept: only empty fields are set. */
+export function fillMissingCatalogFields(
+  db: Db,
+  row: CatalogRow,
+  problem: NewProblem,
+  solvedCount: number | null,
+): boolean {
+  const fillDifficulty = row.difficultyRaw === null && row.difficultyNorm === null;
+  const fillTopics = row.topics.length === 0 && problem.topics.length > 0;
+  const fillTags = row.sourceTags.length === 0 && problem.sourceTags.length > 0;
+  const fillDisplay = row.displayId === null && problem.displayId !== null;
+  const fillSolved = row.solvedCount === null && solvedCount !== null;
+  if (!fillDifficulty && !fillTopics && !fillTags && !fillDisplay && !fillSolved) return false;
+  db.run(
+    `UPDATE problems SET
+       difficulty_raw = CASE WHEN :fillDifficulty THEN :difficultyRaw ELSE difficulty_raw END,
+       difficulty_norm = CASE WHEN :fillDifficulty THEN :difficultyNorm ELSE difficulty_norm END,
+       topics = CASE WHEN :fillTopics THEN :topics ELSE topics END,
+       source_tags = CASE WHEN :fillTags THEN :sourceTags ELSE source_tags END,
+       display_id = CASE WHEN :fillDisplay THEN :displayId ELSE display_id END,
+       solved_count = CASE WHEN :fillSolved THEN :solvedCount ELSE solved_count END
+     WHERE id = :id`,
+    {
+      id: row.id,
+      fillDifficulty: fillDifficulty ? 1 : 0,
+      fillTopics: fillTopics ? 1 : 0,
+      fillTags: fillTags ? 1 : 0,
+      fillDisplay: fillDisplay ? 1 : 0,
+      fillSolved: fillSolved ? 1 : 0,
+      difficultyRaw: problem.difficultyRaw,
+      difficultyNorm: problem.difficultyNorm,
+      topics: JSON.stringify(problem.topics),
+      sourceTags: JSON.stringify(problem.sourceTags),
+      displayId: problem.displayId,
+      solvedCount,
+    },
+  );
+  return true;
 }
 
 export interface LoggedProblem {
