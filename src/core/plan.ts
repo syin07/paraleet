@@ -37,6 +37,17 @@ export const PLAN_MAX_TOPICS = 4;
 /** How many candidates per topic are shown to the model. */
 export const CANDIDATES_PER_TOPIC = 60;
 
+/** The model that writes plans unless the user picks another in Settings (PRD section 7). */
+export const DEFAULT_PLAN_MODEL = 'claude-opus-5-5';
+
+/** Models offered in Settings. Any other model ID can be typed in. */
+export const SUGGESTED_PLAN_MODELS = [
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (recommended)' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (faster, cheaper)' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest, cheapest)' },
+  { id: 'claude-fable-5-2', label: 'Claude Fable 5.2 (most capable, slowest)' },
+] as const;
+
 /** What the user asks for (PRD section 7, steps 1 and 2). */
 export interface PlanRequest {
   topics: TopicId[];

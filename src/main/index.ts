@@ -1,6 +1,6 @@
 // Electron main process: app lifecycle, the database, the bridge and the windows.
 import { randomInt } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { uptime } from 'node:os';
 import {
@@ -9,6 +9,7 @@ import {
   dialog,
   Notification,
   powerMonitor,
+  safeStorage,
   screen,
   shell,
   type MenuItemConstructorOptions,
@@ -17,7 +18,10 @@ import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
 import { getSettings, updateSettings } from '../data/repos/settings';
+import { createAnthropicClient, listModels } from '../llm/anthropicClient';
+import { LlmError } from '../llm/planGenerator';
 import { registerBridge } from './bridge';
+import { API_KEY_FILE_NAME, createSecretStore } from './secrets';
 import { FakeClock, systemClock, type Clock } from './clock';
 import {
   createDayWatcher,
@@ -29,6 +33,7 @@ import {
   sendDueReminder,
   trayState,
   type AppContext,
+  type ModelAccess,
   type Notice,
 } from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
@@ -53,6 +58,27 @@ if (process.env.PARALEET_USER_DATA_DIR) {
 
 /** Until this moment, the app being activated does not open the main window (see the notifier). */
 let quietActivationUntil = 0;
+/**
+ * A model for end-to-end tests: it answers from a JSON file the test writes (an array, consumed
+ * in order), so a test can build answers from the problem IDs it sees in the running app.
+ * Each entry is `{ "plan": <the model's JSON answer> }` or `{ "error": "<message>" }`.
+ */
+function scriptedModels(file: string): ModelAccess {
+  let used = 0;
+  return {
+    client: () => ({
+      complete: async () => {
+        const answers = JSON.parse(readFileSync(file, 'utf8')) as ({ plan?: unknown; error?: string } | undefined)[];
+        const next = answers[used];
+        used += 1;
+        if (!next) throw new LlmError('other', 'The test model has no more answers.');
+        if (typeof next.error === 'string') throw new LlmError('offline', next.error);
+        return { kind: 'json', value: next.plan, text: JSON.stringify(next.plan) };
+      },
+    }),
+    listModels: async () => ['claude-opus-5-5'],
+  };
+}
 
 let mainWindow: BrowserWindow | null = null;
 let petWindow: PetWindowController | null = null;
@@ -199,9 +225,32 @@ function start(): void {
     ctx.notifyChanged();
   }
 
+  // The API key: sealed by the system keychain in the app. End-to-end runs use a stand-in sealer
+  // so they never touch the owner's keychain, and a scripted model so they never use the network.
+  const secrets = createSecretStore(
+    join(userData, API_KEY_FILE_NAME),
+    isE2E
+      ? {
+          available: () => true,
+          seal: (text) => Buffer.from(text, 'utf8').reverse(),
+          open: (sealed) => Buffer.from(sealed).reverse().toString('utf8'),
+        }
+      : {
+          available: () => safeStorage.isEncryptionAvailable(),
+          seal: (text) => safeStorage.encryptString(text),
+          open: (sealed) => safeStorage.decryptString(sealed),
+        },
+  );
+  const models: ModelAccess =
+    isE2E && process.env.PARALEET_E2E_LLM_ANSWERS
+      ? scriptedModels(process.env.PARALEET_E2E_LLM_ANSWERS)
+      : { client: createAnthropicClient, listModels };
+
   const ctx: AppContext = {
     db,
     clock,
+    secrets,
+    models,
     session: newSession(),
     windows: {
       showMain: (target) => showMainWindow(target ? `/${target}` : ''),

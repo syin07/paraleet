@@ -7,17 +7,6 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { LlmError, type LlmAnswer, type LlmClient, type LlmTurn } from './planGenerator';
 
-/** The model used unless the user picks another in Settings. */
-export const DEFAULT_MODEL = 'claude-opus-5-5';
-
-/** Models offered in Settings. Any other model ID can be typed in. */
-export const SUGGESTED_MODELS = [
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (recommended)' },
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (faster, cheaper)' },
-  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest, cheapest)' },
-  { id: 'claude-fable-5-2', label: 'Claude Fable 5.2 (most capable, slowest)' },
-] as const;
-
 /**
  * The answer's shape as sent to the API for structured output. No length or range limits here:
  * the API's schema language has none, and `validatePlanResponse` in core checks everything.

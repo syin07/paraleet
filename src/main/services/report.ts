@@ -17,8 +17,10 @@ import { countAttemptsForProblem, hasSolvedHardProblem, insertAttempt } from '..
 import { getCard, saveCard } from '../../data/repos/cards';
 import { getNotes, saveNotes } from '../../data/repos/notes';
 import { getPet, savePetFacts, saveUnlockedAccessories } from '../../data/repos/pet';
+import { countFinishedPlans } from '../../data/repos/plans';
 import { currentMoment, type AppContext, type Moment } from './context';
 import { knownAccessories } from './pet';
+import { recordPlanAttempt } from './plans';
 import { buildTodayView } from './today';
 import { requireProblem, toSummary } from './views';
 
@@ -76,6 +78,13 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
       notes = saveNotes(ctx.db, { ...notes, keyInsight: input.keyInsight }, attemptedAt);
     }
 
+    // The active plan: the problem's item is done, and its pattern group's name becomes one of
+    // the problem's pattern tags (PRD section 7).
+    const planned = recordPlanAttempt(ctx, problem.id, attemptedAt);
+    if (planned.groupName !== null && !notes.patternTags.includes(planned.groupName)) {
+      notes = saveNotes(ctx.db, { ...notes, patternTags: [...notes.patternTags, planned.groupName] }, attemptedAt);
+    }
+
     const attempt = insertAttempt(ctx.db, {
       problemId: problem.id,
       attemptedAt,
@@ -109,7 +118,7 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
       {
         solvedHardProblem: hasSolvedHardProblem(ctx.db),
         longestStreak: after.longestStreak,
-        plansFinished: 0, // Plans arrive in M3.
+        plansFinished: countFinishedPlans(ctx.db),
       },
       rating,
     );
@@ -119,7 +128,7 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
     const assignment = getAssignment(ctx.db, moment.today);
     if (assignment && assignment.problemId === problem.id) markAssignmentCompleted(ctx.db, moment.today);
 
-    return { attempt, before, after, card, unlocked };
+    return { attempt, before, after, card, unlocked, finishedPlan: planned.finishedPlan };
   });
 
   // Para inspects the report, then eats. Kept in memory only: a restart skips the show.
@@ -147,6 +156,7 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
       growthSolves: after.growthSolves,
     },
     unlocked: outcome.unlocked,
+    finishedPlan: outcome.finishedPlan,
     nextReviewDay:
       outcome.card.status === 'active'
         ? dueDayOf(outcome.card, afterMoment.timeZone, afterMoment.settings.dayBoundaryHour)

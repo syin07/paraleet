@@ -8,6 +8,21 @@ import type { AppContext } from './context';
 import { acknowledgeGreeting, completeOnboarding } from './pet';
 import { skipRemindersAlreadyPassed } from './reminders';
 import {
+  activatePlan,
+  archivePlan,
+  deletePlan,
+  generatePlan,
+  getPlan,
+  getPlanOverview,
+  getPlanSwapOptions,
+  movePlanItem,
+  removeApiKey,
+  removePlanItem,
+  saveApiKey,
+  swapPlanItem,
+  testApiKey,
+} from './plans';
+import {
   addProblem,
   getProblemDetail,
   listLoggedProblems,
@@ -20,8 +35,17 @@ import {
 import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
-export { newSession, type AppContext, type Notice, type SessionState, type WindowPort } from './context';
+export {
+  newSession,
+  type AppContext,
+  type ModelAccess,
+  type Notice,
+  type SecretStore,
+  type SessionState,
+  type WindowPort,
+} from './context';
 export { createMoodWatcher, nextCelebrationStep, trayState } from './pet';
+export { PlanError } from './plans';
 export { reconcile, type ReconcileResult } from './reconcile';
 export { sendDueReminder } from './reminders';
 
@@ -83,6 +107,19 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     hideCard: () => done(() => ctx.windows.hideCard()),
     setCardSize: ({ width, height }) => done(() => ctx.windows.setCardSize(width, height)),
     completeOnboarding: (input) => completeOnboarding(ctx, input, getToday, skipRemindersAlreadyPassed),
+    getPlanOverview: () => getPlanOverview(ctx),
+    generatePlan: (input) => generatePlan(ctx, input),
+    getPlan: ({ planId }) => getPlan(ctx, planId),
+    removePlanItem: (input) => removePlanItem(ctx, input),
+    movePlanItem: (input) => movePlanItem(ctx, input),
+    getPlanSwapOptions: (input) => getPlanSwapOptions(ctx, input),
+    swapPlanItem: (input) => swapPlanItem(ctx, input),
+    activatePlan: ({ planId }) => activatePlan(ctx, planId),
+    archivePlan: ({ planId }) => archivePlan(ctx, planId),
+    deletePlan: ({ planId }) => deletePlan(ctx, planId),
+    saveApiKey: ({ apiKey }) => saveApiKey(ctx, apiKey),
+    removeApiKey: () => removeApiKey(ctx),
+    testApiKey: () => testApiKey(ctx),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

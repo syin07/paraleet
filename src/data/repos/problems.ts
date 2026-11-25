@@ -348,3 +348,45 @@ export function listLoggedProblems(db: Db): LoggedProblem[] {
       card: row.card_status && row.card_due_at ? { status: row.card_status, dueAt: row.card_due_at } : null,
     }));
 }
+
+/** A catalog problem as plan generation sees it. */
+export interface CandidateRow extends Problem {
+  solvedCount: number | null;
+  /** True when the user has attempted it. */
+  solved: boolean;
+}
+
+/**
+ * Every catalog problem on the given platforms that carries `topic`, for choosing plan
+ * candidates. Problems the user added by hand are left out: a plan draws from the catalog only.
+ */
+export function listTopicProblems(db: Db, topic: string, platforms: readonly Platform[]): CandidateRow[] {
+  if (platforms.length === 0) return [];
+  const marks = platforms.map(() => '?').join(', ');
+  return db
+    .all<ProblemRow & { solved_count: number | null; solved: number }>(
+      `SELECT ${prefixed('p')}, p.solved_count AS solved_count,
+              EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id) AS solved
+       FROM problems p
+       WHERE p.origin = 'seed' AND p.platform IN (${marks}) AND p.topics LIKE ? ESCAPE '\\'
+       ORDER BY p.id`,
+      [...platforms, `%"${topic.replace(/[\\%_]/g, (char) => `\\${char}`)}"%`],
+    )
+    .map((row) => ({ ...toProblem(row), solvedCount: row.solved_count, solved: row.solved === 1 }));
+}
+
+/** How many catalog problems carry each topic, per platform. */
+export function countCatalogByTopic(db: Db): { platform: Platform; topics: string[] }[] {
+  return db
+    .all<{ platform: Platform; topics: string }>("SELECT platform, topics FROM problems WHERE origin = 'seed'")
+    .map((row) => ({ platform: row.platform, topics: parseJsonArray(row.topics) }));
+}
+
+/** The problems that have at least one attempt, with the time of the first one. */
+export function listAttemptedProblemTimes(db: Db): { problemId: number; first: IsoInstant; last: IsoInstant }[] {
+  return db
+    .all<{ problem_id: number; first: string; last: string }>(
+      'SELECT problem_id, MIN(attempted_at) AS first, MAX(attempted_at) AS last FROM attempts GROUP BY problem_id',
+    )
+    .map((row) => ({ problemId: row.problem_id, first: row.first, last: row.last }));
+}
