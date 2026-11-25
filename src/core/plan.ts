@@ -121,9 +121,7 @@ export function selectCandidates(
   for (const key of fillOrder) take(buckets.get(key) ?? [], limit - chosen.length);
 
   // Easiest first, best known first within a difficulty; unrated last.
-  return chosen.sort(
-    (a, b) => (a.difficultyNorm ?? 6) - (b.difficultyNorm ?? 6) || byBestKnown(a, b),
-  );
+  return chosen.sort((a, b) => (a.difficultyNorm ?? 6) - (b.difficultyNorm ?? 6) || byBestKnown(a, b));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -235,7 +233,11 @@ export function validatePlanResponse(
       }
     }
 
-    size(section.groups.length, allowed.size >= 6 ? PLAN_SHAPE.groups : { min: 0, max: PLAN_SHAPE.groups.max }, 'pattern groups');
+    size(
+      section.groups.length,
+      allowed.size >= 6 ? PLAN_SHAPE.groups : { min: 0, max: PLAN_SHAPE.groups.max },
+      'pattern groups',
+    );
     const groupNames = new Set<string>();
     for (const group of section.groups) {
       const key = group.name.toLowerCase();
@@ -288,7 +290,11 @@ export function validatePlanRequest(request: PlanRequest): string[] {
   if (request.topics.length > PLAN_MAX_TOPICS) errors.push(`Pick at most ${PLAN_MAX_TOPICS} topics for one plan.`);
   if (new Set(request.topics).size !== request.topics.length) errors.push('A topic is listed twice.');
   if (request.platforms.length === 0) errors.push('Pick at least one platform.');
-  if (!Number.isInteger(request.targetSize) || request.targetSize < PLAN_SIZE_MIN || request.targetSize > PLAN_SIZE_MAX) {
+  if (
+    !Number.isInteger(request.targetSize) ||
+    request.targetSize < PLAN_SIZE_MIN ||
+    request.targetSize > PLAN_SIZE_MAX
+  ) {
     errors.push(`The size must be a whole number from ${PLAN_SIZE_MIN} to ${PLAN_SIZE_MAX}.`);
   }
   return errors;
