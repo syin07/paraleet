@@ -260,9 +260,8 @@ for (const asked of ['/settings', '/today/swap', '/stats']) {
   test(`the flow ends on Today even when ${asked} was asked for during it`, async ({ page }) => {
     await openFlow(page);
     await toReminders(page);
-    await page.evaluate((path) => {
-      window.location.hash = path;
-    }, asked);
+    // As text: the tests are type-checked without the browser's own types.
+    await page.evaluate(`window.location.hash = ${JSON.stringify(asked)}`);
     await expect(flow(page)).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByTestId('screen-today')).toBeVisible();
