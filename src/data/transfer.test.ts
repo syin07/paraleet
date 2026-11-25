@@ -475,7 +475,11 @@ describe('opening the data folder at launch', () => {
     copyFileSync(makeLiar(), join(dataDir, STAGED_IMPORT_FILE_NAME));
     const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
     open.push(opened.db);
-    expect(opened.lastImport).toMatchObject({ status: 'rejected' });
+    // Nothing was there to put back, and the reason does not claim otherwise.
+    expect(opened.lastImport).toEqual({
+      status: 'rejected',
+      reason: 'The imported file could not be opened, so ParaLeet started without it.',
+    });
     expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(0);
   });
 

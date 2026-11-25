@@ -1,0 +1,40 @@
+# How the installer is built: `npm run dist` writes dist/ParaLeet-<version>.dmg.
+# See docs/decisions/0018-installer.md.
+appId: app.paraleet.mac
+productName: ParaLeet
+copyright: Copyright © 2026 Sandy Yin
+
+directories:
+  output: dist
+  buildResources: build
+
+# The build in out/ already holds all the code: third-party packages are bundled into it, so the
+# app ships no node_modules folder.
+files:
+  - out/**
+  - package.json
+  - "!node_modules/**"
+asar: true
+npmRebuild: false
+publish: null
+
+mac:
+  category: public.app-category.education
+  icon: build/icon.icns
+  # One file for both kinds of Mac: Apple silicon and Intel.
+  target:
+    - target: dmg
+      arch:
+        - universal
+  # There is no paid Apple developer certificate. "-" signs ad hoc: enough for the app to start on
+  # Apple silicon, which refuses unsigned code. The first-open warning is covered in docs/INSTALL.md.
+  identity: "-"
+  # The hardened runtime is for notarized apps and breaks an ad hoc signed one.
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  electronLanguages:
+    - en
+
+dmg:
+  title: ParaLeet
+  artifactName: ParaLeet-${version}.${ext}

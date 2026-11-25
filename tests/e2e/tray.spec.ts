@@ -141,7 +141,12 @@ test('the menu bar icon opens the compact card and offers a menu', async () => {
     const birdTop = bird.y + 144;
     const birdBottom = bird.y + 272;
     expect(beside.bounds!.y + beside.bounds!.height <= birdTop || beside.bounds!.y >= birdBottom).toBe(true);
-    await call(fromPet, 'hideCard');
+    // The card closes its own window a moment after it answers. Under load the window can be
+    // gone before the test driver hears the answer; that is the close this step asks for, and the
+    // next line is what checks it.
+    await call(fromPet, 'hideCard').catch((error: unknown) => {
+      if (!/has been closed/.test(String(error))) throw error;
+    });
     await expect.poll(async () => (await running?.card())?.exists).toBe(false);
 
     // Opening it from the other place moves it there instead of closing it.
