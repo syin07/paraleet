@@ -104,6 +104,42 @@ test('not fed, with a problem: the label, the title, the platform, the difficult
   await capture(page, 'card-unfed');
 });
 
+test('a streak of zero is left out', async ({ page }) => {
+  await openCard(page, 'fresh');
+  await expect(page.getByTestId('card-title')).toBeVisible();
+  await expect(page.getByTestId('card-streak')).toHaveCount(0);
+  await expect(card(page)).not.toContainText('day streak');
+});
+
+test('a failed load says so and offers the main window, never a blank card', async ({ page }) => {
+  // The mock is installed by the page itself, so the failure is planted as it lands on `window`.
+  await page.addInitScript(() => {
+    let installed: Record<string, unknown> | undefined;
+    Object.defineProperty(globalThis, 'paraleet', {
+      configurable: true,
+      get: () => installed,
+      set: (value: Record<string, unknown>) => {
+        installed = { ...value, getToday: () => Promise.reject(new Error('The database could not be read')) };
+      },
+    });
+  });
+  await openCard(page);
+  const failed = page.getByTestId('card-failed');
+  await expect(failed).toHaveAttribute('role', 'alert');
+  await expect(failed).toContainText('Something went wrong');
+  await expect(failed).toContainText("Today's problem could not be loaded.");
+  await expect(page.getByTestId('card-title')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'I solved it' })).toHaveCount(0);
+  // The window is as tall as the panel: nothing see-through is left under a short card.
+  const size = await fit(page);
+  const panel = await card(page).boundingBox();
+  expect(size.height).toBe(Math.ceil(panel!.height));
+  await noHorizontalScroll(page);
+  await capture(page, 'card-failed');
+  await page.getByRole('button', { name: 'Open ParaLeet' }).click();
+  expect((await windowCalls(page)).slice(-2)).toEqual(['showMainWindow:', 'hideCard']);
+});
+
 test('"Open problem" opens the problem and leaves the card open', async ({ page }) => {
   await openCard(page);
   await page.getByRole('button', { name: 'Open problem' }).click();

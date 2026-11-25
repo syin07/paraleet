@@ -299,6 +299,7 @@ Mobbin query: `menu bar app popover`, platform web; fallback `today widget with 
 - Fed state: Row 2 shows a green check and "Fed for today", the buttons become one secondary "Log another problem" (opens Today in the main window). With nothing assigned: one line saying any logged problem feeds Para, and a primary "Log a problem".
 - As built: the streak is left out of row 1 while it is zero. The confirmation stays 3s instead of 1.5s when there is news to read (Para grew, an accessory was unlocked). An attempt rated Again says "Para had a nibble."
 - Esc or clicking elsewhere closes it. It never steals focus from other apps until clicked.
+- If today's problem cannot be loaded: "Something went wrong", one muted line, and a secondary "Open ParaLeet". Never a blank card.
 
 **ParaLeet adaptation**
 - Calendar's next event becomes today's problem; "Join" becomes "Open problem"; "I solved it" is the second action.
@@ -365,7 +366,7 @@ Sizes: sm 24px tall, 8px padding, `--text-sm`; md 32px, 12px padding, `--text-ba
 
 **Progress bar**: track `--bg-sunken`, radius 999px, height 6px (inline) or 8px (topic coverage); fill `--accent`; complete at 100% stays `--accent` with a small green check beside the count. Always paired with a tabular "done / total" label in `--text-sm`.
 
-**Segmented rating buttons**: 4 equal cells, 8px gaps, 72px tall (56px in the compact card), radius 8px, `--bg-sunken` with 1px `--border`. Content: label `--text-md` semibold, meaning `--text-xs` muted, shortcut digit top-left. Hover `--surface-raised`. Selected `--accent-subtle`, `--accent-border`, label `--accent`. Single-select, arrow keys move, 1 to 4 select. Generic segmented control (range, size): one 32px container `--bg-sunken` radius 6px, 2px inner padding, segments radius 4px, selected segment `--surface-raised` with `--text-primary`.
+**Segmented rating buttons**: 4 equal cells, 8px gaps, 72px tall (in the compact card: two rows of two, 56px tall, so each meaning fits in two lines), radius 8px, `--bg-sunken` with 1px `--border`. Content: label `--text-md` semibold, meaning `--text-xs` muted, shortcut digit top-left. Hover `--surface-raised`. Selected `--accent-subtle`, `--accent-border`, label `--accent`. Single-select, arrow keys move, 1 to 4 select. Generic segmented control (range, size): one 32px container `--bg-sunken` radius 6px, 2px inner padding, segments radius 4px, selected segment `--surface-raised` with `--text-primary`.
 
 **Modal**: centered, width 480px (forms) or 520px (add problem), max height 80vh with an internal scroll, `--surface`, radius 12px, 1px `--border`, `--shadow-popover`, 24px padding, backdrop `--overlay`. Header title `--text-lg` semibold plus close icon button; footer right-aligned buttons, 8px gap, primary last. Opens with a 200ms fade and 8px rise. Esc closes; focus is trapped.
 

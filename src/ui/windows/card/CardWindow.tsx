@@ -3,7 +3,15 @@
 // The window is exactly as big as this panel: the page measures itself and tells main.
 import { Check, ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { ReportResult, TodayAssignment, TodayView } from '../../../bridge/contract';
+import {
+  CARD_MAX_HEIGHT,
+  CARD_MIN_HEIGHT,
+  CARD_WIDTH,
+  CARD_WIDTH_REPORT,
+  type ReportResult,
+  type TodayAssignment,
+  type TodayView,
+} from '../../../bridge/contract';
 import { api } from '../../bridge';
 import { DifficultyText, PlatformBadge } from '../../components/Badges';
 import { Button } from '../../components/Button';
@@ -13,10 +21,10 @@ import { MOOD_LABELS, problemTitle } from '../../lib/format';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
 import { ParaHead } from './ParaHead';
 
-const MIN_HEIGHT = 120;
-const MAX_HEIGHT = 640;
-const NARROW = 320;
-const WIDE = 360;
+const MIN_HEIGHT = CARD_MIN_HEIGHT;
+const MAX_HEIGHT = CARD_MAX_HEIGHT;
+const NARROW = CARD_WIDTH;
+const WIDE = CARD_WIDTH_REPORT;
 /** How long the confirmation stays up before the card closes. */
 const CONFIRM_MS = 1500;
 /** Longer when there is news (Para grew, an accessory was unlocked) to read. */
@@ -120,8 +128,11 @@ export function CardWindow() {
 
 function FailedView() {
   return (
-    <div className="flex flex-col gap-3" role="alert">
-      <p className="text-base text-fg">Something went wrong</p>
+    <div className="flex flex-col gap-3" role="alert" data-testid="card-failed">
+      <div>
+        <p className="text-md font-semibold text-fg">Something went wrong</p>
+        <p className="mt-1 text-sm text-fg-secondary">Today's problem could not be loaded.</p>
+      </div>
       <Button variant="secondary" onClick={() => openMain(null)}>
         Open ParaLeet
       </Button>

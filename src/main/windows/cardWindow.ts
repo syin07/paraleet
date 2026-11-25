@@ -154,6 +154,8 @@ export class CardWindowController {
       height: Math.min(Math.max(Math.round(height), CARD_MIN_HEIGHT), CARD_MAX_HEIGHT),
     };
     window.setBounds({ ...this.place(), ...this.size });
+    // A see-through window's shadow is drawn from its content and goes stale when the size changes.
+    window.invalidateShadow();
     this.reveal();
   }
 
