@@ -4,7 +4,7 @@ import { renderHatching } from '../../../core/sprite';
 import type { TodayView } from '../../../bridge/contract';
 import { api } from '../../bridge';
 import { Button } from '../../components/Button';
-import { Input } from '../../components/Field';
+import { Field, Input } from '../../components/Field';
 import { useHatchingStep } from '../../components/Hatching';
 import { Card } from '../../components/Layout';
 import { PixelCanvas, Sprite } from '../../components/Sprite';
@@ -13,14 +13,22 @@ import { cx } from '../../lib/format';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
 import { Row } from '../settings/SettingsParts';
 
-const STEPS = 3;
+const MIN_KEY_LENGTH = 10;
+const MAX_KEY_LENGTH = 300;
+const TOO_LONG_MESSAGE = 'That is too long to be an API key.';
 const TIME_MESSAGE = 'Use a 24-hour time like 16:00';
 /** Six frames at this pace make about 1.5 seconds. */
 const HATCH_FRAME_MS = 300;
 const ART_SIZE = 192;
 
-type Step = 'egg' | 'meet' | 'reminders';
-const STEP_NUMBER: Record<Step, number> = { egg: 1, meet: 2, reminders: 3 };
+type Step = 'egg' | 'meet' | 'reminders' | 'key';
+const STEP_NUMBER: Record<Step, number> = {
+  egg: 1,
+  meet: 2,
+  reminders: 3,
+  key: 4,
+};
+type Times = { first: string; evening: string };
 
 /** Moves focus to the step's one primary button when the step appears, so Enter moves on. */
 function useFocusOnAppear(): Ref<HTMLButtonElement> {
@@ -31,10 +39,10 @@ function useFocusOnAppear(): Ref<HTMLButtonElement> {
   return ref;
 }
 
-function ProgressDots({ current }: { current: number }) {
+function ProgressDots({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex gap-2" aria-hidden data-testid="onboarding-dots">
-      {Array.from({ length: STEPS }, (_, i) => (
+      {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
           className={cx(
@@ -137,7 +145,7 @@ function RemindersStep({
   saveError,
 }: {
   initial: { first: string; evening: string };
-  onFinish: (times: { first: string; evening: string }) => void;
+  onFinish: (times: Times) => void;
   saving: boolean;
   saveError: string | null;
 }) {
@@ -203,6 +211,158 @@ function RemindersStep({
 }
 
 /**
+ * The optional last step: the key is saved through the bridge, never kept in the page. A failed
+ * finish is shown here too, since the buttons on this step are the ones that finish the flow.
+ */
+function KeyStep({
+  onSave,
+  onFinish,
+  onEdit,
+  busy,
+  keySaved,
+  finishError,
+}: {
+  onSave: (apiKey: string) => Promise<string | null>;
+  onFinish: () => void;
+  /** Typing in the field puts an old finish message away. */
+  onEdit: () => void;
+  busy: boolean;
+  keySaved: boolean;
+  finishError: string | null;
+}) {
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const working = saving || busy;
+  const fieldRef = useRef<HTMLInputElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+
+  // The field is disabled while saving, which drops focus: hand it back once it can take it.
+  useEffect(() => {
+    if (!working && refocus.current) {
+      refocus.current = false;
+      fieldRef.current?.focus();
+    }
+  }, [working]);
+  // Focus goes to the field when the step appears, and to "Try again" once the failed finish
+  // leaves it enabled (it is busy while the first finish is still running).
+  useEffect(() => {
+    if (!keySaved) fieldRef.current?.focus();
+  }, [keySaved]);
+  useEffect(() => {
+    if (keySaved && !busy) retryRef.current?.focus();
+  }, [keySaved, busy]);
+
+  async function submit(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    if (working || value.trim().length < MIN_KEY_LENGTH) return;
+    // Refused here, in plain words, without sending it; the field keeps what was typed.
+    // Main trims first, so a pasted key with a trailing newline is measured without it.
+    if (value.trim().length > MAX_KEY_LENGTH) {
+      setError(TOO_LONG_MESSAGE);
+      fieldRef.current?.focus();
+      return;
+    }
+    const apiKey = value;
+    // Cleared at once so the typed key is not left in the page, whatever the answer is.
+    setValue('');
+    setError(null);
+    setSaving(true);
+    refocus.current = true;
+    const refused = await onSave(apiKey);
+    setError(refused);
+    setSaving(false);
+  }
+
+  if (keySaved) {
+    return (
+      <div className="flex w-full flex-col items-center" aria-label="API key">
+        <h1 className="text-lg font-semibold text-fg">Want learning plans?</h1>
+        <p className="mt-2 max-w-[400px] text-base text-fg-secondary">Your key is saved.</p>
+        {finishError && (
+          <p role="alert" className="mt-3 max-w-[400px] text-sm text-hard-text">
+            {finishError}
+          </p>
+        )}
+        <Button
+          ref={retryRef}
+          type="button"
+          variant="primary"
+          size="lg"
+          className="mt-6"
+          loading={busy}
+          disabled={busy}
+          onClick={onFinish}
+        >
+          {busy ? 'Saving…' : 'Try again'}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(event) => void submit(event)}
+      noValidate
+      className="flex w-full flex-col items-center"
+      aria-label="API key"
+    >
+      <h1 className="text-lg font-semibold text-fg">Want learning plans?</h1>
+      <p className="mt-2 max-w-[400px] text-base text-fg-secondary">
+        Pick topics and Para asks Claude for a staged list of real problems. That needs your own Anthropic API key.
+        Everything else works without one, and you can add it later in Settings.
+      </p>
+      <Field label="Anthropic API key" className="mt-5 w-full text-left">
+        <Input
+          ref={fieldRef}
+          type="password"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setError(null);
+            onEdit();
+          }}
+          invalid={error !== null}
+          aria-invalid={error !== null}
+          autoComplete="off"
+          spellCheck={false}
+          disabled={working}
+        />
+      </Field>
+      {(error ?? finishError) && (
+        <p role="alert" className="mt-1 w-full text-left text-sm text-hard-text">
+          {error ?? finishError}
+        </p>
+      )}
+      <div className="mt-6 flex gap-3">
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          loading={saving}
+          disabled={working || value.trim().length < MIN_KEY_LENGTH}
+        >
+          {saving ? 'Saving…' : 'Save key'}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          disabled={working}
+          onClick={() => {
+            setError(null);
+            onFinish();
+          }}
+        >
+          Skip for now
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
  * The first-launch flow (PRD section 11, design section 10): hatch the egg, meet Para, pick the
  * reminder times. Finishing marks Para hatched; the parent then shows the app.
  */
@@ -210,29 +370,92 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
   const [step, setStep] = useState<Step>('egg');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [times, setTimes] = useState<Times | null>(null);
+  // Set once the key is stored, so a failed finish retries the finish and never saves it twice.
+  const [keySaved, setKeySaved] = useState(false);
+  // Decided once: null until the answer comes. A slow or failed answer never holds the first
+  // three steps back; if it is still missing when the reminders are done, the flow has three.
+  const [withKeyStep, setWithKeyStep] = useState<boolean | null>(null);
   const settings = useBridgeQuery(() => api().getSettings());
 
-  async function finish(times: { first: string; evening: string }): Promise<void> {
+  useEffect(() => {
+    let live = true;
+    api()
+      .getPlanOverview()
+      .then(
+        (overview) => {
+          if (live) setWithKeyStep((current) => current ?? (overview.llm.canStoreKey && !overview.llm.hasKey));
+        },
+        () => {
+          if (live) setWithKeyStep((current) => current ?? false);
+        },
+      );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  async function finish(chosen: Times): Promise<string | null> {
     setSaving(true);
     setSaveError(null);
     try {
       const today = await api().completeOnboarding({
-        firstReminderTime: times.first,
-        eveningReminderTime: times.evening,
+        firstReminderTime: chosen.first,
+        eveningReminderTime: chosen.evening,
       });
       onFinished(today);
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSaveError(message);
+      setSaving(false);
+      return message;
+    }
+  }
+
+  async function finishReminders(chosen: Times): Promise<void> {
+    if (withKeyStep !== true) {
+      setWithKeyStep(false);
+      await finish(chosen);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await api().updateSettings({
+        firstReminderTime: chosen.first,
+        eveningReminderTime: chosen.evening,
+      });
+      setTimes(chosen);
+      setStep('key');
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
-      setSaving(false);
     }
+    setSaving(false);
+  }
+
+  async function saveKey(apiKey: string): Promise<string | null> {
+    // Held in the parent too, so the top-right Skip cannot finish the flow while the key is saving.
+    setSaving(true);
+    try {
+      await api().saveApiKey({ apiKey });
+    } catch (error) {
+      setSaving(false);
+      return error instanceof Error ? error.message : String(error);
+    }
+    setKeySaved(true);
+    // A failed finish shows its own message on this step; the key is saved either way.
+    await finish(times ?? saved);
+    return null;
   }
 
   // The times already in Settings are the starting point and what "Skip" keeps. On a new install
   // they are the defaults; someone who set their own times before hatching keeps them.
-  const saved = {
+  const saved: Times = {
     first: settings.data?.firstReminderTime ?? DEFAULT_SETTINGS.firstReminderTime,
     evening: settings.data?.eveningReminderTime ?? DEFAULT_SETTINGS.eveningReminderTime,
   };
+  const total = withKeyStep === true ? 4 : 3;
 
   return (
     <div className="flex h-full flex-col bg-canvas" data-testid="onboarding">
@@ -240,28 +463,43 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center pb-8">
         <div className="relative flex w-[440px] max-w-full flex-col items-center text-center">
           <div className="relative mb-6 flex h-6 w-full items-center justify-center">
-            <ProgressDots current={STEP_NUMBER[step]} />
-            {step === 'reminders' && (
+            <ProgressDots current={STEP_NUMBER[step]} total={total} />
+            {(step === 'reminders' || step === 'key') && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="absolute right-0"
                 disabled={saving}
-                onClick={() => void finish(saved)}
+                onClick={() => void finish(step === 'key' ? (times ?? saved) : saved)}
               >
                 Skip
               </Button>
             )}
           </div>
           <div className="sr-only" role="status" data-testid="onboarding-step">
-            Step {STEP_NUMBER[step]} of {STEPS}
+            Step {STEP_NUMBER[step]} of {total}
           </div>
           {/* Keyed so each step is new: its primary button takes focus when it appears. */}
           <div key={step} className="flex min-h-[320px] w-full flex-col items-center">
             {step === 'egg' && <EggStep seed={seed} onNext={() => setStep('meet')} />}
             {step === 'meet' && <MeetStep seed={seed} onNext={() => setStep('reminders')} />}
             {step === 'reminders' && (
-              <RemindersStep initial={saved} onFinish={(t) => void finish(t)} saving={saving} saveError={saveError} />
+              <RemindersStep
+                initial={saved}
+                onFinish={(t) => void finishReminders(t)}
+                saving={saving}
+                saveError={saveError}
+              />
+            )}
+            {step === 'key' && (
+              <KeyStep
+                onSave={saveKey}
+                onFinish={() => void finish(times ?? saved)}
+                onEdit={() => setSaveError(null)}
+                busy={saving}
+                keySaved={keySaved}
+                finishError={saveError}
+              />
             )}
           </div>
         </div>
