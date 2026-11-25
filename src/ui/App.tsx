@@ -1,5 +1,5 @@
 import { CalendarCheck, ChartColumn, ListChecks, Route, Settings, type LucideIcon } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from './bridge';
 import { SAMPLE_SEED, Sprite } from './components/Sprite';
 import { cx } from './lib/format';
@@ -7,6 +7,7 @@ import { navigate, SCREENS, useScreen, type RouteId, type ScreenId } from './lib
 import { useBridgeQuery } from './lib/useBridgeQuery';
 import { GalleryScreen } from './screens/gallery/GalleryScreen';
 import { PlanScreen } from './screens/plan/PlanScreen';
+import { OnboardingFlow } from './screens/onboarding/OnboardingFlow';
 import { ProblemsScreen } from './screens/problems/ProblemsScreen';
 import { SettingsScreen } from './screens/settings/SettingsScreen';
 import { StatsScreen } from './screens/stats/StatsScreen';
@@ -74,7 +75,8 @@ const SCREEN_VIEWS: Record<RouteId, () => React.JSX.Element> = {
   gallery: GalleryScreen,
 };
 
-export function App() {
+/** The app proper: sidebar and screens. Only mounted once Para has hatched. */
+function Shell() {
   const screen = useScreen();
 
   useEffect(() => {
@@ -110,4 +112,26 @@ export function App() {
       </main>
     </div>
   );
+}
+
+export function App() {
+  const today = useBridgeQuery(() => api().getToday());
+  const [finished, setFinished] = useState(false);
+
+  // Until the first load ends, only the canvas: no flash of the shell or of the flow.
+  if (today.loading && today.data === undefined) return <div className="h-full bg-base" />;
+  // A failed load falls through to the shell, whose screens show their own errors.
+  if (today.data && !today.data.pet.hatched && !finished) {
+    return (
+      <OnboardingFlow
+        seed={today.data.pet.seed}
+        onFinished={() => {
+          // The app opens on Today, whatever the address was when it started.
+          window.location.hash = '/today';
+          setFinished(true);
+        }}
+      />
+    );
+  }
+  return <Shell />;
 }

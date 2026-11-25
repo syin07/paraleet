@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { BrowserWindow, Menu, screen, type MenuItemConstructorOptions } from 'electron';
 import type { MainScreen } from '../../bridge/contract';
 import type { Db } from '../../data/db';
+import { getPet } from '../../data/repos/pet';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { Clock } from '../clock';
 import { hardenWindow, loadRenderer } from './mainWindow';
@@ -60,7 +61,7 @@ export class PetWindowController {
       // Over, or the clock was set back so far that "an hour" would last longer than an hour.
       if (remaining <= 0 || remaining > HIDE_FOR_MS) this.hiddenUntil = null;
     }
-    const wanted = settings.petVisible && this.hiddenUntil === null;
+    const wanted = settings.petVisible && this.hiddenUntil === null && this.hasHatched();
     const wasVisible = this.isVisible();
 
     if (!wanted) {
@@ -79,6 +80,15 @@ export class PetWindowController {
       }
     }
     if (wasVisible !== this.isVisible()) this.onVisibilityChanged();
+  }
+
+  /** The floating pet waits for the first-launch flow. No pet row yet counts as not hatched. */
+  private hasHatched(): boolean {
+    try {
+      return getPet(this.db).hatchedAt !== null;
+    } catch {
+      return false;
+    }
   }
 
   isVisible(): boolean {

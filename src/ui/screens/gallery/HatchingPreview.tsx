@@ -1,17 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { HATCH_FRAMES, renderHatching, SPRITE_FPS } from '../../../core/sprite';
 import { Button } from '../../components/Button';
+import { useHatchingStep } from '../../components/Hatching';
 import { Card } from '../../components/Layout';
 import { PixelCanvas } from '../../components/Sprite';
 
 /** Plays the hatching once, from its first frame. Mounting it again (a new `key`) replays it. */
 function Playback({ seed }: { seed: number }) {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    // Half speed, so each crack can be read.
-    const id = setInterval(() => setStep((s) => Math.min(HATCH_FRAMES - 1, s + 1)), (1000 / SPRITE_FPS) * 2);
-    return () => clearInterval(id);
-  }, []);
+  // Half speed, so each crack can be read.
+  const step = useHatchingStep((1000 / SPRITE_FPS) * 2);
   return (
     <>
       <PixelCanvas frame={renderHatching(seed, step)} size={128} label="Para hatching" testId="hatching" />
