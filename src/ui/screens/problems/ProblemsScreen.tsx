@@ -6,6 +6,7 @@ import { TOPICS, topicLabel, type TopicId } from '../../../core/topics';
 import { api } from '../../bridge';
 import { AddProblemDialog } from '../../components/AddProblemDialog';
 import { ReportDialog } from '../../components/ReportForm';
+import { useReportNews } from '../../components/ReportNews';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Field';
 import { EmptyState, QueryNotice } from '../../components/Layout';
@@ -44,6 +45,7 @@ const PLATFORM_OPTIONS: FilterOption<Platform>[] = PLATFORMS.map((value) => ({ v
 
 export function ProblemsScreen() {
   const logged = useBridgeQuery(() => api().listLoggedProblems());
+  const { celebrate, news } = useReportNews();
   const todayView = useBridgeQuery(() => api().getToday());
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
@@ -258,8 +260,14 @@ export function ProblemsScreen() {
         />
       )}
       {reportFor !== null && (
-        <ReportDialog key={reportFor} problemId={reportFor} onClose={() => closeReport(reportFor)} />
+        <ReportDialog
+          key={reportFor}
+          problemId={reportFor}
+          onClose={() => closeReport(reportFor)}
+          onReported={celebrate}
+        />
       )}
+      {news}
     </div>
   );
 }

@@ -342,7 +342,16 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
 }
 
 /** The report form in the shared modal. `onClose` runs after a report and on cancel. */
-export function ReportDialog({ problemId, onClose }: { problemId: number; onClose: () => void }) {
+export function ReportDialog({
+  problemId,
+  onClose,
+  onReported,
+}: {
+  problemId: number;
+  onClose: () => void;
+  /** Called with what the report changed, just before the dialog closes. */
+  onReported?: (result: ReportResult) => void;
+}) {
   const [context, setContext] = useState<ReportContext | null>(null);
   return (
     <Modal
@@ -358,7 +367,15 @@ export function ReportDialog({ problemId, onClose }: { problemId: number; onClos
       }
       onClose={onClose}
     >
-      <ReportForm problemId={problemId} onLoaded={setContext} onDone={onClose} onCancel={onClose} />
+      <ReportForm
+        problemId={problemId}
+        onLoaded={setContext}
+        onDone={(result) => {
+          onReported?.(result);
+          onClose();
+        }}
+        onCancel={onClose}
+      />
     </Modal>
   );
 }

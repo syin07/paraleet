@@ -1,4 +1,4 @@
-import type { IsoInstant, PetFacts } from '../../core/types';
+import type { IsoInstant, ParaDay, PetFacts } from '../../core/types';
 import { parseJsonArray, type Db } from '../db';
 
 export interface PetRecord extends PetFacts {
@@ -8,6 +8,10 @@ export interface PetRecord extends PetFacts {
   equippedAccessories: string[];
   /** When the first-launch hatching flow finished, or null before it has. */
   hatchedAt: IsoInstant | null;
+  /** The ParaLeet day the "missed you" greeting was last seen. */
+  greetedDay: ParaDay | null;
+  /** The ParaLeet day each reminder was last sent. */
+  reminderDays: { first: ParaDay | null; evening: ParaDay | null };
 }
 
 interface PetRow {
@@ -20,6 +24,9 @@ interface PetRow {
   unlocked_accessories: string;
   equipped_accessories: string;
   hatched_at: string | null;
+  greeted_day: string | null;
+  reminder_first_day: string | null;
+  reminder_evening_day: string | null;
 }
 
 function toPet(row: PetRow): PetRecord {
@@ -33,6 +40,8 @@ function toPet(row: PetRow): PetRecord {
     unlockedAccessories: parseJsonArray(row.unlocked_accessories),
     equippedAccessories: parseJsonArray(row.equipped_accessories),
     hatchedAt: row.hatched_at,
+    greetedDay: row.greeted_day,
+    reminderDays: { first: row.reminder_first_day, evening: row.reminder_evening_day },
   };
 }
 
@@ -71,4 +80,17 @@ export function savePetFacts(db: Db, facts: PetFacts): void {
       lastFedDay: facts.lastFedDay,
     },
   );
+}
+
+export function saveGreetedDay(db: Db, day: ParaDay): void {
+  db.run('UPDATE pet SET greeted_day = ? WHERE id = 1', [day]);
+}
+
+export function saveReminderDays(db: Db, days: { first: ParaDay | null; evening: ParaDay | null }): void {
+  db.run('UPDATE pet SET reminder_first_day = ?, reminder_evening_day = ? WHERE id = 1', [days.first, days.evening]);
+}
+
+/** Marks the first-launch flow as finished. Keeps the first time if it is called again. */
+export function saveHatched(db: Db, now: IsoInstant): void {
+  db.run('UPDATE pet SET hatched_at = ? WHERE id = 1 AND hatched_at IS NULL', [now]);
 }

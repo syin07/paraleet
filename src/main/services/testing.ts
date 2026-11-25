@@ -3,6 +3,7 @@
 import type { BridgeHandlers } from '../../bridge/contract';
 import { openDatabase, type Db } from '../../data';
 import { FakeClock } from '../clock';
+import { newSession } from './context';
 import { createHandlers, type AppContext } from './index';
 
 export interface TestApp {
@@ -35,6 +36,7 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
   const ctx: AppContext = {
     db,
     clock,
+    session: newSession(),
     windows: {
       showMain: (screen) => windowCalls.push(`showMain:${screen ?? ''}`),
       movePetBy: (dx, dy) => windowCalls.push(`movePetBy:${dx},${dy}`),

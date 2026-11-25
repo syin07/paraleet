@@ -5,7 +5,9 @@ import { expect, test, type Page } from '@playwright/test';
 // The floating pet window's page, against the mock bridge. The native side (always on top,
 // click-through, remembered position) is covered by tests/e2e/pet.spec.ts.
 
-const PET_WINDOW = { width: 240, height: 250 };
+const PET_WINDOW = { width: 240, height: 280 };
+/** Where the main process expects the bird (PET_BIRD_BOX in src/main/windows/petWindow.ts). */
+const BIRD_BOX = { x: 56, y: 144, width: 128, height: 128 };
 const SHOTS = resolve(import.meta.dirname, '../../artifacts/screenshots');
 
 async function openPet(page: Page, scenario = 'default'): Promise<void> {
@@ -55,32 +57,115 @@ test('shows only the bird on a transparent page', async ({ page }) => {
     return view.getComputedStyle(view.document.body).backgroundColor;
   });
   expect(background).toBe('rgba(0, 0, 0, 0)');
-  // The bird sits where the main process expects it (PET_BIRD_BOX): 128 points, centred, 8 from the bottom.
-  expect(await page.getByTestId('pet-bird').boundingBox()).toEqual({ x: 56, y: 114, width: 128, height: 128 });
+  // The bird sits where the main process expects it: 128 points, centred, 8 from the bottom.
+  expect(await page.getByTestId('pet-bird').boundingBox()).toEqual(BIRD_BOX);
   await capture(page, 'pet-window-idle');
 });
+
+interface PetFacts {
+  line: string | null;
+  mood: string;
+}
+
+function petNow(page: Page): Promise<PetFacts> {
+  return page.evaluate(async () => {
+    const api = (globalThis as unknown as { paraleet: { getToday(): Promise<{ pet: PetFacts }> } }).paraleet;
+    const { pet } = await api.getToday();
+    return { line: pet.line, mood: pet.mood };
+  });
+}
 
 test('hovering shows a speech bubble: the problem when not fed, the streak when fed', async ({ page }) => {
   await openPet(page);
   await expect(page.getByTestId('pet-bubble')).toHaveCount(0);
   await page.getByTestId('pet-bird').hover();
-  await expect(page.getByTestId('pet-bubble')).toHaveText('121. Best Time to Buy and Sell Stock on LeetCode?');
+  const bubble = page.getByTestId('pet-bubble');
+  // Para's own line for the day, and today's problem with its platform one way or the other.
+  const unfed = await petNow(page);
+  expect(unfed.mood).toBe('peckish');
+  await expect(page.getByTestId('pet-bubble-line')).toHaveText(unfed.line ?? '');
+  await expect(bubble).toContainText('Best Time to Buy and Sell Stock');
+  await expect(bubble).toContainText('LeetCode');
+  // Nothing of the fact is cut off for an ordinary title.
+  const detail = page.getByTestId('pet-bubble-detail');
+  if ((await detail.count()) > 0) {
+    expect(await detail.evaluate((element) => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+  }
   await capture(page, 'pet-window-unfed');
   await page.mouse.move(2, 2);
-  await expect(page.getByTestId('pet-bubble')).toHaveCount(0);
+  await expect(bubble).toHaveCount(0);
 
   await openPet(page, 'fed');
   await page.getByTestId('pet-bird').hover();
-  await expect(page.getByTestId('pet-bubble')).toHaveText(/^\d+-day streak!$/);
+  const fed = await petNow(page);
+  expect(fed.mood).toBe('content');
+  await expect(page.getByTestId('pet-bubble-line')).toHaveText(fed.line ?? '');
+  // The streak is there, in the line itself or as the fact under it.
+  await expect(bubble).toContainText(/\d+/);
+  if (!/\d/.test(fed.line ?? '')) await expect(page.getByTestId('pet-bubble-detail')).toHaveText(/^\d+-day streak$/);
   await capture(page, 'pet-window-fed');
 
   await openPet(page, 'nothing');
   await page.getByTestId('pet-bird').hover();
-  await expect(page.getByTestId('pet-bubble')).toHaveText('Log any problem and I get fed!');
+  await expect(page.getByTestId('pet-bubble-detail')).toHaveText('Any problem feeds me');
+});
+
+test('after a report Para checks it, eats, and settles, speaking without being hovered', async ({ page }) => {
+  await openPet(page);
+  await page.mouse.move(2, 2);
+  await expect(page.getByTestId('pet-bubble')).toHaveCount(0);
+  await page.evaluate(async () => {
+    const api = (
+      globalThis as unknown as {
+        paraleet: {
+          getToday(): Promise<{ assignment: { problem: { id: number } } | null }>;
+          submitReport(input: object): Promise<unknown>;
+        };
+      }
+    ).paraleet;
+    const today = await api.getToday();
+    await api.submitReport({
+      problemId: today.assignment!.problem.id,
+      rating: 'good',
+      minutes: null,
+      keyInsight: null,
+      notes: null,
+      insightRevealed: false,
+    });
+  });
+  const bubble = page.getByTestId('pet-bubble');
+  await expect(bubble).toHaveAttribute('data-mood', 'checking');
+  await expect(page.getByTestId('pet-bubble-detail')).toHaveCount(0);
+  await capture(page, 'pet-window-checking');
+  await expect(bubble).toHaveAttribute('data-mood', 'eating', { timeout: 4000 });
+  await capture(page, 'pet-window-eating');
+  // The show ends by itself and the bubble goes away.
+  await expect(bubble).toHaveCount(0, { timeout: 6000 });
+  await page.getByTestId('pet-bird').hover();
+  await expect(bubble).toHaveAttribute('data-mood', 'content');
+});
+
+test('the "missed you" greeting shows by itself and counts as seen once Para is pointed at', async ({ page }) => {
+  await openPet(page, 'missed');
+  await page.mouse.move(2, 2);
+  const bubble = page.getByTestId('pet-bubble');
+  await expect(bubble).toHaveAttribute('data-mood', 'missed_you');
+  const greeting = await petNow(page);
+  await expect(page.getByTestId('pet-bubble-line')).toHaveText(greeting.line ?? '');
+  // Pure delight: no fact about the problem or the days away underneath.
+  await expect(page.getByTestId('pet-bubble-detail')).toHaveCount(0);
+  await capture(page, 'pet-window-missed-you');
+  // It stays until the user points at Para.
+  await page.waitForTimeout(1500);
+  await expect(bubble).toHaveAttribute('data-mood', 'missed_you');
+  await page.getByTestId('pet-bird').hover();
+  await page.mouse.move(2, 2);
+  await expect(bubble).toHaveCount(0);
+  expect((await petNow(page)).mood).toBe('peckish');
 });
 
 test('a long problem title wraps inside the window', async ({ page }) => {
-  await openPet(page, 'many');
+  await openPet(page);
   await page.evaluate(async () => {
     const api = (
       globalThis as unknown as {
@@ -106,6 +191,8 @@ test('a long problem title wraps inside the window', async ({ page }) => {
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.y).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(PET_WINDOW.width);
+  // And it ends above the bird instead of covering it.
+  expect(box!.y + box!.height).toBeLessThanOrEqual(BIRD_BOX.y);
   await capture(page, 'pet-window-long-title');
 });
 
@@ -208,29 +295,4 @@ test('a drag whose release never arrives stops following the pointer', async ({ 
   expect(later.filter((call) => call.startsWith('movePetWindowBy:')).length).toBe(movesBefore);
   expect(later.filter((call) => call === 'endPetDrag').length).toBe(1);
   expect(later).not.toContain('showMainWindow:');
-});
-
-test('the bubble follows the day without a reload', async ({ page }) => {
-  await openPet(page);
-  await page.evaluate(async () => {
-    const api = (
-      globalThis as unknown as {
-        paraleet: {
-          getToday(): Promise<{ assignment: { problem: { id: number } } | null }>;
-          submitReport(input: object): Promise<unknown>;
-        };
-      }
-    ).paraleet;
-    const today = await api.getToday();
-    await api.submitReport({
-      problemId: today.assignment!.problem.id,
-      rating: 'good',
-      minutes: null,
-      keyInsight: null,
-      notes: null,
-      insightRevealed: false,
-    });
-  });
-  await page.getByTestId('pet-bird').hover();
-  await expect(page.getByTestId('pet-bubble')).toHaveText(/^\d+-day streak!$/);
 });

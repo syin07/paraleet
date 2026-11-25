@@ -3,6 +3,7 @@
 // bubble while the pointer is over the bird.
 import { useEffect, useRef, useState } from 'react';
 import type { TodayView } from '../../../bridge/contract';
+import type { Mood } from '../../../core/types';
 import { api } from '../../bridge';
 import { Sprite } from '../../components/Sprite';
 import { SpeechBubble } from '../../components/SpeechBubble';
@@ -13,15 +14,31 @@ import { useBridgeQuery } from '../../lib/useBridgeQuery';
 const DRAG_THRESHOLD = 4;
 const BIRD_SIZE = 128;
 
-/** What the bubble says: today's problem and platform when not fed, the streak when fed. */
-export function bubbleText(today: TodayView): string {
-  if (today.pet.line) return today.pet.line;
-  if (today.fed) return `${Math.max(today.streak.current, 1)}-day streak!`;
-  const assignment = today.assignment;
-  if (assignment && !assignment.completed) {
-    return `${problemTitle(assignment.problem)} on ${PLATFORM_LABELS[assignment.problem.platform]}?`;
-  }
-  return 'Log any problem and I get fed!';
+/** Moods that are a short show of their own: Para speaks without waiting to be hovered. */
+const SPEAKS_UNASKED: readonly Mood[] = ['checking', 'eating', 'nibbling', 'missed_you'];
+
+/**
+ * What the bubble says. `line` is in Para's voice. `detail` is the plain fact the PRD asks for:
+ * today's problem and platform when not fed, the streak when fed. It is left out when the line
+ * already says it, and during the short shows after a report or a return.
+ */
+export function bubbleParts(today: TodayView): { line: string; detail: string | null } {
+  const open = today.assignment && !today.assignment.completed ? today.assignment.problem : null;
+  const streak = Math.max(today.streak.current, 1);
+  const fact = today.fed
+    ? `${streak}-day streak`
+    : open
+      ? // Platform first, so a long title is what gets cut short, never the platform.
+        `${PLATFORM_LABELS[open.platform]} · ${problemTitle(open)}`
+      : 'Any problem feeds me';
+  const line = today.pet.line;
+  if (line === null) return { line: fact, detail: null };
+  if (SPEAKS_UNASKED.includes(today.pet.mood)) return { line, detail: null };
+  // A long title is cut short inside a line, so its opening words are enough to count as said.
+  const alreadySaid = today.fed
+    ? line.includes(String(streak))
+    : open !== null && line.includes(open.title.slice(0, 16));
+  return { line, detail: alreadySaid ? null : fact };
 }
 
 export function PetWindow() {
@@ -90,16 +107,37 @@ export function PetWindow() {
   function onPointerUp(event: React.PointerEvent): void {
     if (event.button !== 0) return;
     const state = release();
-    if (state && !state.dragging) void api().showMainWindow({ screen: null });
+    if (state && !state.dragging) {
+      sawGreeting();
+      void api().showMainWindow({ screen: null });
+    }
   }
 
   const data = today.data;
+  const mood = data?.pet.mood ?? null;
+  const speaking = data !== undefined && data !== null && (hovering || (mood !== null && SPEAKS_UNASKED.includes(mood)));
+  const parts = data ? bubbleParts(data) : null;
+
+  /** Pointing at Para or clicking it is how the "missed you" greeting is seen. */
+  function sawGreeting(): void {
+    if (mood === 'missed_you') void api().acknowledgeGreeting();
+  }
+
   return (
     <div className="flex h-full flex-col items-center justify-end pb-2">
-      {data && hovering && (
+      {speaking && parts && (
         // The bubble only informs: clicks on it pass through to whatever is underneath.
-        <div className="mb-3" data-testid="pet-bubble">
-          <SpeechBubble>{bubbleText(data)}</SpeechBubble>
+        <div className="mb-3" data-testid="pet-bubble" data-mood={mood ?? undefined}>
+          <SpeechBubble>
+            <span className="line-clamp-4" data-testid="pet-bubble-line">
+              {parts.line}
+            </span>
+            {parts.detail !== null && (
+              <span className="mt-1.5 line-clamp-3 text-fg-secondary" data-testid="pet-bubble-detail">
+                {parts.detail}
+              </span>
+            )}
+          </SpeechBubble>
         </div>
       )}
       <button
@@ -114,7 +152,10 @@ export function PetWindow() {
         onPointerCancel={release}
         onLostPointerCapture={release}
         onPointerEnter={() => setHovering(true)}
-        onPointerLeave={() => setHovering(false)}
+        onPointerLeave={() => {
+          setHovering(false);
+          sawGreeting();
+        }}
         onContextMenu={(event) => {
           event.preventDefault();
           void api().showPetMenu();

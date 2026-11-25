@@ -374,7 +374,9 @@ test.describe('quick log', () => {
     await page
       .getByRole('combobox', { name: 'Paste a problem URL or search' })
       .fill('https://leetcode.com/problems/a-brand-new-problem/');
-    await expect(page.getByRole('status')).toHaveText('ParaLeet does not know this problem yet.');
+    await expect(page.getByRole('status').filter({ hasText: 'does not know' })).toHaveText(
+      'ParaLeet does not know this problem yet.',
+    );
     await expect(page.getByRole('button', { name: 'Add it' })).toBeVisible();
     await expect(page.getByRole('option')).toHaveCount(0);
   });
@@ -382,7 +384,9 @@ test.describe('quick log', () => {
   test('a link that is not a problem shows the reason', async ({ page }) => {
     await openScreen(page, 'today');
     await page.getByRole('combobox', { name: 'Paste a problem URL or search' }).fill('http://nonsense');
-    await expect(page.getByRole('status')).toHaveText('That does not look like a link. Paste the full problem URL.');
+    await expect(page.getByRole('status').filter({ hasText: 'link' })).toHaveText(
+      'That does not look like a link. Paste the full problem URL.',
+    );
   });
 });
 
@@ -689,5 +693,157 @@ test.describe("Today's bird", () => {
     await expect(birdOf(page)).toHaveAttribute('data-mood', 'peckish');
     await openScreen(page, 'today', 'fed');
     await expect(birdOf(page)).toHaveAttribute('data-mood', 'content');
+  });
+});
+
+test.describe('the living pet on Today', () => {
+  interface Pet {
+    line: string | null;
+    mood: string;
+    stage: string;
+  }
+  const petNow = (page: Page): Promise<Pet> =>
+    page.evaluate(async () => {
+      const api = (globalThis as unknown as { paraleet: { getToday(): Promise<{ pet: Pet }> } }).paraleet;
+      return (await api.getToday()).pet;
+    });
+
+  test('shows what Para says, and its stage and mood', async ({ page }) => {
+    await openScreen(page, 'today');
+    const pet = await petNow(page);
+    expect(pet.line).not.toBeNull();
+    await expect(page.getByTestId('pet-line')).toHaveText(pet.line ?? '');
+    await expect(page.getByTestId('pet-mood')).toHaveText('Chick · peckish');
+    await captureBothSizes(page, 'today-pet-line');
+  });
+
+  test('the bubble stays inside the pet card for every line Para can say, at both window sizes', async ({ page }) => {
+    await openScreen(page, 'today');
+    // The longest lines the app can produce are 80 characters. Try the worst shapes: long words,
+    // short words, and one unbroken run.
+    const lines = [
+      'Longest Substring Without Repeating Characters on LeetCode would hit the spot….',
+      'I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I',
+      'W'.repeat(80),
+      'Hi!',
+    ];
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(80);
+      await page.evaluate(async (text) => {
+        const host = globalThis as unknown as {
+          paraleet: { getToday(): Promise<{ pet: { line: string | null } }>; updateSettings(patch: object): Promise<unknown> };
+          __realGetToday?: () => Promise<{ pet: { line: string | null } }>;
+        };
+        host.__realGetToday ??= host.paraleet.getToday.bind(host.paraleet);
+        const real = host.__realGetToday;
+        host.paraleet.getToday = async () => {
+          const today = await real();
+          return { ...today, pet: { ...today.pet, line: text } };
+        };
+        // Any saved change makes the screen ask again.
+        await host.paraleet.updateSettings({});
+      }, line);
+      await expect(page.getByTestId('pet-line')).toHaveText(line);
+      // 1040 is where the right rail appears and the pet card is at its narrowest.
+      for (const size of [
+        WINDOW_MIN,
+        { width: 1039, height: 700 },
+        { width: 1040, height: 700 },
+        WINDOW_DEFAULT,
+        { width: 1500, height: 900 },
+      ]) {
+        await page.setViewportSize(size);
+        const bubble = await page.getByTestId('pet-line').boundingBox();
+        const card = await page.getByTestId('pet-stage').boundingBox();
+        expect(bubble).not.toBeNull();
+        expect(card).not.toBeNull();
+        expect(bubble!.x).toBeGreaterThanOrEqual(card!.x);
+        expect(bubble!.y).toBeGreaterThanOrEqual(card!.y);
+        expect(bubble!.x + bubble!.width).toBeLessThanOrEqual(card!.x + card!.width);
+        expect(bubble!.y + bubble!.height).toBeLessThanOrEqual(card!.y + card!.height);
+        // Wide enough to read: at least a dozen characters to a row, unless the line is shorter.
+        if (line.length > 20) expect(bubble!.width).toBeGreaterThanOrEqual(130);
+      }
+      if (line.startsWith('Longest')) await captureBothSizes(page, 'today-pet-line-long');
+    }
+  });
+
+  test('after a report Para checks it, eats, and settles', async ({ page }) => {
+    await openScreen(page, 'today');
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    await page.getByRole('radio', { name: /^Good/ }).click();
+    await page.getByRole('button', { name: 'Feed Para' }).click();
+    const mood = page.getByTestId('pet-mood');
+    await expect(mood).toHaveAttribute('data-mood', 'checking');
+    await expect(mood).toHaveAttribute('data-mood', 'eating', { timeout: 4000 });
+    await expect(mood).toHaveAttribute('data-mood', 'content', { timeout: 6000 });
+    await expect(page.getByTestId('pet-line')).toHaveText((await petNow(page)).line ?? '');
+  });
+
+  test('an attempt rated Again only gets a nibble', async ({ page }) => {
+    await openScreen(page, 'today');
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    await page.getByRole('radio', { name: /^Again/ }).click();
+    await page.getByRole('button', { name: 'Feed Para' }).click();
+    const mood = page.getByTestId('pet-mood');
+    await expect(mood).toHaveAttribute('data-mood', 'nibbling', { timeout: 4000 });
+    await expect(mood).toHaveAttribute('data-mood', 'content', { timeout: 6000 });
+  });
+
+  test('says so when a solve unlocks an accessory', async ({ page }) => {
+    await openScreen(page, 'today', 'milestone');
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    await page.getByRole('radio', { name: /^Good/ }).click();
+    await page.getByRole('button', { name: 'Feed Para' }).click();
+    const news = page.getByRole('status').filter({ hasText: 'New for Para' });
+    await expect(news).toHaveText('New for Para: Bow tie. Put it on in Settings.');
+    await captureBothSizes(page, 'today-unlocked');
+    await expect(news).toHaveCount(0, { timeout: 7000 });
+  });
+
+  test('an attempt rated Again on the milestone day unlocks nothing', async ({ page }) => {
+    await openScreen(page, 'today', 'milestone');
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    await page.getByRole('radio', { name: /^Again/ }).click();
+    await page.getByRole('button', { name: 'Feed Para' }).click();
+    await expect(page.getByTestId('pet-mood')).toHaveAttribute('data-mood', 'nibbling', { timeout: 4000 });
+    await expect(page.getByText('New for Para')).toHaveCount(0);
+  });
+
+  test('says so when Para grows', async ({ page }) => {
+    await openScreen(page, 'today', 'fresh');
+    await expect(page.getByTestId('pet-mood')).toContainText('Egg');
+    // Two solves through the bridge, the third through the form.
+    await page.evaluate(async () => {
+      const api = (
+        globalThis as unknown as {
+          paraleet: { searchProblems(input: object): Promise<{ id: number }[]>; submitReport(input: object): Promise<unknown> };
+        }
+      ).paraleet;
+      const others = (await api.searchProblems({ query: 'a', limit: 10 })).slice(3, 5);
+      for (const problem of others) {
+        await api.submitReport({
+          problemId: problem.id,
+          rating: 'good',
+          minutes: null,
+          keyInsight: null,
+          notes: null,
+          insightRevealed: false,
+        });
+      }
+    });
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    await page.getByRole('radio', { name: /^Good/ }).click();
+    await page.getByRole('button', { name: 'Feed Para' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'grew' })).toHaveText('Para grew into a chick!');
+    await expect(page.getByTestId('pet-mood')).toContainText('Chick');
+  });
+
+  test('the "missed you" greeting counts as seen after a few seconds on Today', async ({ page }) => {
+    await openScreen(page, 'today', 'missed');
+    const mood = page.getByTestId('pet-mood');
+    await expect(mood).toHaveAttribute('data-mood', 'missed_you');
+    await captureBothSizes(page, 'today-missed-you');
+    await expect(mood).toHaveAttribute('data-mood', 'peckish', { timeout: 9000 });
   });
 });

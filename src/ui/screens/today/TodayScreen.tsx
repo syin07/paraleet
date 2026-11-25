@@ -6,6 +6,7 @@ import { AddProblemDialog } from '../../components/AddProblemDialog';
 import { Button } from '../../components/Button';
 import { Card, EmptyState, Page, QueryNotice } from '../../components/Layout';
 import { ReportDialog } from '../../components/ReportForm';
+import { useReportNews } from '../../components/ReportNews';
 import { formatDay } from '../../lib/format';
 import { useHashAction } from '../../lib/navigation';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
@@ -33,6 +34,7 @@ export function TodayScreen() {
   // The pasted link of the add dialog, or null while it is closed.
   const [addingUrl, setAddingUrl] = useState<string | null>(null);
   const quickLogInput = useRef<HTMLInputElement>(null);
+  const { celebrate, news } = useReportNews();
   const today = query.data;
 
   if (!today) {
@@ -49,7 +51,7 @@ export function TodayScreen() {
   return (
     <Page title="Today" actions={<span className="text-sm text-fg-muted">{formatDay(today.today)}</span>}>
       <QueryNotice loading={false} error={query.error} />
-      <div className="grid grid-cols-1 gap-6 min-[960px]:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid grid-cols-1 gap-6 min-[1040px]:grid-cols-[minmax(0,1fr)_280px]">
         <div className="flex min-w-0 flex-col gap-4">
           <PetStage fed={today.fed} pet={today.pet} />
           {assignment ? (
@@ -99,9 +101,11 @@ export function TodayScreen() {
           problemId={reportFor}
           // A late close from this dialog must not close one opened for another problem since.
           onClose={() => setReportFor((current) => (current === reportFor ? null : current))}
+          onReported={celebrate}
         />
       )}
       {swapping && <SwapDialog currentId={assignment?.problem.id ?? null} onClose={() => setSwapping(false)} />}
+      {news}
     </Page>
   );
 }

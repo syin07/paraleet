@@ -1,6 +1,6 @@
 // Small display helpers shared by every screen.
 import { daysBetween } from '../../core/day';
-import type { AssignmentReason, DifficultyNorm, ParaDay, Platform } from '../../core/types';
+import type { AssignmentReason, DifficultyNorm, GrowthStage, Mood, ParaDay, Platform } from '../../core/types';
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   leetcode: 'LeetCode',
@@ -54,3 +54,22 @@ export function plural(count: number, one: string, many = `${one}s`): string {
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ');
 }
+
+/** How a growth stage and a mood are named on screen. */
+export const STAGE_LABELS: Record<GrowthStage, string> = {
+  egg: 'Egg',
+  chick: 'Chick',
+  fledgling: 'Fledgling',
+  adult: 'Adult',
+};
+
+export const MOOD_LABELS: Record<Mood, string> = {
+  sleeping: 'sleeping',
+  content: 'content',
+  peckish: 'peckish',
+  hungry: 'hungry',
+  checking: 'checking',
+  eating: 'eating',
+  nibbling: 'nibbling',
+  missed_you: 'so happy to see you',
+};

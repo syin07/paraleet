@@ -1,3 +1,4 @@
+import { HARD_DIFFICULTY_NORM, type UnlockAttempt } from '../../core/accessories';
 import type { AttemptFact } from '../../core/petFacts';
 import type { Attempt, AttemptKind, IsoInstant, ParaDay, Rating, VerificationMethod } from '../../core/types';
 import { parseJsonArray, type Db } from '../db';
@@ -77,6 +78,28 @@ export function listAttemptFacts(db: Db): AttemptFact[] {
   return db
     .all<{ para_day: string; rating: Rating }>('SELECT para_day, rating FROM attempts ORDER BY id')
     .map((row) => ({ paraDay: row.para_day, rating: row.rating }));
+}
+
+/** Every attempt as the accessory rules see it, in the order recorded. Input for `replayUnlocks`. */
+export function listUnlockAttempts(db: Db): UnlockAttempt[] {
+  return db
+    .all<{ para_day: string; rating: Rating; hard: number }>(
+      `SELECT a.para_day, a.rating, COALESCE(p.difficulty_norm, 0) >= ? AS hard
+       FROM attempts a JOIN problems p ON p.id = a.problem_id ORDER BY a.id`,
+      [HARD_DIFFICULTY_NORM],
+    )
+    .map((row) => ({ paraDay: row.para_day, rating: row.rating, hardProblem: row.hard === 1 }));
+}
+
+/** True once any attempt not rated Again was on a problem of normalized difficulty 4 or 5. */
+export function hasSolvedHardProblem(db: Db): boolean {
+  return (
+    db.get(
+      `SELECT 1 AS found FROM attempts a JOIN problems p ON p.id = a.problem_id
+       WHERE a.rating <> 'again' AND p.difficulty_norm >= ? LIMIT 1`,
+      [HARD_DIFFICULTY_NORM],
+    ) !== undefined
+  );
 }
 
 /** The distinct days with at least one attempt, from `from` to `to` inclusive. */

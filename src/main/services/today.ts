@@ -1,8 +1,7 @@
 // Today: the assignment for the current ParaLeet day and everything the Today screen shows.
-import type { PetSummary, StreakSummary, SwapCandidatesView, TodayView } from '../../bridge/contract';
+import type { StreakSummary, SwapCandidatesView, TodayView } from '../../bridge/contract';
 import { chooseDailyProblem, otherDueReviews, swapCandidates } from '../../core/assignment';
 import { addDays, weekdayIndex } from '../../core/day';
-import { stageFor } from '../../core/petFacts';
 import { dueDayOf, isDueOn } from '../../core/scheduler';
 import { displayedStreak, isFedOn } from '../../core/streak';
 import { ACCESSORY_IDS, type AccessoryId, type AssignmentInput } from '../../core/types';
@@ -14,9 +13,10 @@ import {
 } from '../../data/repos/assignments';
 import { countAttemptsOnDay, listFedDays } from '../../data/repos/attempts';
 import { listActiveCards } from '../../data/repos/cards';
-import { getPet, saveEquippedAccessories, type PetRecord } from '../../data/repos/pet';
+import { getPet, saveEquippedAccessories } from '../../data/repos/pet';
 import { getProblem, listStarterQueue } from '../../data/repos/problems';
 import { currentMoment, type AppContext, type Moment } from './context';
+import { knownAccessories, petSummary } from './pet';
 import { requireProblem, toDueReviewItems, toSummary } from './views';
 
 /** Everything the assignment policy needs, read from the database. */
@@ -84,31 +84,9 @@ export function buildTodayView(ctx: AppContext, moment: Moment): TodayView {
           : null,
       dueReviews: toDueReviewItems(ctx.db, others, moment),
       streak: streakSummary(ctx, moment),
-      pet: petSummary(pet, fed),
+      pet: petSummary(ctx, moment, assignment && problem && !assignment.completed ? problem : null),
     };
   });
-}
-
-/** Accessories in the fixed order of `ACCESSORY_IDS`, dropping anything unknown. */
-function knownAccessories(stored: readonly string[]): AccessoryId[] {
-  return ACCESSORY_IDS.filter((id) => stored.includes(id));
-}
-
-function petSummary(pet: PetRecord, fed: boolean): PetSummary {
-  const unlocked = knownAccessories(pet.unlockedAccessories);
-  return {
-    seed: pet.seed,
-    stage: stageFor(pet.growthSolves),
-    growthSolves: pet.growthSolves,
-    totalAttempts: pet.totalAttempts,
-    // The full mood rules and speech lines arrive with SAN-128; until then Para is simply
-    // content when fed and peckish when not.
-    mood: fed ? 'content' : 'peckish',
-    line: null,
-    unlockedAccessories: unlocked,
-    equippedAccessories: knownAccessories(pet.equippedAccessories).filter((id) => unlocked.includes(id)),
-    hatched: pet.hatchedAt !== null,
-  };
 }
 
 /** Puts accessories on Para or takes them off. Only unlocked accessories can be worn. */

@@ -5,6 +5,7 @@ import { getNotes } from '../../data/repos/notes';
 import { getProblem } from '../../data/repos/problems';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { AppContext } from './context';
+import { acknowledgeGreeting } from './pet';
 import {
   addProblem,
   getProblemDetail,
@@ -18,7 +19,8 @@ import {
 import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
-export type { AppContext, WindowPort } from './context';
+export { newSession, type AppContext, type SessionState, type WindowPort } from './context';
+export { createMoodWatcher, nextCelebrationStep } from './pet';
 export { reconcile, type ReconcileResult } from './reconcile';
 
 /**
@@ -68,6 +70,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     parseProblemUrl: ({ url }) => parseProblemUrl(ctx, url),
     addProblem: (input) => addProblem(ctx, input),
     setEquippedAccessories: ({ accessories }) => setEquippedAccessories(ctx, accessories),
+    acknowledgeGreeting: () => acknowledgeGreeting(ctx, getToday),
     showMainWindow: ({ screen }) => done(() => ctx.windows.showMain(screen)),
     movePetWindowBy: ({ dx, dy }) => done(() => ctx.windows.movePetBy(dx, dy)),
     endPetDrag: () => done(() => ctx.windows.endPetDrag()),

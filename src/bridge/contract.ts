@@ -75,6 +75,8 @@ export const inputSchemas = {
   setEquippedAccessories: z.object({
     accessories: z.array(z.enum(ACCESSORY_IDS)).max(ACCESSORY_IDS.length),
   }),
+  /** The user has seen Para's "missed you" greeting; Para returns to its normal mood. */
+  acknowledgeGreeting: z.undefined(),
   /** Shows and focuses the main window, optionally on a given screen. */
   showMainWindow: z.object({ screen: z.enum(MAIN_SCREENS).nullable() }),
   /** Pet window only: moves it while the user drags the bird. Whole screen points. */
@@ -186,6 +188,8 @@ export interface ReportResult {
   rating: Rating;
   streak: { current: number; longest: number; increased: boolean };
   growth: { stage: GrowthStage; previousStage: GrowthStage; growthSolves: number };
+  /** Accessories this attempt unlocked, for celebrating. Empty for an attempt rated Again. */
+  unlocked: AccessoryId[];
   /** The ParaLeet day of the next review, or null when none is scheduled. */
   nextReviewDay: ParaDay | null;
   today: TodayView;
@@ -268,6 +272,7 @@ export interface BridgeOutputs {
   parseProblemUrl: ParsedProblemUrl;
   addProblem: AddProblemResult;
   setEquippedAccessories: TodayView;
+  acknowledgeGreeting: TodayView;
   showMainWindow: Done;
   movePetWindowBy: Done;
   endPetDrag: Done;

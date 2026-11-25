@@ -1,5 +1,6 @@
 // Reporting an attempt: the step that feeds the pet (PRD section 4, steps 5 to 7).
 import type { BridgeParsedInput, ReportContext, ReportResult } from '../../bridge/contract';
+import { newlyUnlocked, unlockedAfterAttempt } from '../../core/accessories';
 import { applyAttempt, stageFor } from '../../core/petFacts';
 import {
   capRatingAfterReveal,
@@ -10,14 +11,14 @@ import {
   type SchedulerOptions,
 } from '../../core/scheduler';
 import { displayedStreak } from '../../core/streak';
-import type { PetFacts } from '../../core/types';
 import { verifyAttempt } from '../../core/verify';
 import { getAssignment, markAssignmentCompleted } from '../../data/repos/assignments';
-import { countAttemptsForProblem, insertAttempt } from '../../data/repos/attempts';
+import { countAttemptsForProblem, hasSolvedHardProblem, insertAttempt } from '../../data/repos/attempts';
 import { getCard, saveCard } from '../../data/repos/cards';
 import { getNotes, saveNotes } from '../../data/repos/notes';
-import { getPet, savePetFacts } from '../../data/repos/pet';
+import { getPet, savePetFacts, saveUnlockedAccessories } from '../../data/repos/pet';
 import { currentMoment, type AppContext, type Moment } from './context';
+import { knownAccessories } from './pet';
 import { buildTodayView } from './today';
 import { requireProblem, toSummary } from './views';
 
@@ -67,7 +68,7 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
   const outcome = ctx.db.transaction(() => {
     // Read inside the transaction, never from before the verification step: once that step does
     // real work, two reports can be in flight, and each must build on the other's result.
-    const before: PetFacts = getPet(ctx.db);
+    const before = getPet(ctx.db);
     const kind = countAttemptsForProblem(ctx.db, problem.id) === 0 ? 'first_solve' : 'review';
 
     let notes = getNotes(ctx.db, problem.id);
@@ -100,12 +101,29 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
     const after = applyAttempt(before, { paraDay: moment.today, rating });
     savePetFacts(ctx.db, after);
 
+    // Milestones. The attempt is already recorded, so the Hard-problem check sees it. An attempt
+    // rated Again unlocks nothing; whatever it reached is picked up by the next other attempt.
+    const unlockedBefore = knownAccessories(before.unlockedAccessories);
+    const unlockedNow = unlockedAfterAttempt(
+      unlockedBefore,
+      {
+        solvedHardProblem: hasSolvedHardProblem(ctx.db),
+        longestStreak: after.longestStreak,
+        plansFinished: 0, // Plans arrive in M3.
+      },
+      rating,
+    );
+    const unlocked = newlyUnlocked(unlockedBefore, unlockedNow);
+    if (unlocked.length > 0) saveUnlockedAccessories(ctx.db, unlockedNow);
+
     const assignment = getAssignment(ctx.db, moment.today);
     if (assignment && assignment.problemId === problem.id) markAssignmentCompleted(ctx.db, moment.today);
 
-    return { attempt, before, after, card };
+    return { attempt, before, after, card, unlocked };
   });
 
+  // Para inspects the report, then eats. Kept in memory only: a restart skips the show.
+  ctx.session.celebration = { meal: rating === 'again' ? 'crumb' : 'full', reportedAt: moment.now };
   ctx.notifyChanged();
 
   const { before, after } = outcome;
@@ -128,6 +146,7 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
       previousStage: stageFor(before.growthSolves),
       growthSolves: after.growthSolves,
     },
+    unlocked: outcome.unlocked,
     nextReviewDay:
       outcome.card.status === 'active'
         ? dueDayOf(outcome.card, afterMoment.timeZone, afterMoment.settings.dayBoundaryHour)
