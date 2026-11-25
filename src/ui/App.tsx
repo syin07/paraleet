@@ -90,14 +90,7 @@ function Shell() {
       }
     }
     window.addEventListener('keydown', onKeyDown);
-    // Main can ask this window to show a screen, for example from the pet's right-click menu.
-    const stopNavigating = api().onNavigate((path) => {
-      window.location.hash = path;
-    });
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      stopNavigating();
-    };
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   const Screen = SCREEN_VIEWS[screen];
@@ -118,6 +111,17 @@ export function App() {
   const today = useBridgeQuery(() => api().getToday());
   const [finished, setFinished] = useState(false);
   const screen = useScreen();
+
+  // Main can ask this window to show a screen, for example from the pet's right-click menu. It is
+  // heard here and not in the shell, so a request that arrives during the first load is not lost:
+  // the address changes at once, and the shell reads it when it appears.
+  useEffect(
+    () =>
+      api().onNavigate((path) => {
+        window.location.hash = path;
+      }),
+    [],
+  );
 
   // The sprite gallery is a tool for checking the art; it shows whether or not Para has hatched.
   if (screen === 'gallery') return <Shell />;

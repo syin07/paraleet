@@ -195,3 +195,31 @@ test('the menu bar icon opens the compact card and offers a menu', async () => {
     data.remove();
   }
 });
+
+// A request to show a screen must not be lost while the main window is still opening: its page
+// has not loaded, so nothing in it is listening yet.
+test('a screen asked for while the main window is still opening is shown', async () => {
+  const data = makeUserDataDir();
+  let running: RunningApp | null = null;
+  try {
+    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:00:00.000Z' });
+    await expect(running.page.getByTestId('today-title')).toHaveText('1. Two Sum');
+    for (const [label, heading] of [
+      ['Settings…', 'Settings'],
+      ["Swap today's problem…", 'Today'],
+    ] as const) {
+      const open = await running.mainPage();
+      await open.close();
+      await expect.poll(() => running?.mainWindowOpen()).toBe(false);
+      // One right after the other: the second arrives while the new window's page is loading.
+      await running.clickTrayMenu('Open ParaLeet');
+      await running.clickTrayMenu(label);
+      const reopened = await running.mainPage();
+      await expect(reopened.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+      if (heading === 'Today') await expect(reopened.getByRole('dialog')).toBeVisible();
+    }
+  } finally {
+    await running?.close().catch(() => undefined);
+    data.remove();
+  }
+});

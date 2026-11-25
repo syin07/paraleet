@@ -86,10 +86,25 @@ function updateDock(attempt = 0): void {
   );
 }
 
+/**
+ * Asks the main window to show a screen. While its page is still loading nothing in it is
+ * listening and a message would be dropped, so the request waits for the page.
+ */
+function navigateMainWindow(window: BrowserWindow, path: string): void {
+  const contents = window.webContents;
+  if (!contents.isLoading()) {
+    contents.send(NAVIGATE_EVENT, path);
+    return;
+  }
+  contents.once('did-finish-load', () => {
+    if (!window.isDestroyed()) contents.send(NAVIGATE_EVENT, path);
+  });
+}
+
 /** Shows the main window, creating it if needed. `path` is the screen to show, such as `/settings`. */
 function showMainWindow(path = ''): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    if (path !== '') mainWindow.webContents.send(NAVIGATE_EVENT, path);
+    if (path !== '') navigateMainWindow(mainWindow, path);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
