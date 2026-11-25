@@ -20,17 +20,14 @@ M1. The loop works.
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-108 | CSES, Codeforces and Other adapters | `worker/san-108-platforms` | Review round 3. Rounds 1 and 2 found ways one problem could get two identities (trailing dots on the host, leading zeros). Round 3 adds a 5,130-case invariant test. If it fails again the lead takes it over |
-| SAN-110 | Problems screen and add by URL | `worker/san-110-problems-screen` | Review round 2. Round 1 found pasted tags being dropped and a due count the PRD forbids |
-| SAN-111 | Lead: wire the loop end to end | `lead/san-111-daily-loop` (worktree `.claude/worktrees/lead-san-111`) | In progress. Done so far: review cards created on report, real next-review preview, launch-time reconcile, swap guard, end-to-end review test, Playwright config fixes |
-| SAN-127 | Add a problem from Today; report form keyboard and focus fixes | not started | Waits for SAN-110 to merge, then goes to a worker |
+| SAN-127 | Add a problem from Today; report form keyboard and focus fixes; scroll hint in dialogs | `worker/san-127-today-add-and-form-fixes` | Worker running |
+| SAN-111 | Lead: wire the loop end to end | `lead/san-111-daily-loop` (worktree `.claude/worktrees/lead-san-111`) | In progress. Done: review cards created on report, real next-review preview, launch-time reconcile, swap guard and swap-candidate rule, seeds checked with the link recognizer, service tests for every platform, end-to-end review test, Playwright config fixes, decisions 0008 and 0009 |
 
 ## Next
 
-1. Merge SAN-108 and SAN-110 as their reviews pass (rebase on `main`, rerun the suites, merge one at a time). Attach the Problems screenshots to SAN-110 with `scripts/contact-sheet.ts` (on the SAN-111 branch until it merges).
-2. Launch the SAN-127 worker once SAN-110 is merged. The brief is the issue text plus the review notes quoted on SAN-109.
-3. Finish SAN-111 after SAN-108, SAN-110 and SAN-127 are in: rebase, add end-to-end tests for add-by-URL and retire/reset from the Problems screen, update `docs/ARCHITECTURE.md` and the decision log (reconcile step, swap rules), then run its gate. It closes M1.
-4. Then write detailed M2 issues (SAN-112 to SAN-118 are coarse) and continue. M2 will also need issues for the pet mood state machine and the Settings screen, which the coarse list does not have.
+1. SAN-127: when the worker returns, run its gate (rebase, three suites, screenshots at both sizes, fresh reviewer), merge, attach the screenshot sheet.
+2. SAN-111, after SAN-127 is merged: rebase; add `tests/e2e/problems.spec.ts` (open a logged problem, edit notes, retire and reset, add by URL for LeetCode, Codeforces and another site, add from Today's quick-log, restart and check it all persisted); exercise every M1 checklist line in the running app; run its gate; merge. That closes M1.
+3. Then write detailed M2 issues and continue. Planned M2 split: sprite renderer and gallery plus seed variations (core, one worker); pet mood, speech lines, accessory unlocks and reminder decisions (core, new issue); Settings screen (ui, new issue); pet window, menu bar icon and compact card window, notifications, launch at login (lead, main); compact card and first-launch flow screens (ui workers); report animations (ui).
 
 ## Done
 
@@ -41,6 +38,8 @@ M1. The loop works.
 | SAN-107 | Full assignment order: overdue review, plan, starter; the 3-day rule; five due reviews at most | `c071371` |
 | SAN-105 | Streak hardening: boundary, daylight saving, time zones, clock errors; stored facts checked against a recompute | `59e7aa3` |
 | SAN-109 | Today screen and shared report form | `990088f` |
+| SAN-110 | Problems screen: table, filters, detail drawer with notes, retire and reset, add by URL | `bce284f` |
+| SAN-108 | Platform adapters and link recognition for LeetCode, CSES, Codeforces and Other (lead took it over after three failed reviews) | `398b61e` |
 
 ## Linear
 
@@ -72,4 +71,4 @@ None.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0007`.
+See `docs/decisions/0001` to `0007` on `main`; `0008` (loop wiring) and `0009` (problem links) arrive with the SAN-111 branch.
