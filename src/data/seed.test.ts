@@ -70,6 +70,42 @@ describe('validateSeedProblems', () => {
     );
     expect(validateSeedProblems([{ ...good, difficultyNorm: 3 }]).join('\n')).toMatch(/normalized difficulty/);
   });
+
+  it('reports a link the app would identify differently', () => {
+    const other: SeedProblem = {
+      ...good,
+      platform: 'other',
+      platformId: 'https://leetcode.com/problems/two-sum',
+      url: 'https://leetcode.com/problems/two-sum',
+      difficultyNorm: 1,
+    };
+    expect(validateSeedProblems([other]).join('\n')).toMatch(/would not recognize this link as other/);
+  });
+
+  it('accepts well-formed CSES, Codeforces and other links', () => {
+    const base = { displayId: null, difficultyRaw: null, difficultyNorm: null, topics: [], sourceTags: [] };
+    expect(
+      validateSeedProblems([
+        { ...base, platform: 'cses', platformId: '1068', title: 'Weird Algorithm', url: 'https://cses.fi/problemset/task/1068' },
+        {
+          ...base,
+          platform: 'codeforces',
+          platformId: '1352C',
+          title: 'K-th Not Divisible by n',
+          url: 'https://codeforces.com/problemset/problem/1352/C',
+          difficultyRaw: '1200',
+          difficultyNorm: 2,
+        },
+        {
+          ...base,
+          platform: 'other',
+          platformId: 'https://atcoder.jp/contests/abc300/tasks/abc300_a',
+          title: 'N-choice question',
+          url: 'https://atcoder.jp/contests/abc300/tasks/abc300_a',
+        },
+      ]),
+    ).toEqual([]);
+  });
 });
 
 describe('loadStarterSeed', () => {
