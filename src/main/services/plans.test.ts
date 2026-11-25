@@ -138,6 +138,15 @@ describe('generating a plan', () => {
     app.modelAnswers.push(json({ topics: wrong }), json({ topics: wrong }));
     await expect(app.handlers.generatePlan({ ...request, topics: ['binary-search'], platforms: ['leetcode'] })).rejects.toThrow(/usable plan/);
     expect(listPlans(app.db)).toEqual([]);
+
+    // The right topic on a platform that was not asked for is refused the same way.
+    const elsewhere = candidatesFor(app.ctx, { ...request, platforms: ['codeforces'] }).get('binary-search') ?? [];
+    expect(elsewhere[0]?.platform).toBe('codeforces');
+    const offPlatform = structuredClone(answer.topics) as { challenge: number[] }[];
+    offPlatform[0]!.challenge = [elsewhere[0]!.id];
+    app.modelAnswers.push(json({ topics: offPlatform }), json({ topics: offPlatform }));
+    await expect(app.handlers.generatePlan({ ...request, topics: ['binary-search'], platforms: ['leetcode'] })).rejects.toThrow(/usable plan/);
+    expect(listPlans(app.db)).toEqual([]);
   });
 
   it('records the model that wrote the plan when a fallback model answered', async () => {
@@ -290,6 +299,45 @@ describe('an active plan', () => {
     app.modelAnswers.push(json({ topics: other.topics }));
     const solved = await app.handlers.generatePlan({ ...request, topics: ['binary-search'], platforms: ['leetcode'] });
     await expect(later(() => app.handlers.activatePlan({ planId: solved.id }))).rejects.toThrow(/already solved every problem/);
+  });
+
+  it('shows progress per stage and per pattern group, and overall', async () => {
+    app = start();
+    const answer = goodAnswer();
+    const ids = answer.ids;
+    // One problem of the first pattern group is solved before the plan exists: skipped on activation.
+    await report(ids[4]!);
+    app.modelAnswers.push(json({ topics: answer.topics }));
+    const plan = await app.handlers.generatePlan({ ...request, topics: ['binary-search'], platforms: ['leetcode'] });
+    const sections = (view: PlanView) => view.sections.map((section) => [section.stage, section.groupName, section.progress]);
+    // A draft: everything pending, section by section.
+    expect(sections(plan)).toEqual([
+      ['foundations', null, { total: 3, done: 0, skipped: 0, pending: 3 }],
+      ['patterns', 'Search on the answer', { total: 3, done: 0, skipped: 0, pending: 3 }],
+      ['patterns', 'Rotated arrays', { total: 2, done: 0, skipped: 0, pending: 2 }],
+      ['challenge', null, { total: 2, done: 0, skipped: 0, pending: 2 }],
+    ]);
+    await app.handlers.activatePlan({ planId: plan.id });
+    // One foundation, one problem of the first group and one challenge are reported.
+    await report(ids[0]!);
+    await report(ids[3]!, 'again');
+    await report(ids[9]!, 'hard');
+    const active = (await app.handlers.getPlanOverview(undefined)).active!;
+    expect(sections(active)).toEqual([
+      ['foundations', null, { total: 3, done: 1, skipped: 0, pending: 2 }],
+      ['patterns', 'Search on the answer', { total: 3, done: 1, skipped: 1, pending: 1 }],
+      ['patterns', 'Rotated arrays', { total: 2, done: 0, skipped: 0, pending: 2 }],
+      ['challenge', null, { total: 2, done: 1, skipped: 0, pending: 1 }],
+    ]);
+    expect(active.progress).toEqual({ total: 10, done: 3, skipped: 1, pending: 6 });
+    // Each section's counts are its own rows' states, and they add up.
+    for (const section of active.sections) {
+      expect(section.items.filter((item) => item.state === 'done')).toHaveLength(section.progress.done);
+      expect(section.items.filter((item) => item.state === 'skipped')).toHaveLength(section.progress.skipped);
+      expect(section.progress.done + section.progress.skipped + section.progress.pending).toBe(section.progress.total);
+    }
+    // The same view comes back from getPlan.
+    expect(sections(await app.handlers.getPlan({ planId: plan.id }))).toEqual(sections(active));
   });
 
   it('is the only active plan: activating another archives it', async () => {

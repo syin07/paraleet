@@ -390,8 +390,9 @@ export function activePlanQueue(ctx: AppContext): number[] {
 }
 
 /**
- * Records an attempt against the active plan. Call inside the report's transaction, after the
- * attempt is stored. Returns the pattern group the problem belongs to, if any, and the title of
+ * Records an attempt against the active plan. Call inside the report's transaction, before the
+ * attempt is inserted: a plan this attempt finishes is stamped with the ID the attempt is about
+ * to get (see `finishPlan`), so the order of these two calls must not change. Returns the pattern group the problem belongs to, if any, and the title of
  * the plan when this attempt finished it.
  */
 export function recordPlanAttempt(

@@ -18,7 +18,7 @@ The user picks topics, platforms, a level and a size, and gets a staged list of 
 
 4. **A generated plan is a draft.** The user can remove a problem, move one within its stage or group, or swap one for another catalog problem of the same topic. A swap is held to the same rule as the model's answer. Activating a draft archives the plan that was active: one plan is active at a time, and a partial unique index enforces it.
 
-5. **Already-attempted problems are skipped on activation,** and come back as reviews through their cards. A plan made only of attempted problems cannot be activated.
+5. **Already-attempted problems are skipped on activation,** and come back as reviews through their cards. When such a problem is later reviewed while the plan is active, its item counts as done from then on: it was attempted as part of the plan. A plan made only of attempted problems cannot be activated.
 
 6. **Progress follows the attempts.** Reporting a plan's problem marks its item done, inside the report's transaction. At launch `reconcileActivePlan` recomputes the active plan's item states from the attempts, like the streak (decision 0008). An attempt rated Again counts as done for the plan (the problem then returns as tomorrow's review), but the graduation cap needs a growth solve, as every accessory does (decision 0011). A finished plan stores the ID of the attempt that finished it (`finished_from_attempt`). The launch check replays the attempts to restore lost accessories, and with that ID it gives the cap only to a growth solve at or after the finish, never to one from before it. Attempt IDs are used and not times, because IDs only grow and the clock can be wrong.
 
