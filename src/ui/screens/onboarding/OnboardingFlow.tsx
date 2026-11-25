@@ -1,24 +1,24 @@
-import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
-import { DEFAULT_SETTINGS, timeOfDaySchema } from "../../../core/settings";
-import { renderHatching } from "../../../core/sprite";
-import type { TodayView } from "../../../bridge/contract";
-import { api } from "../../bridge";
-import { Button } from "../../components/Button";
-import { Input } from "../../components/Field";
-import { useHatchingStep } from "../../components/Hatching";
-import { Card } from "../../components/Layout";
-import { PixelCanvas, Sprite } from "../../components/Sprite";
-import { SpeechBubble } from "../../components/SpeechBubble";
-import { cx } from "../../lib/format";
-import { Row } from "../settings/SettingsParts";
+import { useEffect, useRef, useState, type FormEvent, type Ref } from 'react';
+import { DEFAULT_SETTINGS, timeOfDaySchema } from '../../../core/settings';
+import { renderHatching } from '../../../core/sprite';
+import type { TodayView } from '../../../bridge/contract';
+import { api } from '../../bridge';
+import { Button } from '../../components/Button';
+import { Input } from '../../components/Field';
+import { useHatchingStep } from '../../components/Hatching';
+import { Card } from '../../components/Layout';
+import { PixelCanvas, Sprite } from '../../components/Sprite';
+import { SpeechBubble } from '../../components/SpeechBubble';
+import { cx } from '../../lib/format';
+import { Row } from '../settings/SettingsParts';
 
 const STEPS = 3;
-const TIME_MESSAGE = "Use a 24-hour time like 16:00";
+const TIME_MESSAGE = 'Use a 24-hour time like 16:00';
 /** Six frames at this pace make about 1.5 seconds. */
 const HATCH_FRAME_MS = 300;
 const ART_SIZE = 192;
 
-type Step = "egg" | "meet" | "reminders";
+type Step = 'egg' | 'meet' | 'reminders';
 const STEP_NUMBER: Record<Step, number> = { egg: 1, meet: 2, reminders: 3 };
 
 /** Moves focus to the step's one primary button when the step appears, so Enter moves on. */
@@ -37,12 +37,8 @@ function ProgressDots({ current }: { current: number }) {
         <span
           key={i}
           className={cx(
-            "h-2 w-2 rounded-full",
-            i + 1 === current
-              ? "bg-accent"
-              : i + 1 < current
-                ? "bg-accent/50"
-                : "bg-line",
+            'h-2 w-2 rounded-full',
+            i + 1 === current ? 'bg-accent' : i + 1 < current ? 'bg-accent/50' : 'bg-line',
           )}
         />
       ))}
@@ -51,7 +47,7 @@ function ProgressDots({ current }: { current: number }) {
 }
 
 function prefersReducedMotion(): boolean {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function PlayingEgg({ seed, onDone }: { seed: number; onDone: () => void }) {
@@ -100,18 +96,9 @@ function EggStep({ seed, onNext }: { seed: number; onNext: () => void }) {
           />
         )}
       </button>
-      <p className="mt-4 font-pixel text-[10px] leading-4 text-fg">
-        Something is moving…
-      </p>
-      <Button
-        ref={focus}
-        variant="primary"
-        size="lg"
-        className="mt-6 min-w-32"
-        onClick={hatch}
-        disabled={playing}
-      >
-        {playing ? "Hatching…" : "Hatch"}
+      <p className="mt-4 font-pixel text-[10px] leading-4 text-fg">Something is moving…</p>
+      <Button ref={focus} variant="primary" size="lg" className="mt-6 min-w-32" onClick={hatch} disabled={playing}>
+        {playing ? 'Hatching…' : 'Hatch'}
       </Button>
     </>
   );
@@ -122,41 +109,25 @@ function MeetStep({ seed, onNext }: { seed: number; onNext: () => void }) {
   return (
     <>
       <div className="relative" style={{ width: ART_SIZE, height: ART_SIZE }}>
-        <Sprite
-          seed={seed}
-          stage="egg"
-          mood="content"
-          size={ART_SIZE}
-          animated
-          testId="onboarding-para"
-        />
-        <div
-          className="absolute top-2 left-[calc(100%-40px)] w-[164px] text-left"
-          data-testid="onboarding-bubble"
-        >
+        <Sprite seed={seed} stage="egg" mood="content" size={ART_SIZE} animated testId="onboarding-para" />
+        <div className="absolute top-2 left-[calc(100%-40px)] w-[164px] text-left" data-testid="onboarding-bubble">
           <SpeechBubble tail="left" className="max-w-full">
             Hi! I&apos;m Para. Feed me one problem a day.
           </SpeechBubble>
         </div>
       </div>
       <p className="mt-6 max-w-[400px] text-base text-fg-secondary">
-        Solve one problem a day and Para gets fed. Para remembers what you
-        solved and brings it back for review at the right time.
+        Solve one problem a day and Para gets fed. Para remembers what you solved and brings it back for review at the
+        right time.
       </p>
-      <Button
-        ref={focus}
-        variant="primary"
-        size="lg"
-        className="mt-6"
-        onClick={onNext}
-      >
+      <Button ref={focus} variant="primary" size="lg" className="mt-6" onClick={onNext}>
         Nice to meet you
       </Button>
     </>
   );
 }
 
-type TimeKey = "first" | "evening";
+type TimeKey = 'first' | 'evening';
 
 function RemindersStep({
   onFinish,
@@ -177,8 +148,7 @@ function RemindersStep({
   });
   const focus = useFocusOnAppear();
 
-  const check = (value: string): string | null =>
-    timeOfDaySchema.safeParse(value).success ? null : TIME_MESSAGE;
+  const check = (value: string): string | null => (timeOfDaySchema.safeParse(value).success ? null : TIME_MESSAGE);
 
   function setTime(key: TimeKey, value: string): void {
     setTimes((current) => ({ ...current, [key]: value }));
@@ -201,9 +171,7 @@ function RemindersStep({
           invalid={errors[key] !== null}
           value={times[key]}
           onChange={(event) => setTime(key, event.target.value)}
-          onBlur={() =>
-            setErrors((current) => ({ ...current, [key]: check(times[key]) }))
-          }
+          onBlur={() => setErrors((current) => ({ ...current, [key]: check(times[key]) }))}
           className="text-center tabular-nums"
           autoComplete="off"
           spellCheck={false}
@@ -215,39 +183,20 @@ function RemindersStep({
   );
 
   return (
-    <form
-      onSubmit={submit}
-      noValidate
-      className="flex w-full flex-col items-center"
-      aria-label="Reminders"
-    >
-      <h1 className="text-lg font-semibold text-fg">
-        When should Para remind you?
-      </h1>
-      <Card
-        padding="none"
-        className="mt-4 w-full divide-y divide-line-subtle text-left"
-      >
-        {field("first", "First reminder")}
-        {field("evening", "Evening reminder")}
+    <form onSubmit={submit} noValidate className="flex w-full flex-col items-center" aria-label="Reminders">
+      <h1 className="text-lg font-semibold text-fg">When should Para remind you?</h1>
+      <Card padding="none" className="mt-4 w-full divide-y divide-line-subtle text-left">
+        {field('first', 'First reminder')}
+        {field('evening', 'Evening reminder')}
       </Card>
-      <p className="mt-2 text-sm text-fg-muted">
-        At most two a day. Skipped once Para is fed.
-      </p>
+      <p className="mt-2 text-sm text-fg-muted">At most two a day. Skipped once Para is fed.</p>
       {saveError && (
         <p role="alert" className="mt-3 text-sm text-hard-text">
           {saveError}
         </p>
       )}
-      <Button
-        ref={focus}
-        type="submit"
-        variant="primary"
-        size="lg"
-        className="mt-6"
-        loading={saving}
-      >
-        {saving ? "Saving…" : "Continue"}
+      <Button ref={focus} type="submit" variant="primary" size="lg" className="mt-6" loading={saving}>
+        {saving ? 'Saving…' : 'Continue'}
       </Button>
     </form>
   );
@@ -257,21 +206,12 @@ function RemindersStep({
  * The first-launch flow (PRD section 11, design section 10): hatch the egg, meet Para, pick the
  * reminder times. Finishing marks Para hatched; the parent then shows the app.
  */
-export function OnboardingFlow({
-  seed,
-  onFinished,
-}: {
-  seed: number;
-  onFinished: (today: TodayView) => void;
-}) {
-  const [step, setStep] = useState<Step>("egg");
+export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished: (today: TodayView) => void }) {
+  const [step, setStep] = useState<Step>('egg');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  async function finish(times: {
-    first: string;
-    evening: string;
-  }): Promise<void> {
+  async function finish(times: { first: string; evening: string }): Promise<void> {
     setSaving(true);
     setSaveError(null);
     try {
@@ -298,7 +238,7 @@ export function OnboardingFlow({
         <div className="relative flex w-[440px] max-w-full flex-col items-center text-center">
           <div className="relative mb-6 flex h-6 w-full items-center justify-center">
             <ProgressDots current={STEP_NUMBER[step]} />
-            {step === "reminders" && (
+            {step === 'reminders' && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -314,22 +254,11 @@ export function OnboardingFlow({
             Step {STEP_NUMBER[step]} of {STEPS}
           </div>
           {/* Keyed so each step is new: its primary button takes focus when it appears. */}
-          <div
-            key={step}
-            className="flex min-h-[320px] w-full flex-col items-center"
-          >
-            {step === "egg" && (
-              <EggStep seed={seed} onNext={() => setStep("meet")} />
-            )}
-            {step === "meet" && (
-              <MeetStep seed={seed} onNext={() => setStep("reminders")} />
-            )}
-            {step === "reminders" && (
-              <RemindersStep
-                onFinish={(t) => void finish(t)}
-                saving={saving}
-                saveError={saveError}
-              />
+          <div key={step} className="flex min-h-[320px] w-full flex-col items-center">
+            {step === 'egg' && <EggStep seed={seed} onNext={() => setStep('meet')} />}
+            {step === 'meet' && <MeetStep seed={seed} onNext={() => setStep('reminders')} />}
+            {step === 'reminders' && (
+              <RemindersStep onFinish={(t) => void finish(t)} saving={saving} saveError={saveError} />
             )}
           </div>
         </div>
