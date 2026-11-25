@@ -217,12 +217,15 @@ function RemindersStep({
 function KeyStep({
   onSave,
   onFinish,
+  onEdit,
   busy,
   keySaved,
   finishError,
 }: {
   onSave: (apiKey: string) => Promise<string | null>;
   onFinish: () => void;
+  /** Typing in the field puts an old finish message away. */
+  onEdit: () => void;
   busy: boolean;
   keySaved: boolean;
   finishError: string | null;
@@ -255,8 +258,10 @@ function KeyStep({
     event.preventDefault();
     if (working || value.trim().length < MIN_KEY_LENGTH) return;
     // Refused here, in plain words, without sending it; the field keeps what was typed.
-    if (value.length > MAX_KEY_LENGTH) {
+    // Main trims first, so a pasted key with a trailing newline is measured without it.
+    if (value.trim().length > MAX_KEY_LENGTH) {
       setError(TOO_LONG_MESSAGE);
+      fieldRef.current?.focus();
       return;
     }
     const apiKey = value;
@@ -316,6 +321,7 @@ function KeyStep({
           onChange={(event) => {
             setValue(event.target.value);
             setError(null);
+            onEdit();
           }}
           invalid={error !== null}
           aria-invalid={error !== null}
@@ -489,6 +495,7 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
               <KeyStep
                 onSave={saveKey}
                 onFinish={() => void finish(times ?? saved)}
+                onEdit={() => setSaveError(null)}
                 busy={saving}
                 keySaved={keySaved}
                 finishError={saveError}

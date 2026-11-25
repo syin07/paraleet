@@ -602,6 +602,16 @@ for (const [label, press] of [
   });
 }
 
+test('typing in the key field clears an old finish message', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await failOnce(page, 'completeOnboarding', 'The database is locked');
+  await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('The database is locked');
+  await keyField(page).fill('s');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('step 4 puts focus in the key field when it appears', async ({ page }) => {
   await openKeyFlow(page);
   await toKey(page);
@@ -661,12 +671,13 @@ test('a key over 300 characters is refused in the page, without being sent or cl
   await keyField(page).fill(long);
   await page.getByRole('button', { name: 'Save key', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('That is too long to be an API key.');
+  await expect(keyField(page)).toBeFocused();
   await expect(keyField(page)).toHaveAttribute('aria-invalid', 'true');
   await expect(keyField(page)).toHaveValue(long);
   expect(await page.getByRole('alert').innerText()).not.toContain('kkkk');
   expect(await calls(page)).toEqual([]);
-  // Exactly 300 is allowed.
-  await keyField(page).fill('k'.repeat(300));
+  // Exactly 300 is allowed, and so is 300 with a trailing newline, which main trims.
+  await keyField(page).fill('k'.repeat(300) + ' ');
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('button', { name: 'Save key', exact: true }).click();
   await expect(page.getByTestId('screen-today')).toBeVisible();
@@ -734,4 +745,100 @@ test('step 4 with a saved key and a failed finish fits the minimum window', asyn
   })`);
   expect(sizes.sh).toBeLessThanOrEqual(sizes.ih);
   expect(sizes.bottom).toBeLessThanOrEqual(sizes.ih);
+});
+
+/** completeOnboarding takes 600ms; the first call fails first when asked to. */
+async function slowFinish(page: Page, failFirst: boolean): Promise<void> {
+  await page.evaluate(`(() => {
+    const original = globalThis.paraleet.completeOnboarding;
+    globalThis.__calls = globalThis.__calls || [];
+    let n = 0;
+    globalThis.paraleet.completeOnboarding = async (input) => {
+      globalThis.__calls.push({ method: 'completeOnboarding', input });
+      n += 1;
+      if (${failFirst} && n === 1) throw new Error('The database is locked');
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return original(input);
+    };
+  })()`);
+}
+
+test('while the finish runs on step 4, nothing can be pressed to finish twice', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await slowFinish(page, false);
+  const skipNow = page.getByRole('button', { name: 'Skip for now', exact: true });
+  await skipNow.click();
+  await expect(skipNow).toBeDisabled();
+  await expect(skipTop(page)).toBeDisabled();
+  await skipNow.click({ force: true });
+  await skipTop(page).click({ force: true });
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await count(page, 'completeOnboarding')).toBe(1);
+});
+
+test('while the finish retries after a saved key, nothing can be pressed to finish twice', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey']);
+  await slowFinish(page, true);
+  await keyField(page).fill(SECRET);
+  await keyField(page).press('Enter');
+  const retry = page.getByRole('button', { name: 'Try again', exact: true });
+  await expect(retry).toBeEnabled();
+  await retry.click();
+  const busy = page.getByRole('button', { name: 'Saving…' });
+  await expect(busy).toBeDisabled();
+  await expect(skipTop(page)).toBeDisabled();
+  await busy.click({ force: true });
+  await skipTop(page).click({ force: true });
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  // One failed call, one retry: the presses while it ran added nothing.
+  expect(await count(page, 'completeOnboarding')).toBe(2);
+  expect(await count(page, 'saveApiKey')).toBe(1);
+});
+
+test('a getPlanOverview that never answers never holds the three steps back', async ({ page }) => {
+  await page.addInitScript(`
+    const timer = setInterval(() => {
+      if (!globalThis.paraleet) return;
+      clearInterval(timer);
+      globalThis.paraleet.getPlanOverview = () => new Promise(() => {});
+    }, 0);
+  `);
+  await openKeyFlow(page);
+  await spyOn(page, ['completeOnboarding', 'updateSettings']);
+  await toReminders(page);
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 3');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect((await calls(page)).map((c) => c.method)).toEqual(['completeOnboarding']);
+});
+
+test('an answer that comes after Continue was pressed does not add step 4', async ({ page }) => {
+  await page.addInitScript(`
+    const timer = setInterval(() => {
+      if (!globalThis.paraleet) return;
+      clearInterval(timer);
+      globalThis.__answer = () => {};
+      globalThis.paraleet.getPlanOverview = () =>
+        new Promise((resolve) => {
+          globalThis.__answer = () => resolve({ llm: { canStoreKey: true, hasKey: false } });
+        });
+    }, 0);
+  `);
+  await openKeyFlow(page);
+  await spyOn(page, ['completeOnboarding', 'updateSettings']);
+  await failOnce(page, 'completeOnboarding', 'The database is locked');
+  await toReminders(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('alert')).toHaveText('The database is locked');
+  // Now the answer arrives: it says "offer step 4", but the flow already chose three steps.
+  await page.evaluate(`globalThis.__answer()`);
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 3');
+  await expect(page.getByTestId('onboarding-dots').locator('span')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Want learning plans?' })).toHaveCount(0);
+  expect((await calls(page)).filter((c) => c.method === 'updateSettings')).toEqual([]);
 });
