@@ -7,6 +7,12 @@ import type { ParaDay } from './types';
 
 export const DEFAULT_BOUNDARY_HOUR = 4;
 
+/**
+ * How many days a last fed day can be ahead of the computed day and still be explained by a move
+ * to an earlier time zone. Further ahead is a wrong system clock, not travel.
+ */
+export const MAX_ZONE_SHIFT_DAYS = 2;
+
 interface LocalParts {
   year: number;
   month: number;
@@ -64,8 +70,17 @@ export function isParaDay(value: string): value is ParaDay {
   return addDays(value, 0) === value;
 }
 
-/** The ParaLeet day that `instant` falls on, for someone in `timeZone`. */
+/**
+ * The ParaLeet day that `instant` falls on, for someone in `timeZone`. The rule is only "local
+ * hour below the boundary belongs to the previous date", so a boundary hour skipped by a
+ * spring-forward needs no special case, and a repeated hour on a fall-back day gives both passes
+ * the same day.
+ */
 export function paraDayOf(instant: Date, timeZone: string, boundaryHour: number = DEFAULT_BOUNDARY_HOUR): ParaDay {
+  if (!Number.isInteger(boundaryHour) || boundaryHour < 0 || boundaryHour > 23) {
+    throw new RangeError(`Boundary hour must be an integer from 0 to 23, got ${boundaryHour}`);
+  }
+  // An unknown zone makes Intl throw a RangeError; it is never swallowed or replaced by another zone.
   const local = localParts(instant, timeZone);
   const calendarDay = toParaDay(local.year, local.month, local.day);
   return local.hour < boundaryHour ? addDays(calendarDay, -1) : calendarDay;
@@ -97,5 +112,5 @@ export function weekdayIndex(day: ParaDay): number {
 export function effectiveToday(computed: ParaDay, lastFedDay: ParaDay | null): ParaDay {
   if (lastFedDay === null) return computed;
   const ahead = daysBetween(computed, lastFedDay);
-  return ahead > 0 && ahead <= 2 ? lastFedDay : computed;
+  return ahead > 0 && ahead <= MAX_ZONE_SHIFT_DAYS ? lastFedDay : computed;
 }
