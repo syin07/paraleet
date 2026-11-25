@@ -1,6 +1,6 @@
 # ParaLeet status
 
-Last updated: 2026-11-25 (session 2, lead)
+Last updated: 2026-11-25 (end of session 2, lead; the owner cleared the session here, see In flight and Cold start)
 
 ## What works today
 
@@ -18,7 +18,7 @@ Last updated: 2026-11-25 (session 2, lead)
 
 ## Notes for the owner
 
-- **Please try Para with a real mouse.** Tests drive the pet window from inside the app, so one thing is unconfirmed by a person: with another app in front, hover Para (a bubble appears), click it (ParaLeet opens), drag it, and click on the empty area around it (the click should reach the window underneath). Run `npm run dev` to try.
+- **Please try Para with a real mouse.** Tests drive the pet window from inside the app, so one thing is unconfirmed by a person: with another app in front, hover Para (a bubble appears), click it (the small card opens beside it; a second click closes it), drag it, right-click it (a menu), and click on the empty area around it (the click should reach the window underneath). Run `npm run dev` to try.
 
 - **Mobbin needs a paid plan.** The Mobbin connector answered "requires a paid plan", so screens are designed from PRD section 11 and well-known app patterns, as section 13 allows. `docs/design-references.md` says so at the top. Nothing is blocked.
 - **Please click a real reminder once.** Tests click the notification from inside the app. With another app in front, a click on a real "Para is peckish" notification should show the small card and not bring the main window forward. The first notification makes macOS ask for permission.
@@ -30,20 +30,46 @@ M3. Catalog and learning plans, with M4 work running beside it. (M2 closed with 
 
 ## In flight
 
-Session 2 (2026-11-25). Nothing below is merged yet.
+**Session 2 ended here (2026-11-25), at the owner's request, with no worker or reviewer running and no test run in progress.** M2 is merged. Three branches hold unmerged work; every worktree is clean (all work committed). Only `main` is on the remote (`origin`, github.com/syin07/paraleet): these branches are local.
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-120 to SAN-123 (M3 core) | Lead: plan rules in core, migration 003, plans repository, the `llm` module, plan services, the API key in a sealed file, bridge methods, plain error messages across the bridge, mock plans, decision 0016 | `lead/m3-plan-core` (worktree `.claude/worktrees/lead-m3`) | Type check, lint and 1026 unit tests pass (`b59ead4`). `tests/e2e/plans.spec.ts` is **written but not run yet**. To do, in order: rebase on main; run the UI and end-to-end suites; fresh reviewer; merge. Then workers: SAN-130 (the Plan screen) and SAN-131 ("Learning plans" in Settings); the lead adds the optional API key step to the first-launch flow |
-| SAN-124 (M4) | Worker: stats rules in core (`src/core/stats.ts`, `buildStats`), 28 tests | `worker/san-124-stats` at `ecc5ae6` (worktree `.claude/worktrees/agent-ab3ac71efafc0b677`) | Worker done; a fresh reviewer is reading it. Then merge; the lead adds `getStats` (bridge, service, mock); then the same worker builds the Stats screen (step 2) |
-| Export and import (M4, issue to create) | Lead: the data layer is done (`src/data/transfer.ts`: `exportDatabase` with `VACUUM INTO`, `inspectDatabaseFile`, an import staged next to the database and swapped in at the next launch, the replaced database kept as `paraleet.sqlite3.before-import`), 18 tests | `lead/san-132-export-import` at `266fcad` (worktree `.claude/worktrees/lead-m4`), stacked on `lead/m3-plan-core` | Still to do: file-dialog and restart ports on the service context, services, bridge methods (`getDataInfo`, `exportData`, `chooseImport`, `applyImport`, `cancelImport`, `showDataInFinder`), apply the staged import at launch in `src/main/index.ts`, mock, end-to-end test, decision 0017. Then a worker adds the "Data" group to Settings |
+| SAN-120 to SAN-123 (M3 core) | Lead: plan rules in core, migration 003, plans repository, the `llm` module, plan services, the API key in a sealed file, bridge methods, plain error messages across the bridge, mock plans, decision 0016, architecture and README | `lead/m3-plan-core` at `591c789` (worktree `.claude/worktrees/lead-m3`), rebased on main `c563b20` | Type check, lint and 1026 unit tests pass after the rebase. **Not run yet on this branch: the UI suite and the end-to-end suite**, including the new `tests/e2e/plans.spec.ts`, which has never been run. Not reviewed yet. To do, in order: rebase on main; `npm run test:ui`; `npm run test:e2e` (expect to debug `plans.spec.ts`); fresh reviewer with SAN-120 to SAN-123's criteria; merge |
+| SAN-124 (M4), step 1 | Worker: stats rules in core (`src/core/stats.ts`, `buildStats`) | `worker/san-124-stats` at `e1024d1` (worktree `.claude/worktrees/agent-ab3ac71efafc0b677`), rebased on main `c563b20` | 959 unit tests pass. Review round 1 blocked on one missing test (a leap day). The lead added it, plus one for solves on a week's first and last day. **Needs a fresh reviewer (round 2), then merge.** Core only, so no UI or end-to-end run is needed beyond `npm run check` |
+| SAN-132 (M4) | Lead: export and import, data layer only (`src/data/transfer.ts`, 18 tests) | `lead/san-132-export-import` at `35df3f6` (worktree `.claude/worktrees/lead-m4`), **stacked on `lead/m3-plan-core`** | 1044 unit tests pass. Not ready to merge: see the to-do list in SAN-132 and under Cold start. When M3 core changes or merges, re-stack with `git rebase --onto <new base> <old base> lead/san-132-export-import` |
+
+Leftovers that are not work in flight: `lead/m2-contract` (two work-in-progress commits from session 1, superseded by the SAN-114 merge; delete after a look) and `worktree-agent-ab3ac71efafc0b677` (the empty branch the worker's worktree was created on).
 
 ## Next
 
-1. Merge M3 core (see the table). Never run two end-to-end suites at once on this Mac: test apps take focus from each other.
-2. Fan out the M3 screens to workers (SAN-130, SAN-131); the lead adds the API key step to the first-launch flow. Tick the M3 checklist in `docs/PRD.md` when merged. Tell the owner in the final report that the server-side refusal fallback is on (decision 0016, item 11), and that no live call to Anthropic was made by the build.
-3. M4: the Stats screen (SAN-124); export and import in Settings; a `.dmg` with electron-builder (this Mac is arm64; build a universal app if the Electron download for x64 works, and sign ad hoc, because an unsigned arm64 app does not start) and a one-page install note for the unsigned-app warning; a log file for failures (`paraleet.log` in the data folder: the launch self-check, bridge failures, tick failures); and in the packaged app confirm `isRendererUrl` (also from a path with unusual characters), the login item and the quiet login start.
-4. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install.
+1. Set the goal again (PRD section 14, kickoff step 6), then re-read this file.
+2. Two cheap merges first: launch a fresh reviewer for `worker/san-124-stats`; run the UI and end-to-end suites on `lead/m3-plan-core` and launch its reviewer. Never run two end-to-end suites at once on this Mac: test apps take focus from each other.
+3. After M3 core merges: workers for SAN-130 (the Plan screen; mock scenarios `plan-nokey`, `plan-nostore`, `plan-fails`, `plan-draft`, `plan-active`) and SAN-131 ("Learning plans" in Settings). The lead adds step 4 of the first-launch flow (the optional API key; design section 10) and ticks the M3 checklist in `docs/PRD.md`.
+4. After the stats rules merge: the lead adds `getStats` (channels, contract, service, mock; see Cold start), then a worker builds the Stats screen (SAN-124, step 3).
+5. Finish SAN-132 (export and import), then a worker adds the "Data" group to Settings. SAN-131 and this both edit the Settings screen: run them one after the other, or give both to one worker.
+6. SAN-125: the `.dmg`, the install note, the log file, and the checks in the packaged app. Start after M3 core merges (both change `package.json`).
+7. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; and the hand checks under "Notes for the owner".
+
+## Cold start: what is not written down anywhere else
+
+**Agents do not survive a cleared session.** The stats worker cannot be continued with `SendMessage`. For the Stats screen, brief a new `implementer` and tell it to work on top of main once the rules are merged. A worktree left by an old agent may be locked: `git worktree unlock <path>` before removing it.
+
+**Lessons from this session's reviews.** Five branches went to review; four were blocked in round 1, each time for the same reason: an acceptance criterion in the brief had no test that would fail if it broke (where the card opens after a notification click; the card's failed-load state; a leap day). Before sending a branch to review, go down the criteria in the brief and name the test for each one. The reviewers' non-blocking notes were worth fixing before the merge every time.
+
+**Check exit codes.** `npm run test:ui 2>&1 | tail -3 && git commit ...` commits past a failing test, because the pipe's exit code is `tail`'s. This happened once this session (caught before the merge). Run each suite to a log file and print `$?`.
+
+**Do not assert heights that depend on how text wraps** in UI tests. The web font may or may not have loaded when the test measures, and a cell's height changed between 74 and 90 points from run to run. Assert positions (same row, same column) instead.
+
+**The Anthropic SDK (1.14), as found by running it.** `messages.parse` throws on an answer that is cut off or is not JSON, so the client calls `messages.create` and reads the text itself. The SDK sends the key as `Authorization: Bearer`, not `x-api-key`; tests accept either. The client takes a `fetch` option, which is how `src/llm/anthropicClient.test.ts` runs without the network. End-to-end runs always get the scripted model (`scriptedModels` in `src/main/index.ts`), with or without `PARALEET_E2E_LLM_ANSWERS`.
+
+**Decided for M4, not yet in the decision log** (write `docs/decisions/0017-stats-and-data.md` on the M4 branch; `src/data/transfer.ts` already points at it):
+
+- Stats. A solve is an attempt rated Hard, Good or Easy. A fed day is a day with any attempt, also one rated Again. The heatmap colors days by attempts (0, 1, 2, 3, 4 or more; the tokens `heat-0` to `heat-4` exist in `src/ui/styles.css`). The weekly bars count solves. Topic coverage counts different problems solved per topic. Weeks start on Monday, in ParaLeet days. Ranges: 12, 26 and 53 weeks. Attempts dated after today count in totals but never light a future day. Streaks are not computed in `buildStats`: the `getStats` service takes them from the pet facts (`displayedStreak` for the current one). The service builds `StatsAttempt` rows from the attempts joined with each problem's topics.
+- Export. `VACUUM INTO` a file beside the target, then rename: a complete, compact copy, safe while the app runs. The API key is not in it.
+- Import. Check the file (`inspectDatabaseFile`: a real ParaLeet database, not newer than the app, passes SQLite's integrity check), show the user what is in it, then copy it next to the database as `paraleet.sqlite3.import` and restart. At launch, before the database is opened, `applyStagedImport` checks it again and swaps it in; the old database becomes `paraleet.sqlite3.before-import` (one backup is kept). The open database is never replaced while the app runs. Rejected: swapping the connection in place (every holder of the database would need to follow).
+- Import, still to build. Ports on the service context: `files.chooseSavePath`, `files.chooseOpenPath`, `files.reveal`, and `restart` (main: `dialog`, `shell.showItemInFolder`, `app.relaunch()` then `app.exit(0)`; in end-to-end runs the paths come from test hooks and restart only quits, and the test launches the app again on the same folder). The UI never passes a file path to main: `chooseImport` remembers the path in `ctx.session` and `applyImport` takes no input. Bridge methods: `getDataInfo`, `exportData`, `chooseImport`, `applyImport`, `cancelImport`, `showDataInFinder`. In `src/main/index.ts`, call `applyStagedImport(userData)` before `openDatabase`, and log a rejected file.
+- Log file. `paraleet.log` in the data folder, appended, rotated at about 1 MB to `paraleet.log.old`. It gets the launch self-check's failures, bridge failures (`registerBridge`'s `onFailure` already exists on the M3 branch), failed tick steps and uncaught errors. Never an input, never the key.
+- Installer. See SAN-125's notes. This Mac is arm64, macOS 26.6.
 
 ## Done
 
@@ -106,8 +132,8 @@ Session 2 (2026-11-25). Nothing below is merged yet.
 
 ## Blockers
 
-None.
+None. Nothing is waiting on the owner. The M4 line "a week of the owner's own daily use" (SAN-126) is the owner's and starts when he likes; it is easier once the installer exists.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0015` (`0012`: wiring the living pet; `0013`: menu bar icon and card; `0014`: the catalog; `0015`: reminders and launch at login). `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
+See `docs/decisions/0001` to `0015` (`0012`: wiring the living pet; `0013`: menu bar icon and card; `0014`: the catalog; `0015`: reminders and launch at login). `0016` (learning plans, the model, the API key, plain errors across the bridge) is written on `lead/m3-plan-core` and arrives with its merge. `0017` (stats, export and import) is still to write: its content is under Cold start. `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
