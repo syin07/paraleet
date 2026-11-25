@@ -33,6 +33,12 @@ function openMain(screen: 'today' | null): void {
   void api().hideCard();
 }
 
+/** "Swap" lands on Today with the swap choices already open. */
+function openSwap(): void {
+  void api().showSwap();
+  void api().hideCard();
+}
+
 export function CardWindow() {
   const today = useBridgeQuery(() => api().getToday());
   const [view, setView] = useState<View>({ kind: 'first' });
@@ -188,7 +194,7 @@ function FirstView({ data, onSolved }: { data: TodayView; onSolved: (assignment:
           Open ParaLeet
         </Button>
         {open && (
-          <Button variant="ghost" size="sm" onClick={() => openMain('today')}>
+          <Button variant="ghost" size="sm" onClick={openSwap}>
             Swap
           </Button>
         )}

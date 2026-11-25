@@ -66,3 +66,27 @@ test('the card opens from the menu bar icon, feeds Para, and closes by itself; t
     data.remove();
   }
 });
+
+test("the card's Swap opens the swap choices in the main window and closes the card", async () => {
+  const data = makeUserDataDir();
+  let running: RunningApp | null = null;
+  try {
+    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:00:00.000Z' });
+    const main = running.page;
+    await expect(main.getByTestId('today-title')).toHaveText('1. Two Sum');
+    // Somewhere else in the main window first, so landing on Today is the card's doing.
+    await main.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Settings' }).click();
+
+    await running.clickTray();
+    const card = await running.cardPage();
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    await card.getByRole('button', { name: 'Swap' }).click();
+
+    await expect(main.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    await expect(main.getByRole('dialog')).toContainText('swap');
+    await expect.poll(async () => (await running?.card())?.exists).toBe(false);
+  } finally {
+    await running?.close().catch(() => undefined);
+    data.remove();
+  }
+});

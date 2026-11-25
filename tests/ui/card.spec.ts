@@ -242,7 +242,7 @@ test('the footer opens the main window and closes the card', async ({ page }) =>
 
   await openCard(page);
   await page.getByRole('button', { name: 'Swap' }).click();
-  expect((await windowCalls(page)).slice(-2)).toEqual(['showMainWindow:today', 'hideCard']);
+  expect((await windowCalls(page)).slice(-2)).toEqual(['showSwap', 'hideCard']);
 });
 
 test('Escape closes the card from the first view and from the report view', async ({ page }) => {
