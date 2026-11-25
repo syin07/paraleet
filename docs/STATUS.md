@@ -4,13 +4,15 @@ Last updated: 2026-11-25 (session 1, lead)
 
 ## What works today
 
-**Milestone M1 is complete and merged.** Run `npm install`, then `npm run dev`.
+**Milestone M1 is complete and merged, and most of M2.** Run `npm install`, then `npm run dev`.
+
+- Para is a pixel-art parakeet drawn by code. It floats on the desktop in its own see-through window, follows the day (asleep, peckish, hungry, content), says a different line each day, checks and eats when you report a solve, greets you after days away, grows (egg, chick, fledgling, adult) and earns accessories you can put on in Settings.
 
 - Para picks one problem a day: a due review first, otherwise the next starter problem. "Open problem" opens the browser; "I solved it" records a rating in two clicks.
 - Every reported problem gets a review card (FSRS). A problem rated Again is tomorrow's problem. Up to five other due reviews are listed, never a count. Today's problem can be swapped.
 - Any problem can be logged from Today by search or by pasting its link (LeetCode, CSES, Codeforces or another site). The Problems screen lists everything logged, with filters, attempt history, notes, retire and reset.
 - The streak holds across the 04:00 boundary, restarts, sleep and time-zone changes. All data is one SQLite file.
-- The bird is still a placeholder, and Plan, Stats and Settings are placeholders. That is M2 to M4.
+- Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories). Plan and Stats are still placeholders (M3 and M4). The menu bar icon, the compact card, notifications and the first-launch flow are in progress.
 
 ## Notes for the owner
 
@@ -28,15 +30,18 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-112 + SAN-113 | Worker: procedural sprite, seed traits, `Sprite` component, gallery at `#/gallery` | `worker/san-112-sprite` (worktree `.claude/worktrees/agent-a76a928ef3328cd62`) | Reviewer PASS at `e825ceb`. Back with the worker for a short polish pass from the reviewer's notes (sleeping Z's, egg outline, scarf with bow tie, a tighter jump test). Then the lead rebases (the pet window imports the old placeholder, which this branch deletes: switch `PetWindow.tsx` to `Sprite`), runs the suites and merges |
-| SAN-116 | Lead: Para comes alive. Migration 002, real mood and line in `petSummary`, accessory unlocks inside `submitReport`, the "missed you" greeting, mood changes pushed to windows | `lead/san-116-pet-life` (worktree `.claude/worktrees/lead-san-111`) | Starting |
+| SAN-115 (main-process side) | Lead: menu bar icon from the sprite's head with the streak; the compact card window and its placement; bridge methods `showCard`, `hideCard`, `setCardSize`, `completeOnboarding`; the floating pet waits until Para has hatched | `lead/san-115-tray-card` at `b5e3ce5` (worktree `.claude/worktrees/lead-b`) | In review, round 1 |
+| SAN-119 | Worker: problem catalog for LeetCode (3,332), CSES (400) and Codeforces (3,905), built by scripts, loaded at launch, searchable | `worker/san-119-catalog` at `e1d98bc` (worktree `.claude/worktrees/agent-ac6983be5414551ee`) | In review, round 1 |
+| SAN-117 + SAN-118 (main-process side) | Lead: the two daily notifications from `dueReminder`; launch at login | `lead/san-117-reminders` (worktree `.claude/worktrees/lead-san-111`), stacked on the SAN-115 branch | Being built |
 
 ## Next
 
-1. Merge SAN-112 + SAN-113 when the polish pass is back. Attach the gallery screenshots to both Linear issues.
-2. Finish SAN-116 (above). Migration 002 also adds what M3's catalog needs (`problems.solved_count`, `catalog_sources`), so the catalog worker (SAN-119) can start as soon as it is on main.
-3. Then SAN-115 (menu bar icon from the sprite's head with the streak as its title; the compact card from the pet and the icon, reusing `ReportForm`), SAN-117 (two daily notifications from `dueReminder`, clicking one opens the compact card), SAN-118 (launch at login, only when packaged; the first-launch hatching flow, without forcing people who already use the app through it). Define the bridge for these in one lead slice first, then give the compact card page and the first-launch screens to workers while the lead does the main-process side.
-4. Then M3 (catalog and learning plans; load the `claude-api` skill before writing the `llm` module) and M4 (stats, export and import, the `.dmg`).
+1. Merge SAN-115's main-process side when its review passes. Then launch two UI workers from main: the compact card's page (`src/ui/windows/card/**`, design section 9: problem, Open problem, I solved it, the report form in place, the fed state; it calls `setCardSize` and `hideCard`) and the first-launch screens (`src/ui/screens/onboarding/**`, design section 10: hatch, meet Para, reminder times; it calls `completeOnboarding`; `App.tsx` shows it while `pet.hatched` is false; mock scenario `hatching`). When the card page merges, switch the floating pet's click from `showMainWindow` to `showCard({ anchor: 'pet' })` and update the pet tests.
+2. Merge SAN-119 when its review passes. Write decision 0014 (the catalog: sources, the Codeforces floor of 9,000 solves, load rules, unmapped tags).
+3. Finish SAN-117 and SAN-118's main-process side: a notifier port on the app context (faked in tests, recorded in end-to-end runs), `sendDueReminder` on the tick, clicking a notification opens the card; the login item set only in a packaged app; opened at login means no main window (macOS 13 and later does not say whether the app was opened at login, so the plan is: the setting is on and the Mac has been up for under three minutes).
+4. Tick the M2 checklist in the PRD when SAN-115, SAN-117 and SAN-118 are fully merged.
+5. M3 after the catalog: plan tables (migration 003), the `llm` module (load the `claude-api` skill first; look up the current model list), plan validation against the catalog, the Plan screen, the API key stored with Electron `safeStorage` outside the database, the daily loop drawing from the active plan, the graduation cap (`plansFinished`), and an in-app "refresh Codeforces" using the worker's pure transform.
+6. M4: Stats screen, export and import, the `.dmg` with an install note, a log file for launch self-check failures, confirm `isRendererUrl` and the login item in the packaged app.
 
 ## Done
 
@@ -54,13 +59,15 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 | SAN-129 | Settings screen: reminder times, day boundary, target retention, pet switches, accessories, LeetCode handle | `b908ee1` |
 | SAN-128 | Pet rules in core: mood, speech lines, accessory unlocks, reminder timing | `a3393c2` |
 | SAN-114 | The floating pet window (slice 1, shared types, was `44b278d`) | `17bce45` |
+| SAN-112 + SAN-113 | Para drawn by code: four stages, eight moods, hatching, accessories, seed traits; the gallery at `#/gallery` | `73ff1b4` |
+| SAN-116 | Para comes alive: moods through the day, lines, checking and eating on report, the greeting, accessory unlocks, migration 002 | `63ec870` |
 
 ## Linear
 
 - Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4.
 - M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). SAN-112, 113, 128 and 129 are detailed; SAN-114 to SAN-118 are coarse. M3: SAN-119 to SAN-123 (coarse). M4: SAN-124 to SAN-126 (coarse; SAN-126 is the owner's one-week trial).
 - Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (group `Module`).
-- M2 so far: SAN-114, SAN-128 and SAN-129 are Done with screenshots attached where there is a screen.
+- M2 so far: SAN-112, SAN-113, SAN-114, SAN-116, SAN-128 and SAN-129 are Done with screenshots attached where there is a screen. SAN-115, SAN-117 and SAN-118 remain.
 
 ## How the loop is run in this repo
 
@@ -94,4 +101,4 @@ None.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0011`. `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
+See `docs/decisions/0001` to `0012` (`0012`: wiring the living pet; `0013`, the menu bar icon and card, arrives with the SAN-115 merge). `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
