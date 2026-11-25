@@ -790,6 +790,12 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     assignToday(state);
     state.plans.model = 'fails';
   },
+  /** Plans: a key is saved, but Anthropic does not accept it. */
+  'plan-badkey': (state) => {
+    midway(state);
+    assignToday(state);
+    state.plans.model = 'bad-key';
+  },
   /** Plans: a freshly generated draft waiting for review. */
   'plan-draft': (state) => {
     midway(state);
