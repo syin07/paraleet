@@ -387,7 +387,7 @@ test.describe('changes from elsewhere', () => {
 test.describe('the screen', () => {
   test('shows every group in order, in a column of 640px at most', async ({ page }) => {
     await openScreen(page, 'settings');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Reminders', 'Review schedule', 'Para', 'Account handles']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Reminders', 'Review schedule', 'Para', 'Learning plans', 'Account handles']);
     const column = await page.getByTestId('screen-settings').locator('> div').boundingBox();
     expect(column?.width).toBeLessThanOrEqual(640);
     await captureBothSizes(page, 'settings-default');
@@ -471,5 +471,329 @@ test.describe('review fixes', () => {
     await expect(bowTie).toHaveAttribute('aria-pressed', 'true');
     await expect(scarf).toHaveAttribute('aria-pressed', 'false');
     expect(await page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getToday()).pet.equippedAccessories)).toEqual(['bow_tie', 'crown']);
+  });
+});
+
+// ---------- Learning plans (SAN-131) ----------
+
+const SECRET_KEY = 'sk-ant-test-0123456789-secret';
+const keyField = (page: Page) => page.getByLabel('Anthropic API key');
+const plansGroup = (page: Page) => page.getByRole('region', { name: 'Learning plans' });
+type AnyApi = Record<string, (...args: unknown[]) => Promise<unknown>>;
+
+/** Makes the next call to a bridge method reject once with `message`. */
+function failBridgeNext(page: Page, method: string, message: string): Promise<void> {
+  return page.evaluate(
+    ([name, text]) => {
+      const api = (globalThis as unknown as Host).paraleet as unknown as AnyApi;
+      const original = api[name as string] as (...args: unknown[]) => Promise<unknown>;
+      let failed = false;
+      api[name as string] = (...args: unknown[]) => {
+        if (!failed) {
+          failed = true;
+          return Promise.reject(new Error(text));
+        }
+        return original(...args);
+      };
+    },
+    [method, message] as const,
+  );
+}
+
+/** Makes every call to a bridge method reject until `restoreBridge` runs. */
+function failBridgeAlways(page: Page, method: string, message: string): Promise<void> {
+  return page.evaluate(
+    ([name, text]) => {
+      const api = (globalThis as unknown as Host).paraleet as unknown as AnyApi;
+      const host = globalThis as unknown as { __original?: Record<string, unknown> };
+      host.__original = { ...host.__original, [name as string]: api[name as string] };
+      api[name as string] = () => Promise.reject(new Error(text));
+    },
+    [method, message] as const,
+  );
+}
+
+function restoreBridge(page: Page, method: string): Promise<void> {
+  return page.evaluate((name) => {
+    const api = (globalThis as unknown as Host).paraleet as unknown as AnyApi;
+    const host = globalThis as unknown as { __original: Record<string, (...args: unknown[]) => Promise<unknown>> };
+    api[name] = host.__original[name] as (...args: unknown[]) => Promise<unknown>;
+  }, method);
+}
+
+/** Waits until the group has loaded (it first shows "Loading…" or a failure), then scrolls it into view. */
+async function showPlans(page: Page): Promise<void> {
+  await expect(plansGroup(page).getByText('Model', { exact: true }).or(plansGroup(page).getByRole('button', { name: 'Try again' }))).toBeVisible();
+  await plansGroup(page).evaluate((element) => element.scrollIntoView({ block: 'center' }));
+}
+
+test.describe('learning plans', () => {
+  test('the group sits between Para and Account handles, with a key row and a model row', async ({ page }) => {
+    await openScreen(page, 'settings');
+    const titles = await page.getByTestId('screen-settings').getByRole('heading', { level: 2 }).allTextContents();
+    expect(titles.indexOf('Learning plans')).toBe(titles.indexOf('Para') + 1);
+    expect(titles.indexOf('Account handles')).toBe(titles.indexOf('Learning plans') + 1);
+    await expect(plansGroup(page).getByText('Anthropic API key', { exact: true })).toBeVisible();
+    await expect(plansGroup(page).getByText('Model', { exact: true })).toBeVisible();
+    await expect(plansGroup(page).getByText('Used only to build learning plans.', { exact: false })).toBeVisible();
+    await expect(plansGroup(page).getByText('The Claude model that picks problems for a plan.')).toBeVisible();
+  });
+
+  test('with no key: Save waits for 10 characters, a refused save explains, a saved key is never shown again', async ({ page }) => {
+    await openScreen(page, 'settings', 'plan-nokey');
+    await showPlans(page);
+    const save = plansGroup(page).getByRole('button', { name: 'Save' });
+    await expect(keyField(page)).toHaveAttribute('type', 'password');
+    await expect(save).toBeDisabled();
+    await keyField(page).fill('123456789');
+    await expect(save).toBeDisabled();
+    await keyField(page).fill('1234567890');
+    await expect(save).toBeEnabled();
+    await captureBothSizes(page, 'settings-plans-nokey');
+
+    await failBridgeNext(page, 'saveApiKey', 'The key could not be saved right now.');
+    await save.click();
+    await expect(plansGroup(page).getByRole('alert')).toHaveText('The key could not be saved right now.');
+    // The refused key does not stay in the page either.
+    await expect(keyField(page)).toHaveValue('');
+    expect(await page.content()).not.toContain('1234567890');
+
+    await keyField(page).fill(SECRET_KEY);
+    await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
+    await keyField(page).press('Enter');
+    await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+    await expect(keyField(page)).toHaveCount(0);
+    await expect(plansGroup(page).getByRole('button', { name: 'Test' })).toBeVisible();
+    await expect(plansGroup(page).getByRole('button', { name: 'Remove' })).toBeVisible();
+    expect(await page.content()).not.toContain(SECRET_KEY);
+    expect(await page.locator('input').evaluateAll((inputs) => inputs.map((input) => (input as unknown as { value: string }).value))).not.toContain(SECRET_KEY);
+    await captureBothSizes(page, 'settings-plans-saved');
+  });
+
+  test('with a key: Test says it works, shows it is busy, and Remove goes back to the field', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+    await expect(keyField(page)).toHaveCount(0);
+
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet as unknown as AnyApi;
+      const original = api.testApiKey as (...args: unknown[]) => Promise<unknown>;
+      const counter = globalThis as unknown as { __tests: number };
+      counter.__tests = 0;
+      api.testApiKey = async (...args: unknown[]) => {
+        counter.__tests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return original(...args);
+      };
+    });
+    await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+    await expect(plansGroup(page).getByRole('button', { name: 'Testing…' })).toBeDisabled();
+    await expect(plansGroup(page).getByRole('button', { name: 'Remove' })).toBeDisabled();
+    await expect(plansGroup(page).getByText('The key works.')).toBeVisible();
+    expect(await page.evaluate(() => (globalThis as unknown as { __tests: number }).__tests)).toBe(1);
+    await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
+    await captureBothSizes(page, 'settings-plans-test-ok');
+
+    await plansGroup(page).getByRole('button', { name: 'Remove' }).click();
+    await expect(keyField(page)).toBeVisible();
+    await expect(plansGroup(page).getByText('Saved, encrypted')).toHaveCount(0);
+    await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getPlanOverview()).llm.hasKey)).toBe(false);
+  });
+
+  test('a key typed and saved is not kept: after Remove the field is empty and the key is nowhere in the page', async ({ page }) => {
+    await openScreen(page, 'settings', 'plan-nokey');
+    await showPlans(page);
+    await keyField(page).fill(SECRET_KEY);
+    await keyField(page).press('Enter');
+    await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+    await plansGroup(page).getByRole('button', { name: 'Remove' }).click();
+    await expect(keyField(page)).toBeVisible();
+    await expect(keyField(page)).toHaveValue('');
+    expect(await page.content()).not.toContain(SECRET_KEY);
+  });
+
+  for (const [scenario, label] of [
+    ['default', 'a passing test'],
+    ['plan-badkey', 'a failing test'],
+  ] as const) {
+    test(`a new key starts with no test result, after ${label}, Remove and Save`, async ({ page }) => {
+      await openScreen(page, 'settings', scenario);
+      await showPlans(page);
+      await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+      await expect(plansGroup(page).getByText(scenario === 'default' ? 'The key works.' : /did not accept/)).toBeVisible();
+      await plansGroup(page).getByRole('button', { name: 'Remove' }).click();
+      await keyField(page).fill(SECRET_KEY);
+      await keyField(page).press('Enter');
+      await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+      await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
+      await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
+      await expect(plansGroup(page).getByRole('button', { name: 'Test' })).toBeEnabled();
+    });
+  }
+
+  test('a slow test that finishes after the model changed stays busy until it returns and is not shown for the new model', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet as unknown as AnyApi;
+      const original = api.testApiKey as (...args: unknown[]) => Promise<unknown>;
+      const counter = globalThis as unknown as { __tests: number };
+      counter.__tests = 0;
+      api.testApiKey = async (...args: unknown[]) => {
+        counter.__tests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        return original(...args);
+      };
+    });
+    await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+    await plansGroup(page).getByRole('combobox', { name: 'Model' }).selectOption({ label: 'Claude Sonnet 5.5 (faster, cheaper)' });
+    await expect(toast(page)).toHaveText('Saved');
+    // Still busy, and cannot be started twice.
+    await expect(plansGroup(page).getByRole('button', { name: 'Testing…' })).toBeDisabled();
+    // Once the old answer arrives the button is free again, and the answer is not shown for the new model.
+    await expect(plansGroup(page).getByRole('button', { name: 'Test', exact: true })).toBeEnabled();
+    await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
+    expect(await page.evaluate(() => (globalThis as unknown as { __tests: number }).__tests)).toBe(1);
+  });
+
+  test('typing the ID of the model that is already saved leaves the control showing that model', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    const select = plansGroup(page).getByRole('combobox', { name: 'Model' });
+    await select.selectOption({ label: 'Other…' });
+    await field(page, 'Model ID').fill('claude-opus-5-5');
+    await field(page, 'Model ID').press('Enter');
+    await expect(field(page, 'Model ID')).toHaveCount(0);
+    await expect(select).toHaveValue('claude-opus-5-5');
+    await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
+  });
+
+  test('a key Anthropic does not accept: Test says why in plain words', async ({ page }) => {
+    await openScreen(page, 'settings', 'plan-badkey');
+    await showPlans(page);
+    await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+    await expect(plansGroup(page).getByRole('alert')).toHaveText('Anthropic did not accept the API key. Check it in Settings.');
+    await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
+    await captureBothSizes(page, 'settings-plans-test-failed');
+  });
+
+  test('a key that works but cannot use the chosen model says so and suggests another', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    await plansGroup(page).getByRole('combobox', { name: 'Model' }).selectOption({ label: 'Other…' });
+    await field(page, 'Model ID').fill('claude-not-a-model');
+    await field(page, 'Model ID').press('Enter');
+    await expect(toast(page)).toHaveText('Saved');
+    await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+    await expect(plansGroup(page).getByText(/cannot use the chosen model/)).toContainText('Pick another model');
+    await expect(plansGroup(page).getByText('The key works.', { exact: true })).toHaveCount(0);
+  });
+
+  test('a Mac that cannot encrypt: plain message, field and Save disabled', async ({ page }) => {
+    await openScreen(page, 'settings', 'plan-nostore');
+    await showPlans(page);
+    await expect(plansGroup(page).getByText('The key cannot be stored securely on this Mac, so learning plans are not available.')).toBeVisible();
+    await expect(keyField(page)).toBeDisabled();
+    await expect(plansGroup(page).getByRole('button', { name: 'Save' })).toBeDisabled();
+    await captureBothSizes(page, 'settings-plans-nostore');
+  });
+
+  test('the model: pick a suggested one, it is saved and kept', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    const select = plansGroup(page).getByRole('combobox', { name: 'Model' });
+    const labels = await select.locator('option').allTextContents();
+    expect(labels.at(-1)).toBe('Other…');
+    expect(labels).toContain('Claude Sonnet 5.5 (faster, cheaper)');
+    await select.selectOption({ label: 'Claude Sonnet 5.5 (faster, cheaper)' });
+    await expect(toast(page)).toHaveText('Saved');
+    await expect(field(page, 'Model ID')).toHaveCount(0);
+    await leaveAndReturn(page);
+    await expect(plansGroup(page).getByRole('combobox', { name: 'Model' })).toHaveValue('claude-sonnet-5-5');
+  });
+
+  test('the model: Other reveals a text field, saved on Enter and on blur, and a saved unknown ID shows as Other', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    const select = plansGroup(page).getByRole('combobox', { name: 'Model' });
+    await expect(field(page, 'Model ID')).toHaveCount(0);
+    await select.selectOption({ label: 'Other…' });
+    await expect(field(page, 'Model ID')).toBeVisible();
+    await expect(toast(page)).toHaveText('');
+
+    await field(page, 'Model ID').fill('claude-custom-1');
+    await field(page, 'Model ID').press('Enter');
+    await expect(toast(page)).toHaveText('Saved');
+    await leaveAndReturn(page);
+    await expect(select).toHaveValue('__other__');
+    await expect(select.locator('option:checked')).toHaveText('Other…');
+    await expect(field(page, 'Model ID')).toHaveValue('claude-custom-1');
+    await showPlans(page);
+    await captureBothSizes(page, 'settings-plans-other-model');
+
+    await field(page, 'Model ID').fill('claude-custom-2');
+    await field(page, 'Model ID').blur();
+    await expect(toast(page)).toHaveText('Saved');
+    await expect.poll(() => page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getSettings()).planModel)).toBe('claude-custom-2');
+  });
+
+  test('the model: a refused ID shows the message under the row and the control goes back to the saved value', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    const select = plansGroup(page).getByRole('combobox', { name: 'Model' });
+    await select.selectOption({ label: 'Other…' });
+    await failNext(page, 'updateSettings', 'Use a model ID such as claude-opus-5-5');
+    await field(page, 'Model ID').fill('not valid!');
+    await field(page, 'Model ID').press('Enter');
+    await expect(plansGroup(page).getByRole('alert')).toHaveText('Use a model ID such as claude-opus-5-5');
+    await expect(field(page, 'Model ID')).toHaveCount(0);
+    await expect(select).toHaveValue('claude-opus-5-5');
+    await expect.poll(() => page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getSettings()).planModel)).toBe('claude-opus-5-5');
+
+    // The same refusal on a saved custom ID puts the saved ID back in the text field.
+    await select.selectOption({ label: 'Other…' });
+    await field(page, 'Model ID').fill('claude-custom-1');
+    await field(page, 'Model ID').press('Enter');
+    await expect(toast(page)).toHaveText('Saved');
+    await failNext(page, 'updateSettings', 'Use a model ID such as claude-opus-5-5');
+    await field(page, 'Model ID').fill('bad id');
+    await field(page, 'Model ID').press('Enter');
+    await expect(plansGroup(page).getByRole('alert')).toBeVisible();
+    await expect(field(page, 'Model ID')).toHaveValue('claude-custom-1');
+  });
+
+  test('arriving at #/settings/api-key focuses the key field, or Test when a key is saved', async ({ page }) => {
+    await page.goto('/?scenario=plan-nokey#/settings/api-key');
+    await page.getByTestId('screen-settings').waitFor();
+    await expect(keyField(page)).toBeFocused();
+    await expect(keyField(page)).toBeInViewport();
+    expect(new URL(page.url()).hash).toBe('#/settings');
+
+    await page.goto('/?scenario=default#/settings/api-key');
+    await page.getByTestId('screen-settings').waitFor();
+    await expect(plansGroup(page).getByRole('button', { name: 'Test' })).toBeFocused();
+    await expect(plansGroup(page).getByRole('button', { name: 'Test' })).toBeInViewport();
+  });
+
+  test('if the key setting cannot be read: a message and Try again, and the rest of Settings still works', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await failBridgeAlways(page, 'getPlanOverview', 'The key store did not answer.');
+    await leaveAndReturn(page);
+    await showPlans(page);
+    await expect(plansGroup(page).getByRole('alert')).toContainText('The key store did not answer.');
+    await expect(plansGroup(page).getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(plansGroup(page).getByText('Anthropic API key', { exact: true })).toHaveCount(0);
+    await captureBothSizes(page, 'settings-plans-load-failed');
+
+    await field(page, 'First reminder').fill('15:45');
+    await field(page, 'First reminder').press('Enter');
+    await expect(toast(page)).toHaveText('Saved');
+
+    await restoreBridge(page, 'getPlanOverview');
+    await plansGroup(page).getByRole('button', { name: 'Try again' }).click();
+    await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+    await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
   });
 });
