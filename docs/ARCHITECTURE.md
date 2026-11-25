@@ -10,7 +10,7 @@ Keep this file accurate at the end of every session (PRD section 2).
 ┌──────────────────────── Electron main process (Node) ────────────────────────┐
 │  src/main/index.ts        app lifecycle, single-instance lock, timers, Dock    │
 │  src/main/windows/*       main window, floating pet window, window placement   │
-│  src/main/bridge.ts       one IPC handler per bridge method, zod-validated     │
+│  src/main/bridge.ts       one IPC handler per bridge method (services/dispatch)│
 │  src/main/services/*      use cases: today, report, problems, settings         │
 │        │                  (no Electron imports; unit-tested with real SQLite)  │
 │        ├── src/core       pure rules: day, streak, assignment, scheduler, pet  │
@@ -48,7 +48,7 @@ Services never import Electron. When a use case needs a window to do something i
 | `src/core` | `types.ts`, `topics.ts`, `day.ts`, `streak.ts`, `petFacts.ts`, `scheduler.ts`, `assignment.ts`, `verify.ts`, `settings.ts` | Pure. Time and time zone are arguments. Lint blocks Electron, Node built-ins, the network, `new Date()`, `Date.now()` and `Math.random()`. |
 | `src/platforms` | `types.ts` (`PlatformAdapter`), one file per platform, `index.ts` (`recognizeUrl`, `adapterFor`) | LeetCode, CSES, Codeforces and Other. No network in v1. |
 | `src/data` | `db.ts` (wrapper over `node:sqlite`), `migrations/`, `migrate.ts`, `seedFormat.ts`, `seed.ts`, `repos/*`, `index.ts` (`openDatabase`) | Hand-written SQL, no ORM. JSON arrays are stored as text. |
-| `src/llm` | Empty until M3 | Plan generation, main process only. |
+| `src/llm` | `prompt.ts` (what the model is told), `planGenerator.ts` (ask, check, retry once), `anthropicClient.ts` (the real client), `fixtures/` (saved answers for tests) | Plan generation, main process only. The model is reached through `LlmClient`, so tests never use the network. |
 | `src/bridge` | `channels.ts` (method names, no imports), `contract.ts` (zod input schemas, output types, `ParaLeetApi`, `BridgeHandlers`) | The single contract shared by main, preload and UI. |
 | `src/main` | `index.ts`, `bridge.ts`, `clock.ts`, `windows/mainWindow.ts`, `services/` | `services/` builds the bridge handlers from an `AppContext` (database, clock, side-effect callbacks). |
 | `src/preload` | `index.ts` | Forwards calls; nothing else. Built as CommonJS because sandboxed preloads require it. |
@@ -62,6 +62,16 @@ Services never import Electron. When a use case needs a window to do something i
 4. **The user reports.** `submitReport` caps the rating if the key insight was revealed, calls `verifyAttempt` (the verification seam; v1 trusts the self-report), then in one transaction: saves the key insight, appends the attempt, creates or reschedules the problem's review card (`scheduleFirstAttempt` or `scheduleReview`), updates the pet facts with `applyAttempt`, and marks today's assignment completed if it was that problem. Then it sends `paraleet:changed`.
 5. **The next day.** Cards whose due day has arrived are read by `readAssignmentInput`; `chooseDailyProblem` gives the slot to the most overdue one, and `otherDueReviews` lists up to five more. The user may swap to one of `swapCandidates`.
 6. **Derived values are never stored.** Fed status, displayed streak, growth stage and (later) mood are computed from stored facts and the current time.
+
+## Data flow: learning plans
+
+1. **Candidates.** `candidatesFor` (`services/plans.ts`) reads catalog problems for each chosen topic and platform, marks the ones already attempted, and `selectCandidates` (core) keeps up to 60 per topic to suit the level.
+2. **The model.** `generatePlan` (`src/llm/planGenerator.ts`) sends the candidates as metadata lines and asks for structured output. `validatePlanResponse` (core) accepts the answer only if every problem ID is a candidate shown under that topic, used once, in the stage shape. One retry with the errors; then a plain error.
+3. **Draft.** A valid plan is saved as a draft. The user can remove, move or swap problems; a swap must be another candidate of the same topic.
+4. **Active.** `activatePlan` archives the plan that was active and skips problems already attempted. `getToday` passes the active plan's pending problems to `chooseDailyProblem` (`planQueue`).
+5. **Progress.** `submitReport` marks the problem's plan item done in the same transaction (`recordPlanAttempt`), adds the pattern group's name to the problem's pattern tags, and finishes the plan with its last problem. `reconcile()` recomputes the active plan's item states from the attempts at launch.
+
+See decision 0016.
 
 At launch, before any window opens, `reconcile()` (`services/reconcile.ts`) recomputes the streak and totals from the attempts and rebuilds any missing review cards, so the stored derived data can never drift from the attempts for long. See decision 0008.
 
@@ -87,12 +97,18 @@ One file, `paraleet.sqlite3`, opened with a rollback journal (not WAL) so the da
 | `catalog_sources` | Which catalog file is loaded for each platform, so a newer file loads once (used from M3) |
 | `settings` | Key-value settings as JSON, plus `meta.*` keys for internal state |
 
-Migration 2 added the pet's greeting and reminder days and the catalog bookkeeping. Plan tables arrive with M3 as migration 3.
+| `plans` | Learning plans: what was asked for, the model that wrote it, status (draft, active, done, archived). At most one is active (a partial unique index). A finished plan keeps the ID of the attempt that finished it |
+| `plan_items` | A plan's problems in order: topic, stage, pattern group name and description, state (pending, done, skipped). Each points at a row in `problems` |
+
+Migration 2 added the pet's greeting and reminder days and the catalog bookkeeping. Migration 3 added the plan tables.
+
+The Anthropic API key is not in the database. It is sealed with Electron's `safeStorage` in `anthropic-api-key.bin`, next to the database (`src/main/secrets.ts`, decision 0016).
 
 ## The bridge
 
 - `src/bridge/channels.ts` lists the method names. `src/bridge/contract.ts` gives each an input schema and an output type.
 - Main validates every input with zod and accepts calls only from the main frame of the app's own windows.
+- Main answers every call with `{ ok: true, value }` or `{ ok: false, message }` (`dispatch` in `services/dispatch.ts`), and the preload turns a failure back into an error with that message unchanged (`unwrapReply`). So a message written for the user, such as "That plan no longer exists.", reaches the screen as written. Failures are logged in main without their input.
 - The UI gets `window.paraleet` with one async function per method, `onChanged(listener)` and `onNavigate(listener)`. Main sends `paraleet:navigate` with a path such as `/settings` to move the main window to a screen.
 - Window commands (`showMainWindow`, `movePetWindowBy`, `endPetDrag`, `setPetInteractive`, `showPetMenu`, `showCard`, `hideCard`, `setCardSize`) are ordinary bridge methods whose handlers call `ctx.windows`.
 - In a plain browser there is no preload, so `src/ui/main.tsx` installs `src/ui/mock/mockBridge.ts`, an in-memory implementation of the same contract with named scenarios.
@@ -104,6 +120,7 @@ Migration 2 added the pet's greeting and reminder days and the catalog bookkeepi
 - Only `http` and `https` links stored in the database are ever opened externally, and only by ID (`openProblem`, `openSolutionLink`). The renderer cannot open a window or pass a URL to open.
 - The bridge answers only the main frame of the app's own windows while it shows the app's own page.
 - Test switches are ignored by a packaged app (see decision 0004).
+- The API key never leaves the main process. The UI can save, remove and test it, and learns only whether one is saved. The only network calls the app makes are to Anthropic, from `src/llm`, when the user generates a plan or tests the key.
 
 ## Build and packaging
 
@@ -117,4 +134,4 @@ Migration 2 added the pet's greeting and reminder days and the catalog bookkeepi
 | --- | --- | --- |
 | Unit | `src/**/*.test.ts`, `scripts/**/*.test.ts` (vitest) | core rules with injected time; migrations from every earlier version; seed validity; services against in-memory SQLite; the lint boundary rules themselves (`scripts/lint-boundaries.test.ts`) |
 | UI | `tests/ui/*.spec.ts` (Playwright, Chromium) | Screens against the mock bridge; screenshots at default and minimum window sizes |
-| End to end | `tests/e2e/*.spec.ts` (Playwright, Electron) | The built app with a temp data folder and a fake clock: report, restart, day rollover, a due review taking the slot, swap, quick-log |
+| End to end | `tests/e2e/*.spec.ts` (Playwright, Electron) | The built app with a temp data folder and a fake clock: report, restart, day rollover, a due review taking the slot, swap, quick-log, the pet, the card, reminders, a plan made with a scripted model |

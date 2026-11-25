@@ -38,8 +38,38 @@ export const BRIDGE_METHODS = [
   'hideCard',
   'setCardSize',
   'completeOnboarding',
+  'getPlanOverview',
+  'generatePlan',
+  'getPlan',
+  'removePlanItem',
+  'movePlanItem',
+  'getPlanSwapOptions',
+  'swapPlanItem',
+  'activatePlan',
+  'archivePlan',
+  'deletePlan',
+  'saveApiKey',
+  'removeApiKey',
+  'testApiKey',
   'getSettings',
   'updateSettings',
 ] as const;
 
 export type BridgeMethodName = (typeof BRIDGE_METHODS)[number];
+
+/**
+ * How main answers every bridge call: the value, or a message that can be shown to the user as
+ * it is. A failure travels as data, not as a rejected call, because Electron rewrites the message
+ * of a rejected call ("Error invoking remote method ...").
+ */
+export type BridgeReply = { ok: true; value: unknown } | { ok: false; message: string };
+
+/** The preload's half: hands back the value, or throws an error with main's message. */
+export function unwrapReply(reply: unknown): unknown {
+  if (typeof reply === 'object' && reply !== null && 'ok' in reply) {
+    const answer = reply as BridgeReply;
+    if (answer.ok) return answer.value;
+    throw new Error(answer.message);
+  }
+  throw new Error('ParaLeet did not answer. Try again.');
+}

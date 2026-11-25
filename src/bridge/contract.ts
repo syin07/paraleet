@@ -3,6 +3,19 @@
 // the main process with the zod schemas below. Owned by the lead: do not change without the
 // lead's say.
 import { z } from 'zod';
+import {
+  PLAN_LEVELS,
+  PLAN_MAX_TOPICS,
+  PLAN_PLATFORMS,
+  PLAN_SIZE_MAX,
+  PLAN_SIZE_MIN,
+  type PlanItemState,
+  type PlanLevel,
+  type PlanPlatform,
+  type PlanProgress,
+  type PlanStage,
+  type PlanStatus,
+} from '../core/plan';
 import { settingsPatchSchema, timeOfDaySchema, type Settings } from '../core/settings';
 import { TOPIC_IDS, type TopicId } from '../core/topics';
 import {
@@ -41,6 +54,9 @@ export const CARD_MAX_HEIGHT = 640;
 
 const problemId = z.number().int().positive();
 const problemRef = z.object({ problemId });
+const planId = z.number().int().positive();
+const planRef = z.object({ planId });
+const planItemRef = z.object({ planId, problemId });
 const shortText = (max: number) => z.string().trim().max(max);
 
 export const inputSchemas = {
@@ -118,6 +134,34 @@ export const inputSchemas = {
     firstReminderTime: timeOfDaySchema,
     eveningReminderTime: timeOfDaySchema,
   }),
+  /** Everything the Plan screen shows: the key's state, the active plan, drafts and past plans. */
+  getPlanOverview: z.undefined(),
+  /** Asks the model for a plan and saves it as a draft. Needs an API key. */
+  generatePlan: z.object({
+    topics: z.array(z.enum(TOPIC_IDS as [TopicId, ...TopicId[]])).min(1).max(PLAN_MAX_TOPICS),
+    platforms: z.array(z.enum(PLAN_PLATFORMS)).min(1).max(PLAN_PLATFORMS.length),
+    level: z.enum(PLAN_LEVELS),
+    targetSize: z.number().int().min(PLAN_SIZE_MIN).max(PLAN_SIZE_MAX),
+  }),
+  getPlan: planRef,
+  /** Draft plans only: takes a problem out of the plan. */
+  removePlanItem: planItemRef,
+  /** Draft plans only: moves a problem one place up or down within its stage or group. */
+  movePlanItem: planItemRef.extend({ direction: z.enum(['up', 'down']) }),
+  /** Draft plans only: other catalog problems that could take this one's place. */
+  getPlanSwapOptions: planItemRef,
+  /** Draft plans only: puts another catalog problem in this one's place. */
+  swapPlanItem: planItemRef.extend({ replacementId: problemId }),
+  /** Makes a draft the active plan. A plan that was active is archived. */
+  activatePlan: planRef,
+  archivePlan: planRef,
+  /** Deletes a draft or an archived plan. */
+  deletePlan: planRef,
+  /** Stores the Anthropic API key, encrypted. The key is never sent back to the UI. */
+  saveApiKey: z.object({ apiKey: z.string().trim().min(10).max(300) }),
+  removeApiKey: z.undefined(),
+  /** Asks Anthropic whether the stored key works. Costs nothing. */
+  testApiKey: z.undefined(),
   getSettings: z.undefined(),
   updateSettings: settingsPatchSchema,
 } as const satisfies Record<BridgeMethodName, z.ZodType>;
@@ -218,6 +262,8 @@ export interface ReportResult {
   growth: { stage: GrowthStage; previousStage: GrowthStage; growthSolves: number };
   /** Accessories this attempt unlocked, for celebrating. Empty for an attempt rated Again. */
   unlocked: AccessoryId[];
+  /** The title of the plan this attempt finished, or null. */
+  finishedPlan: string | null;
   /** The ParaLeet day of the next review, or null when none is scheduled. */
   nextReviewDay: ParaDay | null;
   today: TodayView;
@@ -275,6 +321,62 @@ export type AddProblemResult =
   | { ok: true; problem: ProblemSummary; created: boolean }
   | { ok: false; reason: string };
 
+/** Whether plans can be generated, and with which model. The key itself never leaves main. */
+export interface LlmStatus {
+  hasKey: boolean;
+  /** False when this Mac cannot encrypt the key, so none can be stored. */
+  canStoreKey: boolean;
+  model: string;
+  suggestedModels: { id: string; label: string }[];
+}
+
+export type ApiKeyTest = { ok: true; modelAvailable: boolean } | { ok: false; reason: string };
+
+export interface PlanSummary {
+  id: number;
+  title: string;
+  status: PlanStatus;
+  topics: TopicId[];
+  platforms: PlanPlatform[];
+  level: PlanLevel;
+  model: string;
+  createdAt: IsoInstant;
+  progress: PlanProgress;
+}
+
+export interface PlanItemView {
+  problem: ProblemSummary;
+  state: PlanItemState;
+  /** True for the problem the daily loop will assign next from this plan. */
+  isNext: boolean;
+}
+
+/** A run of the plan: one stage of one topic, or one pattern group. */
+export interface PlanSectionView {
+  topic: TopicId;
+  stage: PlanStage;
+  /** The pattern group's name and one-sentence description, written by the model. */
+  groupName: string | null;
+  groupDescription: string | null;
+  progress: PlanProgress;
+  items: PlanItemView[];
+}
+
+export interface PlanView extends PlanSummary {
+  targetSize: number;
+  sections: PlanSectionView[];
+}
+
+export interface PlanOverview {
+  llm: LlmStatus;
+  active: PlanView | null;
+  drafts: PlanSummary[];
+  /** Finished and archived plans, newest first. */
+  past: PlanSummary[];
+  /** How many catalog problems each topic has on each platform, for the topic picker. */
+  topics: { id: TopicId; label: string; counts: Record<PlanPlatform, number> }[];
+}
+
 /** The answer of a command that returns nothing. */
 export interface Done {
   ok: true;
@@ -311,6 +413,19 @@ export interface BridgeOutputs {
   hideCard: Done;
   setCardSize: Done;
   completeOnboarding: TodayView;
+  getPlanOverview: PlanOverview;
+  generatePlan: PlanView;
+  getPlan: PlanView;
+  removePlanItem: PlanView;
+  movePlanItem: PlanView;
+  getPlanSwapOptions: ProblemSummary[];
+  swapPlanItem: PlanView;
+  activatePlan: PlanView;
+  archivePlan: PlanOverview;
+  deletePlan: PlanOverview;
+  saveApiKey: LlmStatus;
+  removeApiKey: LlmStatus;
+  testApiKey: ApiKeyTest;
   getSettings: Settings;
   updateSettings: Settings;
 }

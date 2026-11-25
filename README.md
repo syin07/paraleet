@@ -65,6 +65,12 @@ Packaging a `.dmg` arrives with milestone M4.
 
 All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (see "Run it"). Copy that file to back it up. The app stores problem titles, links, tags and your attempts and notes. It never stores problem statements.
 
+## Learning plans and the API key
+
+Everything works without a key except generating a learning plan. A plan needs your own Anthropic API key (from the Claude Console, platform.claude.com), added in Settings. The key is encrypted with the macOS keychain and kept in `anthropic-api-key.bin` next to the database, never inside it. A copy of the database does not carry the key; on another Mac you add the key again.
+
+When you generate a plan, the app sends Anthropic one request: the topics, level and size you chose, and titles, platforms, difficulties and tags of catalog problems to choose from. Nothing else leaves your Mac.
+
 ## Environment switches (for tests and debugging)
 
 | Variable | Effect |
@@ -72,7 +78,10 @@ All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (se
 | `PARALEET_USER_DATA_DIR` | Use this folder for all app data |
 | `PARALEET_FAKE_NOW` | Freeze the app's clock at this ISO time, for example `2026-11-25T20:00:00Z` |
 | `PARALEET_FAKE_TZ` | With `PARALEET_FAKE_NOW`: the time zone to pretend, for example `Asia/Tokyo` |
-| `PARALEET_E2E=1` | Record links instead of opening the browser, and expose test hooks |
+| `PARALEET_E2E=1` | Record links and notifications instead of showing them, expose test hooks, and replace Anthropic with a scripted model |
+| `PARALEET_E2E_UNHATCHED=1` | With `PARALEET_E2E`: start before Para has hatched, to see the first-launch flow |
+| `PARALEET_E2E_AT_LOGIN=1` | With `PARALEET_E2E`: start the way the login item does, with no main window |
+| `PARALEET_E2E_LLM_ANSWERS` | With `PARALEET_E2E`: a JSON file of answers for the scripted model, an array of `{ "plan": ... }` or `{ "error": "..." }` used in order. What the model was asked is written to `<file>.calls.json` |
 
 A packaged app ignores every switch except `PARALEET_USER_DATA_DIR`.
 

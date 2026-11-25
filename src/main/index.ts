@@ -1,6 +1,6 @@
 // Electron main process: app lifecycle, the database, the bridge and the windows.
 import { randomInt } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { uptime } from 'node:os';
 import {
@@ -9,6 +9,7 @@ import {
   dialog,
   Notification,
   powerMonitor,
+  safeStorage,
   screen,
   shell,
   type MenuItemConstructorOptions,
@@ -17,7 +18,10 @@ import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
 import { getSettings, updateSettings } from '../data/repos/settings';
+import { createAnthropicClient, listModels } from '../llm/anthropicClient';
+import { LlmError } from '../llm/planGenerator';
 import { registerBridge } from './bridge';
+import { API_KEY_FILE_NAME, createSecretStore } from './secrets';
 import { FakeClock, systemClock, type Clock } from './clock';
 import {
   createDayWatcher,
@@ -29,6 +33,7 @@ import {
   sendDueReminder,
   trayState,
   type AppContext,
+  type ModelAccess,
   type Notice,
 } from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
@@ -53,6 +58,33 @@ if (process.env.PARALEET_USER_DATA_DIR) {
 
 /** Until this moment, the app being activated does not open the main window (see the notifier). */
 let quietActivationUntil = 0;
+/**
+ * A model for end-to-end tests: it answers from a JSON file the test writes (an array, consumed
+ * in order). Each entry is `{ "plan": <the model's JSON answer> }` or `{ "error": "<message>" }`.
+ * What it was asked is written next to that file, as `<file>.calls.json`, so a test can read the
+ * candidates the app sent and build an answer from them.
+ */
+function scriptedModels(file: string): ModelAccess {
+  let used = 0;
+  const calls: { model: string; system: string; turns: { role: string; text: string }[] }[] = [];
+  return {
+    client: () => ({
+      complete: async (input) => {
+        // A test that did not bring answers gets a failure, never the network.
+        if (file === '') throw new LlmError('other', 'The test model has no answers.');
+        calls.push({ model: input.model, system: input.system, turns: input.turns.map((turn) => ({ ...turn })) });
+        writeFileSync(`${file}.calls.json`, JSON.stringify(calls));
+        const answers = JSON.parse(readFileSync(file, 'utf8')) as ({ plan?: unknown; error?: string } | undefined)[];
+        const next = answers[used];
+        used += 1;
+        if (!next) throw new LlmError('other', 'The test model has no more answers.');
+        if (typeof next.error === 'string') throw new LlmError('offline', next.error);
+        return { kind: 'json', value: next.plan, text: JSON.stringify(next.plan) };
+      },
+    }),
+    listModels: async () => ['claude-opus-5-5'],
+  };
+}
 
 let mainWindow: BrowserWindow | null = null;
 let petWindow: PetWindowController | null = null;
@@ -199,9 +231,32 @@ function start(): void {
     ctx.notifyChanged();
   }
 
+  // The API key: sealed by the system keychain in the app. End-to-end runs use a stand-in sealer
+  // so they never touch the owner's keychain, and a scripted model so they never use the network.
+  const secrets = createSecretStore(
+    join(userData, API_KEY_FILE_NAME),
+    isE2E
+      ? {
+          available: () => true,
+          seal: (text) => Buffer.from(text, 'utf8').reverse(),
+          open: (sealed) => Buffer.from(sealed).reverse().toString('utf8'),
+        }
+      : {
+          available: () => safeStorage.isEncryptionAvailable(),
+          seal: (text) => safeStorage.encryptString(text),
+          open: (sealed) => safeStorage.decryptString(sealed),
+        },
+  );
+  const models: ModelAccess =
+    isE2E
+      ? scriptedModels(process.env.PARALEET_E2E_LLM_ANSWERS ?? '')
+      : { client: (apiKey) => createAnthropicClient(apiKey), listModels: (apiKey) => listModels(apiKey) };
+
   const ctx: AppContext = {
     db,
     clock,
+    secrets,
+    models,
     session: newSession(),
     windows: {
       showMain: (target) => showMainWindow(target ? `/${target}` : ''),
@@ -308,15 +363,20 @@ function start(): void {
   }
 
   // The bridge answers only the main frame of the app's own windows, showing the app's own page.
-  registerBridge(createHandlers(ctx), (event) => {
-    const frame = event.senderFrame;
-    return (
-      BrowserWindow.fromWebContents(event.sender) !== null &&
-      frame !== null &&
-      frame === event.sender.mainFrame &&
-      isRendererUrl(frame.url)
-    );
-  });
+  registerBridge(
+    createHandlers(ctx),
+    (event) => {
+      const frame = event.senderFrame;
+      return (
+        BrowserWindow.fromWebContents(event.sender) !== null &&
+        frame !== null &&
+        frame === event.sender.mainFrame &&
+        isRendererUrl(frame.url)
+      );
+    },
+    // The window shows the message; the log keeps the rest. The input is never logged.
+    (method, error) => console.error(`ParaLeet: ${method} failed:`, error),
+  );
 
   const dayWatcher = createDayWatcher(ctx);
   const moodWatcher = createMoodWatcher(ctx);

@@ -83,12 +83,19 @@ export function listAttemptFacts(db: Db): AttemptFact[] {
 /** Every attempt as the accessory rules see it, in the order recorded. Input for `replayUnlocks`. */
 export function listUnlockAttempts(db: Db): UnlockAttempt[] {
   return db
-    .all<{ para_day: string; rating: Rating; hard: number }>(
-      `SELECT a.para_day, a.rating, COALESCE(p.difficulty_norm, 0) >= ? AS hard
+    .all<{ para_day: string; rating: Rating; hard: number; plans_finished: number }>(
+      `SELECT a.para_day, a.rating, COALESCE(p.difficulty_norm, 0) >= ? AS hard,
+         (SELECT COUNT(*) FROM plans f
+          WHERE f.finished_from_attempt IS NOT NULL AND f.finished_from_attempt <= a.id) AS plans_finished
        FROM attempts a JOIN problems p ON p.id = a.problem_id ORDER BY a.id`,
       [HARD_DIFFICULTY_NORM],
     )
-    .map((row) => ({ paraDay: row.para_day, rating: row.rating, hardProblem: row.hard === 1 }));
+    .map((row) => ({
+      paraDay: row.para_day,
+      rating: row.rating,
+      hardProblem: row.hard === 1,
+      plansFinished: Number(row.plans_finished),
+    }));
 }
 
 /** True once any attempt not rated Again was on a problem of normalized difficulty 4 or 5. */

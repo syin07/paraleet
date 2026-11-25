@@ -58,15 +58,20 @@ export interface UnlockAttempt {
   rating: Rating;
   /** True when the attempted problem's normalized difficulty is 4 or 5. */
   hardProblem: boolean;
+  /**
+   * How many plans counted as finished when this attempt was recorded, the plan this attempt
+   * finished included. Left out means none.
+   */
+  plansFinished?: number;
 }
 
 /**
  * Every accessory the attempts have unlocked, replayed in the order they were recorded exactly
- * as reporting them one by one would have. `plansFinished` is the number of finished plans today;
- * it is applied to every attempt, which can only unlock the graduation cap earlier in the replay
- * and gives the same final answer.
+ * as reporting them one by one would have. Each attempt sees only the plans that were finished
+ * when it was recorded: a plan finished by an attempt rated Again earns the graduation cap with
+ * the next attempt of another rating, never with an earlier one.
  */
-export function replayUnlocks(attempts: readonly UnlockAttempt[], plansFinished = 0): AccessoryId[] {
+export function replayUnlocks(attempts: readonly UnlockAttempt[]): AccessoryId[] {
   let facts = EMPTY_PET_FACTS;
   let solvedHardProblem = false;
   let unlocked: AccessoryId[] = [];
@@ -75,7 +80,7 @@ export function replayUnlocks(attempts: readonly UnlockAttempt[], plansFinished 
     if (attempt.hardProblem && isGrowthSolve(attempt.rating)) solvedHardProblem = true;
     unlocked = unlockedAfterAttempt(
       unlocked,
-      { solvedHardProblem, longestStreak: facts.longestStreak, plansFinished },
+      { solvedHardProblem, longestStreak: facts.longestStreak, plansFinished: attempt.plansFinished ?? 0 },
       attempt.rating,
     );
   }

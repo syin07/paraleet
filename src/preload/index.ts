@@ -1,11 +1,12 @@
 // The preload script: exposes the bridge to the UI as `window.paraleet`. It forwards calls to the
 // main process and nothing else. It runs sandboxed, with no Node access.
 import { contextBridge, ipcRenderer } from 'electron';
-import { BRIDGE_METHODS, CHANGED_EVENT, IPC_PREFIX, NAVIGATE_EVENT } from '../bridge/channels';
+import { BRIDGE_METHODS, CHANGED_EVENT, IPC_PREFIX, NAVIGATE_EVENT, unwrapReply } from '../bridge/channels';
 
 const api: Record<string, unknown> = {};
 for (const method of BRIDGE_METHODS) {
-  api[method] = (input?: unknown) => ipcRenderer.invoke(IPC_PREFIX + method, input);
+  // Main answers with the value or a message; a failure is thrown here with that message as it is.
+  api[method] = (input?: unknown) => ipcRenderer.invoke(IPC_PREFIX + method, input).then(unwrapReply);
 }
 api.onChanged = (listener: () => void) => {
   const handler = (): void => listener();

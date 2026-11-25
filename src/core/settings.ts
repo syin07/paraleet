@@ -2,6 +2,7 @@
 // invalid value falls back to its default, so adding a setting never needs a migration.
 import { z } from 'zod';
 import { DEFAULT_BOUNDARY_HOUR } from './day';
+import { DEFAULT_PLAN_MODEL } from './plan';
 import { DEFAULT_TARGET_RETENTION } from './scheduler';
 
 /** A local wall-clock time, `HH:MM` in 24-hour form. */
@@ -20,6 +21,8 @@ export const settingsSchema = z.object({
   launchAtLogin: z.boolean(),
   /** Unused in v1; kept for later solve verification (PRD section 8). */
   leetcodeHandle: z.string().max(64),
+  /** The Anthropic model that writes learning plans (PRD section 7). */
+  planModel: z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._:@-]+$/, 'Use a model ID such as claude-opus-5-5'),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -34,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   petWindowPosition: null,
   launchAtLogin: true,
   leetcodeHandle: '',
+  planModel: DEFAULT_PLAN_MODEL,
 };
 
 export const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS) as SettingKey[];

@@ -6,6 +6,7 @@ import type { Celebration } from '../../core/pet';
 import type { Settings } from '../../core/settings';
 import type { ParaDay } from '../../core/types';
 import type { Db } from '../../data/db';
+import type { LlmClient } from '../../llm/planGenerator';
 import { ensurePet, type PetRecord } from '../../data/repos/pet';
 import { getSettings } from '../../data/repos/settings';
 import type { Clock } from '../clock';
@@ -46,9 +47,30 @@ export function newSession(): SessionState {
   return { celebration: null };
 }
 
+/**
+ * Where the Anthropic API key lives: encrypted with the operating system's keychain, outside the
+ * database, never in logs (PRD section 9). Main implements it; tests use an in-memory fake.
+ */
+export interface SecretStore {
+  /** False when the system cannot encrypt, in which case no key is ever stored. */
+  available(): boolean;
+  getApiKey(): string | null;
+  setApiKey(key: string): void;
+  clearApiKey(): void;
+}
+
+/** How the app reaches a model. Main supplies the real client; tests supply saved answers. */
+export interface ModelAccess {
+  client(apiKey: string): LlmClient;
+  /** The model IDs this key may use. Throws `LlmError` when the key is not accepted. */
+  listModels(apiKey: string): Promise<string[]>;
+}
+
 export interface AppContext {
   db: Db;
   clock: Clock;
+  secrets: SecretStore;
+  models: ModelAccess;
   windows: WindowPort;
   session: SessionState;
   /** Tells every window that data changed, so they refetch. */

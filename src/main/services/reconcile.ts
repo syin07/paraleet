@@ -14,6 +14,7 @@ import { saveCard } from '../../data/repos/cards';
 import { savePetFacts, saveUnlockedAccessories } from '../../data/repos/pet';
 import { currentMoment, type AppContext } from './context';
 import { knownAccessories } from './pet';
+import { reconcileActivePlan } from './plans';
 import { schedulerOptions } from './report';
 
 export interface ReconcileResult {
@@ -23,6 +24,8 @@ export interface ReconcileResult {
   cardsRebuilt: number;
   /** Accessories the attempts had earned that were not stored as unlocked, now added. */
   accessoriesRestored: AccessoryId[];
+  /** Items of the active plan whose state differed from what the attempts say, now corrected. */
+  planItemsCorrected: number;
 }
 
 function sameFacts(a: PetFacts, b: PetFacts): boolean {
@@ -65,12 +68,15 @@ export function reconcile(ctx: AppContext): ReconcileResult {
     // Accessories never go away, so this only ever adds: anything the attempts earned that is
     // not stored (a database from before accessories existed, or a lost write).
     const stored = knownAccessories(moment.pet.unlockedAccessories);
+    // The active plan's progress first: finishing a plan is what earns the graduation cap.
+    const planItemsCorrected = reconcileActivePlan(ctx, moment.now.toISOString());
+
     const earned = replayUnlocks(listUnlockAttempts(ctx.db));
     const accessoriesRestored = newlyUnlocked(stored, earned);
     if (accessoriesRestored.length > 0) {
       saveUnlockedAccessories(ctx.db, ACCESSORY_IDS.filter((id) => stored.includes(id) || earned.includes(id)));
     }
 
-    return { petFactsRepaired, cardsRebuilt: missing.length, accessoriesRestored };
+    return { petFactsRepaired, cardsRebuilt: missing.length, accessoriesRestored, planItemsCorrected };
   });
 }

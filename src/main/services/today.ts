@@ -17,6 +17,7 @@ import { getPet, saveEquippedAccessories } from '../../data/repos/pet';
 import { getProblem, listStarterQueue } from '../../data/repos/problems';
 import { currentMoment, type AppContext, type Moment } from './context';
 import { knownAccessories, petSummary } from './pet';
+import { activePlanQueue } from './plans';
 import { requireProblem, toDueReviewItems, toSummary } from './views';
 
 /** Everything the assignment policy needs, read from the database. */
@@ -29,7 +30,7 @@ export function readAssignmentInput(ctx: AppContext, moment: Moment): Assignment
     today,
     dueReviews,
     recentAssignments: listAssignmentsBefore(ctx.db, today, 7),
-    planQueue: [], // Plans arrive in M3.
+    planQueue: activePlanQueue(ctx),
     starterQueue: listStarterQueue(ctx.db),
   };
 }

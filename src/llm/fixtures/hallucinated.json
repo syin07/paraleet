@@ -1,0 +1,16 @@
+{
+  "topics": [
+    {
+      "topic": "binary-search",
+      "foundations": [101, 102, 900001],
+      "groups": [
+        {
+          "name": "Binary search on the answer",
+          "description": "Guess a value and check whether it is feasible, then narrow the range.",
+          "problems": [104, 105, 900002]
+        }
+      ],
+      "challenge": [110, 104]
+    }
+  ]
+}

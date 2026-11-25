@@ -35,6 +35,16 @@ const FIXTURES: Record<number, (db: Db) => void> = {
       VALUES ('leetcode', 'test', '2026-11-01T00:00:00.000Z', 1, '2026-11-01T00:00:01.000Z');
     `);
   },
+  3: (db) => {
+    FIXTURES[2]?.(db);
+    db.exec(`
+      INSERT INTO plans (id, title, topics, platforms, level, target_size, status, model, created_at, activated_at)
+      VALUES (1, 'Arrays & hashing', '["arrays-hashing"]', '["leetcode"]', 'some', 20, 'active', 'test-model',
+        '2026-11-03T00:00:00.000Z', '2026-11-03T00:10:00.000Z');
+      INSERT INTO plan_items (plan_id, position, topic, stage, group_name, group_description, problem_id, state)
+      VALUES (1, 0, 'arrays-hashing', 'foundations', NULL, NULL, 1, 'done');
+    `);
+  },
 };
 
 function expectDataSurvived(db: Db): void {
@@ -266,6 +276,52 @@ describe('migration 2', () => {
         "INSERT INTO catalog_sources (platform, source, generated_at, problem_count, loaded_at) VALUES ('other', 's', 't', 0, 't')",
       ),
     ).toThrow();
+    db.close();
+  });
+});
+
+describe('migration 3', () => {
+  function current(): Db {
+    const db = new Db(':memory:');
+    migrate(db);
+    FIXTURES[3]?.(db);
+    return db;
+  }
+
+  it('allows only one active plan', () => {
+    const db = current();
+    const second = `INSERT INTO plans (title, topics, platforms, level, target_size, status, model, created_at)
+      VALUES ('Second', '[]', '[]', 'new', 10, 'active', 'm', '2026-11-04T00:00:00.000Z')`;
+    expect(() => db.exec(second)).toThrow();
+    // Any number of drafts and archived plans is fine.
+    db.exec(second.replace("'active'", "'draft'"));
+    db.exec(second.replace("'active'", "'archived'"));
+    db.close();
+  });
+
+  it('refuses a plan item for a problem that does not exist, and the same problem twice in a plan', () => {
+    const db = current();
+    const item = (problemId: number): string =>
+      `INSERT INTO plan_items (plan_id, position, topic, stage, problem_id) VALUES (1, 1, 'arrays-hashing', 'challenge', ${problemId})`;
+    expect(() => db.exec(item(424242))).toThrow();
+    expect(() => db.exec(item(1))).toThrow();
+    db.close();
+  });
+
+  it('refuses an unknown level, status, stage or item state', () => {
+    const db = current();
+    expect(() => db.exec("UPDATE plans SET level = 'expert'")).toThrow();
+    expect(() => db.exec("UPDATE plans SET status = 'paused'")).toThrow();
+    expect(() => db.exec("UPDATE plan_items SET stage = 'warmup'")).toThrow();
+    expect(() => db.exec("UPDATE plan_items SET state = 'failed'")).toThrow();
+    db.close();
+  });
+
+  it('removes a plan\'s items with the plan, and never a problem', () => {
+    const db = current();
+    db.exec('DELETE FROM plans WHERE id = 1');
+    expect(db.get<{ n: number }>('SELECT COUNT(*) AS n FROM plan_items')?.n).toBe(0);
+    expect(db.get<{ n: number }>('SELECT COUNT(*) AS n FROM problems')?.n).toBe(1);
     db.close();
   });
 });

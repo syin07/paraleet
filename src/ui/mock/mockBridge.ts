@@ -26,6 +26,15 @@ import { DEFAULT_SETTINGS, type Settings } from '../../core/settings';
 import { displayedStreak, isFedOn, missedDays } from '../../core/streak';
 import type { TopicId } from '../../core/topics';
 import { ACCESSORY_IDS } from '../../core/types';
+import {
+  buildMockPlan,
+  createPlanApi,
+  emptyPlanState,
+  mockPlanQueue,
+  mockRecordPlanAttempt,
+  type MockPlanState,
+  type PlanHost,
+} from './mockPlans';
 import type {
   AccessoryId,
   AssignmentReason,
@@ -61,6 +70,7 @@ interface MockState {
   /** True once the "missed you" greeting was acknowledged. */
   greeted: boolean;
   celebration: Celebration | null;
+  plans: MockPlanState;
 }
 
 // A few non-LeetCode problems so every platform shows up in the mock. Mock data only.
@@ -126,6 +136,7 @@ function baseState(): MockState {
     windowCalls: [],
     greeted: false,
     celebration: null,
+    plans: emptyPlanState(),
   };
 }
 
@@ -198,11 +209,16 @@ function nextStarter(state: MockState): number | null {
   return state.starterIds.find((id) => !attempted.has(id)) ?? null;
 }
 
-/** The same order as the real policy: most overdue review, then the starter list. */
+/** The same order as the real policy: most overdue review, then the active plan, then the starter list. */
 function assignToday(state: MockState): void {
   const review = dueReviews(state)[0];
   if (review) {
     state.assignment = { problemId: review.problem.id, reason: 'review', completed: false };
+    return;
+  }
+  const planned = mockPlanQueue(state.plans)[0];
+  if (planned !== undefined) {
+    state.assignment = { problemId: planned, reason: 'plan', completed: false };
     return;
   }
   const starter = nextStarter(state);
@@ -354,6 +370,18 @@ function recognize(text: string): { platform: Platform; platformId: string; cano
 function createApi(state: MockState): ParaLeetApi {
   const listeners = new Set<() => void>();
   const changed = (): void => listeners.forEach((listener) => listener());
+  const planHost: PlanHost = {
+    get plans() {
+      return state.plans;
+    },
+    get problems() {
+      return state.problems;
+    },
+    planModel: () => state.settings.planModel,
+    attemptedIds: () => new Set(state.attempts.map((attempt) => attempt.problemId)),
+    now: () => mockNow().toISOString(),
+    changed,
+  };
 
   return {
     getToday: async () => todayView(state),
@@ -440,6 +468,7 @@ function createApi(state: MockState): ParaLeetApi {
           growthSolves: state.pet.growthSolves,
         },
         unlocked: newlyUnlocked(unlockedBefore, state.unlockedAccessories),
+        finishedPlan: mockRecordPlanAttempt(state.plans, input.problemId),
         nextReviewDay: state.cards.get(input.problemId)?.dueDay ?? null,
         today,
       };
@@ -622,6 +651,8 @@ function createApi(state: MockState): ParaLeetApi {
       return todayView(state);
     },
 
+    ...createPlanApi(planHost),
+
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
@@ -678,6 +709,21 @@ function midway(state: MockState): void {
   });
 }
 
+/** A plan built by the pretend model, for scenarios that start with one. */
+function planFor(state: MockState, topics: TopicId[]) {
+  return buildMockPlan(
+    {
+      plans: state.plans,
+      problems: state.problems,
+      planModel: () => state.settings.planModel,
+      attemptedIds: () => new Set(),
+      now: () => MOCK_NOW,
+      changed: () => undefined,
+    },
+    { topics, platforms: ['leetcode'], level: 'some', targetSize: 12 },
+  );
+}
+
 export const SCENARIOS: Record<string, (state: MockState) => void> = {
   /** The default: a user a few weeks in. */
   default: (state) => {
@@ -723,6 +769,52 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
       const id = state.starterIds[index];
       if (id !== undefined) logAttempt(state, id, addDays(MOCK_TODAY, -6 + index), 'good', { minutes: 14 });
     }
+    assignToday(state);
+  },
+  /** Plans: no API key saved yet. */
+  'plan-nokey': (state) => {
+    midway(state);
+    assignToday(state);
+    state.plans.hasKey = false;
+  },
+  /** Plans: this Mac cannot encrypt, so no key can be stored. */
+  'plan-nostore': (state) => {
+    midway(state);
+    assignToday(state);
+    state.plans.hasKey = false;
+    state.plans.canStoreKey = false;
+  },
+  /** Plans: the model fails to produce a usable plan. */
+  'plan-fails': (state) => {
+    midway(state);
+    assignToday(state);
+    state.plans.model = 'fails';
+  },
+  /** Plans: a key is saved, but Anthropic does not accept it. */
+  'plan-badkey': (state) => {
+    midway(state);
+    assignToday(state);
+    state.plans.model = 'bad-key';
+  },
+  /** Plans: a freshly generated draft waiting for review. */
+  'plan-draft': (state) => {
+    midway(state);
+    assignToday(state);
+    state.plans.plans.push(planFor(state, ['binary-search', 'two-pointers']));
+  },
+  /** Plans: an active plan part way through, an older archived one and a finished one. */
+  'plan-active': (state) => {
+    midway(state);
+    const finished = planFor(state, ['stacks']);
+    finished.status = 'done';
+    finished.items.forEach((item) => (item.state = 'done'));
+    const archived = planFor(state, ['greedy']);
+    archived.status = 'archived';
+    const active = planFor(state, ['arrays-hashing', 'sliding-window']);
+    active.status = 'active';
+    active.items.slice(0, 4).forEach((item) => (item.state = 'done'));
+    if (active.items[4]) active.items[4].state = 'skipped';
+    state.plans.plans.push(finished, archived, active);
     assignToday(state);
   },
   /** More than five reviews due, to check the cap of five. */
