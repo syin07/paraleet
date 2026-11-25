@@ -165,7 +165,7 @@ test.describe('table', () => {
     const clipped = await page.getByTestId('topic-chip').evaluateAll((chips) =>
       chips
         // Chips wrapped out of the one-line row are folded into "+n"; only shown ones count.
-        .filter((chip) => (chip as HTMLElement).offsetTop === 0)
+        .filter((chip) => (chip as unknown as { offsetTop: number }).offsetTop === 0)
         .map((chip) => ({ text: chip.textContent, over: chip.scrollWidth - chip.clientWidth }))
         .filter((chip) => chip.over > 0),
     );
