@@ -52,6 +52,12 @@ export const BRIDGE_METHODS = [
   'removeApiKey',
   'testApiKey',
   'getStats',
+  'getDataInfo',
+  'exportData',
+  'chooseImport',
+  'applyImport',
+  'cancelImport',
+  'showDataInFinder',
   'getSettings',
   'updateSettings',
 ] as const;

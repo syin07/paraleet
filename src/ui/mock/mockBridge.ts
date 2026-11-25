@@ -8,6 +8,8 @@ import starterSeed from '../../../seed/starter.json';
 import type {
   AttemptView,
   CardSummary,
+  DataInfo,
+  DataSummary,
   DueReviewItem,
   LoggedProblemRow,
   ParaLeetApi,
@@ -74,6 +76,40 @@ interface MockState {
   plans: MockPlanState;
   /** True when reading the stats should fail, to show the Stats screen's error state. */
   statsFail: boolean;
+  data: MockDataState;
+}
+
+/** Export and import in the mock: there are no files, so the dialogs' answers are scripted. */
+interface MockDataState {
+  /** What the open dialog "picks": a good backup, a file that is not ParaLeet's, one from a newer ParaLeet, or nothing. */
+  importFile: 'good' | 'not-paraleet' | 'newer' | 'none';
+  /** What saving a copy does: works, is cancelled in the dialog, or fails. */
+  save: 'ok' | 'cancel' | 'fails';
+  /** True between a good `chooseImport` and the yes or no that follows. */
+  pending: boolean;
+  hasBackup: boolean;
+  lastImport: DataInfo['lastImport'];
+}
+
+const MOCK_DATA_PATH = '/Users/you/Library/Application Support/ParaLeet/paraleet.sqlite3';
+/** The backup the mock's open dialog "picks". */
+const MOCK_IMPORT_SUMMARY: DataSummary = {
+  attempts: 214,
+  problems: 96,
+  firstDay: '2026-03-02',
+  lastDay: '2026-10-31',
+  longestStreak: 41,
+};
+
+function dataSummary(state: MockState): DataSummary {
+  const days = state.attempts.map((attempt) => attempt.paraDay).sort();
+  return {
+    attempts: state.attempts.length,
+    problems: new Set(state.attempts.map((attempt) => attempt.problemId)).size,
+    firstDay: days[0] ?? null,
+    lastDay: days[days.length - 1] ?? null,
+    longestStreak: state.pet.longestStreak,
+  };
 }
 
 // A few non-LeetCode problems so every platform shows up in the mock. Mock data only.
@@ -141,6 +177,7 @@ function baseState(): MockState {
     celebration: null,
     plans: emptyPlanState(),
     statsFail: false,
+    data: { importFile: 'good', save: 'ok', pending: false, hasBackup: false, lastImport: null },
   };
 }
 
@@ -681,6 +718,61 @@ function createApi(state: MockState): ParaLeetApi {
       };
     },
 
+    getDataInfo: async () => ({
+      path: MOCK_DATA_PATH,
+      summary: dataSummary(state),
+      hasImportBackup: state.data.hasBackup,
+      importBackupName: 'paraleet.sqlite3.before-import',
+      lastImport: state.data.lastImport,
+    }),
+    exportData: async () => {
+      if (state.data.save === 'cancel') return { saved: false };
+      if (state.data.save === 'fails') throw new Error('The copy could not be saved there. Choose another place and try again.');
+      return { saved: true, path: `/Users/you/Documents/ParaLeet backup ${MOCK_TODAY}.sqlite3` };
+    },
+    chooseImport: async () => {
+      state.data.pending = false;
+      if (state.data.importFile === 'none') return { chosen: false };
+      if (state.data.importFile === 'not-paraleet') {
+        return { chosen: true, ok: false, fileName: 'recipes.sqlite3', reason: 'That file is not a ParaLeet database.' };
+      }
+      if (state.data.importFile === 'newer') {
+        return {
+          chosen: true,
+          ok: false,
+          fileName: 'ParaLeet backup 2027-03-01.sqlite3',
+          reason: 'That file was made by a newer ParaLeet. Update ParaLeet, then import it.',
+        };
+      }
+      state.data.pending = true;
+      return {
+        chosen: true,
+        ok: true,
+        fileName: 'ParaLeet backup 2026-10-31.sqlite3',
+        incoming: { ...MOCK_IMPORT_SUMMARY },
+        current: dataSummary(state),
+      };
+    },
+    applyImport: async () => {
+      if (!state.data.pending) throw new Error('Choose a file to import first.');
+      // The real app restarts on the imported data. The mock keeps its own and says what a
+      // restart would: an import was applied and the old data is kept as a backup.
+      state.data.pending = false;
+      state.data.hasBackup = true;
+      state.data.lastImport = { status: 'applied' };
+      state.windowCalls.push('restart');
+      changed();
+      return { ok: true };
+    },
+    cancelImport: async () => {
+      state.data.pending = false;
+      return { ok: true };
+    },
+    showDataInFinder: async () => {
+      state.windowCalls.push('showDataInFinder');
+      return { ok: true };
+    },
+
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
@@ -694,6 +786,9 @@ function createApi(state: MockState): ParaLeetApi {
       }
       if (patch.targetRetention !== undefined && !(patch.targetRetention >= 0.7 && patch.targetRetention <= 0.97)) {
         throw new Error('Target retention must be between 0.7 and 0.97');
+      }
+      if (patch.planModel !== undefined && !/^[A-Za-z0-9._:@-]{1,100}$/.test(patch.planModel.trim())) {
+        throw new Error('Use a model ID such as claude-opus-5-5');
       }
       state.settings = { ...state.settings, ...patch };
       changed();
@@ -885,6 +980,44 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     midway(state);
     assignToday(state);
     state.statsFail = true;
+  },
+  /** Data: the file picked for import is not a ParaLeet database. */
+  'data-import-bad': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.importFile = 'not-paraleet';
+  },
+  /** Data: the file picked for import was made by a newer ParaLeet. */
+  'data-import-newer': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.importFile = 'newer';
+  },
+  /** Data: every file dialog is closed without choosing. */
+  'data-cancel': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.importFile = 'none';
+    state.data.save = 'cancel';
+  },
+  /** Data: the copy cannot be saved where the user chose. */
+  'data-export-fails': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.save = 'fails';
+  },
+  /** Data: this launch applied an import; the data it replaced is kept as a backup. */
+  'data-imported': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.hasBackup = true;
+    state.data.lastImport = { status: 'applied' };
+  },
+  /** Data: this launch refused a staged import. */
+  'data-import-refused': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.lastImport = { status: 'rejected', reason: 'That file is damaged and cannot be imported. Your data was not changed.' };
   },
   /** More than five reviews due, to check the cap of five. */
   backlog: (state) => {

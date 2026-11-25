@@ -5,6 +5,7 @@ import { getNotes } from '../../data/repos/notes';
 import { getProblem } from '../../data/repos/problems';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { AppContext } from './context';
+import { applyImport, cancelImport, chooseImport, exportData, getDataInfo, showDataInFinder } from './data';
 import { acknowledgeGreeting, completeOnboarding } from './pet';
 import { skipRemindersAlreadyPassed } from './reminders';
 import {
@@ -39,6 +40,8 @@ import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from '
 export {
   newSession,
   type AppContext,
+  type FilePort,
+  type ImportOutcome,
   type ModelAccess,
   type Notice,
   type SecretStore,
@@ -122,6 +125,12 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     removeApiKey: () => removeApiKey(ctx),
     testApiKey: () => testApiKey(ctx),
     getStats: ({ range }) => getStats(ctx, range),
+    getDataInfo: () => getDataInfo(ctx),
+    exportData: () => exportData(ctx),
+    chooseImport: () => chooseImport(ctx),
+    applyImport: () => applyImport(ctx),
+    cancelImport: () => cancelImport(ctx),
+    showDataInFinder: () => showDataInFinder(ctx),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

@@ -165,6 +165,21 @@ export const inputSchemas = {
   testApiKey: z.undefined(),
   /** Everything the Stats screen shows, for a range of 12, 26 or 53 weeks. */
   getStats: z.object({ range: z.enum(STATS_RANGES) }),
+  /** Where the data lives and what it holds, for the Data group in Settings. */
+  getDataInfo: z.undefined(),
+  /** Asks where to save, then writes a complete copy of the database there. */
+  exportData: z.undefined(),
+  /**
+   * Asks for a database file and says what is in it. Main remembers the file for `applyImport`:
+   * the UI never hands main a file path.
+   */
+  chooseImport: z.undefined(),
+  /** Replaces the data with the file chosen in `chooseImport`, then restarts the app. */
+  applyImport: z.undefined(),
+  /** Forgets the file chosen in `chooseImport`. */
+  cancelImport: z.undefined(),
+  /** Shows the database file in Finder. */
+  showDataInFinder: z.undefined(),
   getSettings: z.undefined(),
   updateSettings: settingsPatchSchema,
 } as const satisfies Record<BridgeMethodName, z.ZodType>;
@@ -391,6 +406,39 @@ export interface StatsView extends Stats {
   };
 }
 
+/** What a database holds, in the terms a person recognizes their data by. */
+export interface DataSummary {
+  /** Attempts logged. */
+  attempts: number;
+  /** Different problems with at least one attempt. */
+  problems: number;
+  firstDay: ParaDay | null;
+  lastDay: ParaDay | null;
+  longestStreak: number;
+}
+
+export interface DataInfo {
+  /** The database file's full path, for showing. The UI never sends a path back. */
+  path: string;
+  summary: DataSummary;
+  /** True when the data an earlier import replaced is kept as a backup next to the database. */
+  hasImportBackup: boolean;
+  importBackupName: string;
+  /** What this launch did with an import: applied it, refused it and why, or null for a normal launch. */
+  lastImport: { status: 'applied' } | { status: 'rejected'; reason: string } | null;
+}
+
+/** `saved: false` when the user closed the dialog without choosing a place. */
+export type ExportResult = { saved: false } | { saved: true; path: string };
+
+export type ImportChoice =
+  /** The user closed the dialog without choosing a file. */
+  | { chosen: false }
+  /** Not a file this app can import. `reason` says why, in plain words. Nothing changed. */
+  | { chosen: true; ok: false; fileName: string; reason: string }
+  /** A ParaLeet database. `applyImport` replaces the current data with it. */
+  | { chosen: true; ok: true; fileName: string; incoming: DataSummary; current: DataSummary };
+
 /** The answer of a command that returns nothing. */
 export interface Done {
   ok: true;
@@ -441,6 +489,13 @@ export interface BridgeOutputs {
   removeApiKey: LlmStatus;
   testApiKey: ApiKeyTest;
   getStats: StatsView;
+  getDataInfo: DataInfo;
+  exportData: ExportResult;
+  chooseImport: ImportChoice;
+  /** The app restarts a moment after this answers. */
+  applyImport: Done;
+  cancelImport: Done;
+  showDataInFinder: Done;
   getSettings: Settings;
   updateSettings: Settings;
 }

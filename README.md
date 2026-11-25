@@ -63,7 +63,7 @@ Packaging a `.dmg` arrives with milestone M4.
 
 ## Your data
 
-All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (see "Run it"). Copy that file to back it up. The app stores problem titles, links, tags and your attempts and notes. It never stores problem statements.
+All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (see "Run it"). Copy that file to back it up, or use Settings, Data, "Export", which saves a complete copy wherever you choose. "Import" replaces the data with such a copy: the app shows what is in the file, asks, restarts on the imported data, and keeps what it replaced as `paraleet.sqlite3.before-import` in the same folder. The app stores problem titles, links, tags and your attempts and notes. It never stores problem statements.
 
 ## Learning plans and the API key
 

@@ -6,6 +6,8 @@ import type { Celebration } from '../../core/pet';
 import type { Settings } from '../../core/settings';
 import type { ParaDay } from '../../core/types';
 import type { Db } from '../../data/db';
+import type { ImportOutcome } from '../../data';
+import type { DatabaseSummary } from '../../data/transfer';
 import type { LlmClient } from '../../llm/planGenerator';
 import { ensurePet, type PetRecord } from '../../data/repos/pet';
 import { getSettings } from '../../data/repos/settings';
@@ -37,14 +39,36 @@ export interface Notice {
   onClick(): void;
 }
 
+export type { ImportOutcome } from '../../data';
+
 /** What the app remembers only while it is running. */
 export interface SessionState {
   /** The most recent report, while Para may still be checking it or eating. */
   celebration: Celebration | null;
+  /**
+   * The file the user picked to import, checked and waiting for a yes or no. Main keeps the path:
+   * the UI never hands main a file path.
+   */
+  pendingImport: { path: string; summary: DatabaseSummary } | null;
+  /** Set at launch when an import was applied or refused, so Settings can say so. */
+  lastImport: ImportOutcome | null;
 }
 
-export function newSession(): SessionState {
-  return { celebration: null };
+export function newSession(lastImport: ImportOutcome | null = null): SessionState {
+  return { celebration: null, pendingImport: null, lastImport };
+}
+
+/**
+ * The system's file dialogs and Finder. Main implements it with Electron; tests script it. A
+ * dialog answers null when the user cancels.
+ */
+export interface FilePort {
+  /** Asks where to save a file, offering `suggestedName`. */
+  chooseSavePath(suggestedName: string): Promise<string | null>;
+  /** Asks for a database file to open. */
+  chooseOpenPath(): Promise<string | null>;
+  /** Shows a file in Finder. */
+  reveal(path: string): void;
 }
 
 /**
@@ -72,6 +96,7 @@ export interface AppContext {
   secrets: SecretStore;
   models: ModelAccess;
   windows: WindowPort;
+  files: FilePort;
   session: SessionState;
   /** Tells every window that data changed, so they refetch. */
   notifyChanged(): void;
@@ -81,6 +106,8 @@ export interface AppContext {
   openExternal(url: string): Promise<void>;
   /** A random 31-bit integer, used once to give a new pet its seed. */
   randomSeed(): number;
+  /** Quits the app and starts it again. Used once an import is staged: it is applied at launch. */
+  restart(): void;
 }
 
 export interface Moment {
