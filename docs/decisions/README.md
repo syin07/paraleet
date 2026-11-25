@@ -1,0 +1,12 @@
+# Decision log
+
+One short file per non-obvious choice: context, decision, alternatives rejected. Number them in order and never rewrite history; when a decision changes, add a new entry and mark the old one "superseded by NNNN".
+
+| # | Decision |
+| --- | --- |
+| [0001](0001-stack.md) | Stack and tooling |
+| [0002](0002-sqlite-node-builtin.md) | SQLite through `node:sqlite`, one file, no ORM |
+| [0003](0003-days-and-streak.md) | ParaLeet days, time zones and the streak |
+| [0004](0004-bridge-and-services.md) | The typed bridge and the Electron-free service layer |
+| [0005](0005-starter-list.md) | The starter list |
+| [0006](0006-agents-and-process.md) | Agents, tools and process choices |
