@@ -33,7 +33,7 @@ A second person must be able to install ParaLeet on another Mac from one file, w
 
 ## Limits
 
-- The Intel half was started under Rosetta on an Apple silicon Mac, not on an Intel Mac.
+- The Intel half is started under Rosetta on an Apple silicon Mac (`dist:check` does it, and waits for its log to say it started as `x64`), not on an Intel Mac.
 - A real login launch of the installed app (only Para and the menu bar icon, no main window) is not part of `dist:check`: it needs a logout. The rule is unit-tested (`src/main/loginItem.test.ts`) and the development build is tested end to end; the installed app is a hand check for the owner.
 - The log holds file paths, which include the Mac's user name, and it holds failures of the main process only: an error inside a window's page is not written to it.
 - The Electron switch that lets the app binary be run as plain Node (`ELECTRON_RUN_AS_NODE`) is left on. Turning it off is hardening for later, not something a friend's install needs.

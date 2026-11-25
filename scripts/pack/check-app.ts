@@ -13,7 +13,7 @@
 // the main process, and if the copy has died it is started once more to do that.
 //
 //   npx tsx scripts/pack/check-app.ts
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -85,8 +85,8 @@ async function main(): Promise<void> {
   }
 
   // The data folder starts with "Launch at login" off, so starting the app registers nothing.
-  const seedLoginOff = (): void => {
-    const seeded = openDatabase(join(dataDir, DATABASE_FILE_NAME), new Date().toISOString());
+  const seedLoginOff = (folder: string = dataDir): void => {
+    const seeded = openDatabase(join(folder, DATABASE_FILE_NAME), new Date().toISOString());
     updateSettings(seeded.db, { launchAtLogin: false });
     seeded.db.close();
   };
@@ -169,6 +169,34 @@ async function main(): Promise<void> {
     const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
     check('the log file says an installed copy started', /INFO ParaLeet \S+ started \(installed, /.test(log), log.split('\n')[0] ?? '');
     check('the log holds no error', !/ ERROR /.test(log), log.split('\n').find((line) => line.includes(' ERROR ')) ?? '');
+
+    // The Intel half. On an Apple silicon Mac it is started once under Rosetta, where Rosetta is
+    // installed, on a data folder of its own with "Launch at login" off. Its log says it started.
+    if (process.arch === 'arm64') {
+      if (output('arch', ['-x86_64', '/usr/bin/true']) === null) {
+        console.log('skip the Intel half was not started: Rosetta is not installed on this Mac');
+      } else {
+        const intelData = join(root, 'data intel');
+        mkdirSync(intelData, { recursive: true });
+        seedLoginOff(intelData);
+        const intelLog = join(intelData, 'paraleet.log');
+        const child = spawn('arch', ['-x86_64', join(installed, 'Contents/MacOS/ParaLeet')], {
+          env: { ...env, PARALEET_USER_DATA_DIR: intelData },
+          stdio: 'ignore',
+        });
+        const gone = new Promise<void>((done) => child.once('exit', () => done()));
+        const readLog = (): string => (existsSync(intelLog) ? readFileSync(intelLog, 'utf8') : '');
+        // Translating the app the first time is slow: give it a minute.
+        const started = await until(async () => /INFO ParaLeet \S+ started \(installed, x64\)/.test(readLog()), 60_000);
+        check('the Intel half starts (under Rosetta)', started, readLog().split('\n')[0] ?? '');
+        // A little longer, so a failure right after the first line would be in the log.
+        await new Promise((done) => setTimeout(done, 3_000));
+        check('the Intel half logs no error', !/ ERROR /.test(readLog()), readLog().split('\n').find((line) => line.includes(' ERROR ')) ?? '');
+        child.kill('SIGTERM');
+        await Promise.race([gone, new Promise((done) => setTimeout(done, 10_000))]);
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }
+    }
   } finally {
     // The copy is deleted next. A login item must not outlive it, whatever went wrong above.
     if (loginItemMayBeOn) {
