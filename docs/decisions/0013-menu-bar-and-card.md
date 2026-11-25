@@ -36,6 +36,8 @@ The PRD asks for a tiny bird head in the menu bar whose expression matches the m
 
 13. **End-to-end tests start with Para hatched** unless they ask otherwise (`launchApp({ hatched: false })`). `completeOnboarding` exists in the bridge for the first-launch screens; hiding the floating pet until Para has hatched is switched on together with those screens, so that nobody can be left without a pet in between.
 
+14. **In end-to-end runs the card does not close on a real loss of focus.** Several test apps on one Mac take focus from each other, which closed the card at random. Tests call the same code path directly (`lostFocus`); the wiring from the window's `blur` event to it is one line.
+
 ## Alternatives rejected
 
 - **A template (monochrome) icon:** it adapts to the menu bar's color by itself, but Para without its orange and its cheek patch is not Para, and the expression is harder to read in one color.

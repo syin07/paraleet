@@ -153,7 +153,9 @@ function start(): void {
   petWindow = pet;
 
   // The compact card hangs on the bird or on the menu bar icon, whichever asked for it.
-  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() }, () => updateDock());
+  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() }, () => updateDock(), {
+    closeOnBlur: !isE2E,
+  });
   const trayMenu = (): MenuItemConstructorOptions[] => [
     { label: 'Open ParaLeet', click: () => showMainWindow() },
     { label: "Swap today's problem…", click: () => showMainWindow('/today/swap') },
@@ -369,7 +371,7 @@ function start(): void {
       // same breath, before it has been shown.
       blurCard: (early: string) => {
         if (early === 'early') card.show('tray');
-        card.current()?.emit('blur');
+        card.lostFocus();
       },
       trayMenuLabels: () => trayMenu().map((item) => item.label ?? item.type ?? ''),
       clickTrayMenu: (label: string) => {

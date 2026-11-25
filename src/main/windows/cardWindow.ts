@@ -41,6 +41,11 @@ export class CardWindowController {
     private readonly anchors: CardAnchors,
     /** Called when the card has been shown or closed, so the Dock rule can be applied again. */
     private readonly onVisibilityChanged: () => void = () => undefined,
+    /**
+     * `closeOnBlur: false` is for end-to-end runs only: several test apps on one Mac take focus
+     * from each other, which would close the card at random. Tests call `lostFocus()` instead.
+     */
+    private readonly options: { closeOnBlur: boolean } = { closeOnBlur: true },
   ) {}
 
   /** Opens the card at `anchor`. Asking again from the same place closes it. */
@@ -94,9 +99,7 @@ export class CardWindowController {
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     // A popover: it goes away when the user clicks anywhere else.
     window.on('blur', () => {
-      if (this.window !== window || !this.shown) return;
-      this.blurClose = { anchor, at: performance.now() };
-      this.hide();
+      if (this.options.closeOnBlur && this.window === window) this.lostFocus();
     });
     window.on('closed', () => {
       if (this.window === window) this.forget();
@@ -104,6 +107,16 @@ export class CardWindowController {
     // Shown once the page has said how tall it is, so it never opens at the wrong size.
     this.showTimer = setTimeout(() => this.reveal(), SHOW_FALLBACK_MS);
     loadRenderer(window, '/card');
+  }
+
+  /**
+   * The card lost focus: the user clicked somewhere else. It closes, and remembers that it did,
+   * unless it has not even been shown yet.
+   */
+  lostFocus(): void {
+    if (!this.current() || !this.shown || this.anchor === null) return;
+    this.blurClose = { anchor: this.anchor, at: performance.now() };
+    this.hide();
   }
 
   hide(): void {
