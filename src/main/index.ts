@@ -94,7 +94,10 @@ function start(): void {
   mkdirSync(userData, { recursive: true });
 
   try {
-    db = openDatabase(join(userData, DATABASE_FILE_NAME), clock.now().toISOString()).db;
+    const opened = openDatabase(join(userData, DATABASE_FILE_NAME), clock.now().toISOString());
+    db = opened.db;
+    // The catalog is reference data: the app opens without a file that could not be loaded.
+    for (const problem of opened.catalogProblems) console.warn(`ParaLeet: ${problem}`);
   } catch (error) {
     // Never repair or replace the file automatically: the user's data comes first.
     dialog.showErrorBox(

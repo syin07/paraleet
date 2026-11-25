@@ -1,0 +1,30 @@
+{
+  "status": "OK",
+  "result": {
+    "problems": [
+      { "contestId": 1, "index": "A", "name": "Theatre  Square", "type": "PROGRAMMING", "points": 1000.0, "rating": 1000, "tags": ["math"] },
+      { "contestId": 4, "index": "A", "name": "Watermelon", "type": "PROGRAMMING", "rating": 800, "tags": ["brute force", "math"] },
+      { "contestId": 2, "index": "B", "name": "The least round way", "type": "PROGRAMMING", "rating": 2000, "tags": ["dp", "math", "*special"] },
+      { "contestId": 2, "index": "A", "name": "Winner", "type": "PROGRAMMING", "rating": 1500, "tags": ["hashing", "implementation"] },
+      { "contestId": 3, "index": "A", "name": "Shortest path of the king", "type": "PROGRAMMING", "rating": 1000, "tags": ["greedy", "shortest paths"] },
+      { "contestId": 5, "index": "A", "name": "Unrated problem", "type": "PROGRAMMING", "tags": [] },
+      { "contestId": 6, "index": "A", "name": "Not a program", "type": "QUESTION", "rating": 1200, "tags": [] },
+      { "contestId": 921, "index": "14", "name": "Labyrinth-14", "type": "PROGRAMMING", "rating": 3200, "tags": [] },
+      { "contestId": 7, "index": "A", "name": "Rare problem", "type": "PROGRAMMING", "rating": 1100, "tags": ["math"] },
+      { "contestId": 4, "index": "A", "name": "Watermelon (again)", "type": "PROGRAMMING", "rating": 800, "tags": [] },
+      { "contestId": 100001, "index": "B", "name": "Gym number", "type": "PROGRAMMING", "rating": 1900, "tags": ["trees"] }
+    ],
+    "problemStatistics": [
+      { "contestId": 1, "index": "A", "solvedCount": 150000 },
+      { "contestId": 4, "index": "A", "solvedCount": 400000 },
+      { "contestId": 2, "index": "B", "solvedCount": 20000 },
+      { "contestId": 2, "index": "A", "solvedCount": 30000 },
+      { "contestId": 3, "index": "A", "solvedCount": 12000 },
+      { "contestId": 5, "index": "A", "solvedCount": 90000 },
+      { "contestId": 6, "index": "A", "solvedCount": 90000 },
+      { "contestId": 921, "index": "14", "solvedCount": 90000 },
+      { "contestId": 7, "index": "A", "solvedCount": 5 },
+      { "contestId": 100001, "index": "B", "solvedCount": 15000 }
+    ]
+  }
+}

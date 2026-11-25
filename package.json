@@ -23,7 +23,11 @@
     "test:ui": "playwright test --project=ui",
     "test:e2e": "npm run build && playwright test --project=e2e",
     "check": "npm run typecheck && npm run lint && npm run test:unit",
-    "seed:starter": "tsx scripts/seed/build-starter.ts"
+    "seed:starter": "tsx scripts/seed/build-starter.ts",
+    "seed:catalog": "tsx scripts/seed/build-catalog.ts all",
+    "seed:leetcode": "tsx scripts/seed/build-catalog.ts leetcode",
+    "seed:cses": "tsx scripts/seed/build-catalog.ts cses",
+    "seed:codeforces": "tsx scripts/seed/build-catalog.ts codeforces"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.3.0",
