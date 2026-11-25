@@ -1,5 +1,7 @@
 import { HARD_DIFFICULTY_NORM, type UnlockAttempt } from '../../core/accessories';
 import type { AttemptFact } from '../../core/petFacts';
+import type { StatsAttempt } from '../../core/stats';
+import { isTopicId } from '../../core/topics';
 import type { Attempt, AttemptKind, IsoInstant, ParaDay, Rating, VerificationMethod } from '../../core/types';
 import { parseJsonArray, type Db } from '../db';
 
@@ -107,6 +109,22 @@ export function hasSolvedHardProblem(db: Db): boolean {
       [HARD_DIFFICULTY_NORM],
     ) !== undefined
   );
+}
+
+/** Every attempt as the Stats screen's rules see it, with its problem's topics, in the order recorded. */
+export function listStatsAttempts(db: Db): StatsAttempt[] {
+  return db
+    .all<{ problem_id: number; para_day: string; rating: Rating; kind: AttemptKind; topics: string }>(
+      `SELECT a.problem_id, a.para_day, a.rating, a.kind, p.topics
+       FROM attempts a JOIN problems p ON p.id = a.problem_id ORDER BY a.id`,
+    )
+    .map((row) => ({
+      problemId: row.problem_id,
+      day: row.para_day,
+      rating: row.rating,
+      kind: row.kind,
+      topics: parseJsonArray(row.topics).filter(isTopicId),
+    }));
 }
 
 /** The distinct days with at least one attempt, from `from` to `to` inclusive. */

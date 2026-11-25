@@ -82,6 +82,20 @@ describe('day counts and levels', () => {
     expect(day.level).toBe(level);
   });
 
+  it('counts different problems: two attempts on one problem in a day count once', () => {
+    const stats = build([
+      { problemId: 7, day: '2026-11-24', rating: 'again', kind: 'first_solve', topics: [] },
+      { problemId: 7, day: '2026-11-24', rating: 'good', kind: 'review', topics: [] },
+      { problemId: 8, day: '2026-11-24', rating: 'good', kind: 'first_solve', topics: [] },
+      { problemId: 7, day: '2026-11-25', rating: 'easy', kind: 'review', topics: [] },
+    ]);
+    expect(dayOf(stats, '2026-11-24')).toMatchObject({ count: 2, level: 2 });
+    expect(dayOf(stats, '2026-11-25')).toMatchObject({ count: 1, level: 1 });
+    // The week's bar still counts every solve, and the totals every attempt's part.
+    expect(stats.weeks.at(-1)!.solves).toBe(3);
+    expect(stats.totals).toEqual({ solves: 3, reviews: 2, problemsSolved: 2, fedDays: 2 });
+  });
+
   it('an again attempt counts for the day but is not a solve', () => {
     const stats = build([attempt('2026-11-24', 'again')]);
     expect(dayOf(stats, '2026-11-24')).toMatchObject({ count: 1, level: 1 });
@@ -213,6 +227,14 @@ describe('topics', () => {
     expect(by.math).toMatchObject({ solved: 2, label: 'Math' });
     expect(by.greedy!.solved).toBe(1);
     expect(by.trees!.solved).toBe(0);
+  });
+
+  it('leaves out a topic that is not in the fixed list', () => {
+    const stats = build([
+      { problemId: 1, day: '2026-11-20', rating: 'good', kind: 'first_solve', topics: ['math', 'not-a-topic' as never] },
+    ]);
+    expect(stats.topics).toHaveLength(TOPICS.length);
+    expect(stats.topics.reduce((sum, topic) => sum + topic.solved, 0)).toBe(1);
   });
 
   it('orders by solved descending, ties in TOPICS order', () => {

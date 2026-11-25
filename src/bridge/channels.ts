@@ -51,6 +51,7 @@ export const BRIDGE_METHODS = [
   'saveApiKey',
   'removeApiKey',
   'testApiKey',
+  'getStats',
   'getSettings',
   'updateSettings',
 ] as const;

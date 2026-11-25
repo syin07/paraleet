@@ -23,6 +23,7 @@ import { CHECKING_MS, celebrationEndsAt, deriveMood, type Celebration } from '..
 import { applyAttempt, EMPTY_PET_FACTS, isGrowthSolve, stageFor } from '../../core/petFacts';
 import { pickLine } from '../../core/petLines';
 import { DEFAULT_SETTINGS, type Settings } from '../../core/settings';
+import { buildStats } from '../../core/stats';
 import { displayedStreak, isFedOn, missedDays } from '../../core/streak';
 import type { TopicId } from '../../core/topics';
 import { ACCESSORY_IDS } from '../../core/types';
@@ -71,6 +72,8 @@ interface MockState {
   greeted: boolean;
   celebration: Celebration | null;
   plans: MockPlanState;
+  /** True when reading the stats should fail, to show the Stats screen's error state. */
+  statsFail: boolean;
 }
 
 // A few non-LeetCode problems so every platform shows up in the mock. Mock data only.
@@ -137,6 +140,7 @@ function baseState(): MockState {
     greeted: false,
     celebration: null,
     plans: emptyPlanState(),
+    statsFail: false,
   };
 }
 
@@ -653,6 +657,30 @@ function createApi(state: MockState): ParaLeetApi {
 
     ...createPlanApi(planHost),
 
+    getStats: async ({ range }) => {
+      if (state.statsFail) throw new Error('The stats could not be read. Try again.');
+      const streakState = {
+        current: state.pet.currentStreak,
+        longest: state.pet.longestStreak,
+        lastFedDay: state.pet.lastFedDay,
+      };
+      return {
+        ...buildStats({
+          attempts: state.attempts.map((attempt) => ({
+            problemId: attempt.problemId,
+            day: attempt.paraDay,
+            rating: attempt.rating,
+            kind: attempt.kind,
+            topics: requireProblem(state, attempt.problemId).topics,
+          })),
+          today: MOCK_TODAY,
+          range,
+        }),
+        today: MOCK_TODAY,
+        streak: { current: displayedStreak(streakState, MOCK_TODAY), longest: state.pet.longestStreak },
+      };
+    },
+
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
@@ -707,6 +735,34 @@ function midway(state: MockState): void {
     notes: 'Second try went fine once I wrote the skip loops first.',
     solutionUrl: 'https://leetcode.com/problems/valid-palindrome/submissions/',
   });
+}
+
+/**
+ * Most of a year of practice, for the Stats screen: busy weeks and quiet ones, a two-week break in
+ * the summer, and a streak that runs through yesterday. The same history on every load.
+ */
+function longHistory(state: MockState): void {
+  let seed = 20261125;
+  const next = (): number => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  for (let offset = -330; offset <= -1; offset += 1) {
+    const inBreak = offset >= -150 && offset < -136;
+    const inFinalRun = offset >= -12;
+    if (inBreak || (!inFinalRun && next() < 0.22)) continue;
+    const roll = next();
+    const problems = roll < 0.58 ? 1 : roll < 0.84 ? 2 : roll < 0.95 ? 3 : 5;
+    const used = new Set<number>();
+    for (let index = 0; index < problems; index += 1) {
+      const problem = state.problems[Math.floor(next() * state.problems.length)];
+      if (!problem || used.has(problem.id)) continue;
+      used.add(problem.id);
+      const rated = next();
+      const rating: Rating = rated < 0.1 ? 'again' : rated < 0.35 ? 'hard' : rated < 0.85 ? 'good' : 'easy';
+      logAttempt(state, problem.id, addDays(MOCK_TODAY, offset), rating, { minutes: 5 + Math.floor(next() * 35) });
+    }
+  }
 }
 
 /** A plan built by the pretend model, for scenarios that start with one. */
@@ -816,6 +872,19 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     if (active.items[4]) active.items[4].state = 'skipped';
     state.plans.plans.push(finished, archived, active);
     assignToday(state);
+  },
+  /** Stats: most of a year of history. */
+  'stats-year': (state) => {
+    longHistory(state);
+    state.unlockedAccessories = ['scarf', 'bow_tie', 'crown'];
+    state.equippedAccessories = ['scarf'];
+    assignToday(state);
+  },
+  /** Stats: the numbers cannot be read. */
+  'stats-fails': (state) => {
+    midway(state);
+    assignToday(state);
+    state.statsFail = true;
   },
   /** More than five reviews due, to check the cap of five. */
   backlog: (state) => {

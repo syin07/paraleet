@@ -33,6 +33,7 @@ import {
   searchProblems,
 } from './problems';
 import { getReportContext, revealKeyInsight, submitReport } from './report';
+import { getStats } from './stats';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
 export {
@@ -120,6 +121,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     saveApiKey: ({ apiKey }) => saveApiKey(ctx, apiKey),
     removeApiKey: () => removeApiKey(ctx),
     testApiKey: () => testApiKey(ctx),
+    getStats: ({ range }) => getStats(ctx, range),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

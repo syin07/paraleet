@@ -17,6 +17,7 @@ import {
   type PlanStatus,
 } from '../core/plan';
 import { settingsPatchSchema, timeOfDaySchema, type Settings } from '../core/settings';
+import { STATS_RANGES, type Stats } from '../core/stats';
 import { TOPIC_IDS, type TopicId } from '../core/topics';
 import {
   ACCESSORY_IDS,
@@ -162,6 +163,8 @@ export const inputSchemas = {
   removeApiKey: z.undefined(),
   /** Asks Anthropic whether the stored key works. Costs nothing. */
   testApiKey: z.undefined(),
+  /** Everything the Stats screen shows, for a range of 12, 26 or 53 weeks. */
+  getStats: z.object({ range: z.enum(STATS_RANGES) }),
   getSettings: z.undefined(),
   updateSettings: settingsPatchSchema,
 } as const satisfies Record<BridgeMethodName, z.ZodType>;
@@ -377,6 +380,17 @@ export interface PlanOverview {
   topics: { id: TopicId; label: string; counts: Record<PlanPlatform, number> }[];
 }
 
+/** What the Stats screen shows: the rules' output, plus the streaks the pet facts hold. */
+export interface StatsView extends Stats {
+  /** The ParaLeet day the numbers were built for. */
+  today: ParaDay;
+  streak: {
+    /** 0 after a missed day. */
+    current: number;
+    longest: number;
+  };
+}
+
 /** The answer of a command that returns nothing. */
 export interface Done {
   ok: true;
@@ -426,6 +440,7 @@ export interface BridgeOutputs {
   saveApiKey: LlmStatus;
   removeApiKey: LlmStatus;
   testApiKey: ApiKeyTest;
+  getStats: StatsView;
   getSettings: Settings;
   updateSettings: Settings;
 }

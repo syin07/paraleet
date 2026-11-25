@@ -26,7 +26,7 @@ export type HeatLevel = 0 | 1 | 2 | 3 | 4;
 
 export interface StatsDay {
   day: ParaDay;
-  /** Attempts logged that day, any rating. */
+  /** Different problems attempted that day, any rating. Two attempts on one problem count once. */
   count: number;
   /** 0 not fed, 1 one problem, 2 two, 3 three, 4 four or more. */
   level: HeatLevel;
@@ -82,7 +82,7 @@ export function buildStats(input: { attempts: readonly StatsAttempt[]; today: Pa
   const currentStart = addDays(today, -weekdayIndex(today));
   const firstStart = addDays(currentStart, -7 * (weekCount - 1));
 
-  const countByDay = new Map<ParaDay, number>();
+  const problemsByDay = new Map<ParaDay, Set<number>>();
   const solvesByWeek: number[] = new Array<number>(weekCount).fill(0);
   const solvedProblems = new Set<number>();
   const topicProblems = new Map<TopicId, Set<number>>();
@@ -90,7 +90,9 @@ export function buildStats(input: { attempts: readonly StatsAttempt[]; today: Pa
   let reviews = 0;
 
   for (const attempt of attempts) {
-    countByDay.set(attempt.day, (countByDay.get(attempt.day) ?? 0) + 1);
+    let onDay = problemsByDay.get(attempt.day);
+    if (!onDay) problemsByDay.set(attempt.day, (onDay = new Set()));
+    onDay.add(attempt.problemId);
     if (attempt.kind === 'review') reviews += 1;
     if (!isGrowthSolve(attempt.rating)) continue;
     solves += 1;
@@ -114,7 +116,7 @@ export function buildStats(input: { attempts: readonly StatsAttempt[]; today: Pa
     for (let d = 0; d < 7; d += 1) {
       const day = addDays(start, d);
       const future = day > today;
-      const count = future ? 0 : (countByDay.get(day) ?? 0);
+      const count = future ? 0 : (problemsByDay.get(day)?.size ?? 0);
       days.push({ day, count, level: levelFor(count), future });
     }
     weeks.push({ start, days, solves: solvesByWeek[w] ?? 0, current: start === currentStart });
@@ -130,7 +132,7 @@ export function buildStats(input: { attempts: readonly StatsAttempt[]; today: Pa
 
   return {
     range,
-    totals: { solves, reviews, problemsSolved: solvedProblems.size, fedDays: countByDay.size },
+    totals: { solves, reviews, problemsSolved: solvedProblems.size, fedDays: problemsByDay.size },
     weeks,
     maxWeekSolves: Math.max(0, ...solvesByWeek),
     topics,

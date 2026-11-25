@@ -45,7 +45,7 @@ Services never import Electron. When a use case needs a window to do something i
 
 | Module | Holds | Notes |
 | --- | --- | --- |
-| `src/core` | `types.ts`, `topics.ts`, `day.ts`, `streak.ts`, `petFacts.ts`, `scheduler.ts`, `assignment.ts`, `verify.ts`, `settings.ts` | Pure. Time and time zone are arguments. Lint blocks Electron, Node built-ins, the network, `new Date()`, `Date.now()` and `Math.random()`. |
+| `src/core` | `types.ts`, `topics.ts`, `day.ts`, `streak.ts`, `petFacts.ts`, `scheduler.ts`, `assignment.ts`, `verify.ts`, `settings.ts`, `pet.ts`, `petLines.ts`, `accessories.ts`, `reminders.ts`, `plan.ts`, `stats.ts` | Pure. Time and time zone are arguments. Lint blocks Electron, Node built-ins, the network, `new Date()`, `Date.now()` and `Math.random()`. |
 | `src/platforms` | `types.ts` (`PlatformAdapter`), one file per platform, `index.ts` (`recognizeUrl`, `adapterFor`) | LeetCode, CSES, Codeforces and Other. No network in v1. |
 | `src/data` | `db.ts` (wrapper over `node:sqlite`), `migrations/`, `migrate.ts`, `seedFormat.ts`, `seed.ts`, `repos/*`, `index.ts` (`openDatabase`) | Hand-written SQL, no ORM. JSON arrays are stored as text. |
 | `src/llm` | `prompt.ts` (what the model is told), `planGenerator.ts` (ask, check, retry once), `anthropicClient.ts` (the real client), `fixtures/` (saved answers for tests) | Plan generation, main process only. The model is reached through `LlmClient`, so tests never use the network. |
@@ -72,6 +72,10 @@ Services never import Electron. When a use case needs a window to do something i
 5. **Progress.** `submitReport` marks the problem's plan item done in the same transaction (`recordPlanAttempt`), adds the pattern group's name to the problem's pattern tags, and finishes the plan with its last problem. `reconcile()` recomputes the active plan's item states from the attempts at launch.
 
 See decision 0016.
+
+## Data flow: stats
+
+`getStats` (`services/stats.ts`) reads every attempt with its problem's topics and hands them to `buildStats` (core) with today and the range. The result is the whole Stats screen: per-day counts in Monday-first weeks, solves per week, totals and topic coverage. The streaks are added from the pet facts. Nothing is stored. See decision 0017.
 
 At launch, before any window opens, `reconcile()` (`services/reconcile.ts`) recomputes the streak and totals from the attempts and rebuilds any missing review cards, so the stored derived data can never drift from the attempts for long. See decision 0008.
 
