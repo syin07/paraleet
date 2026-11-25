@@ -1,25 +1,42 @@
 // Reporting an attempt: the step that feeds the pet (PRD section 4, steps 5 to 7).
 import type { BridgeParsedInput, ReportContext, ReportResult } from '../../bridge/contract';
 import { applyAttempt, stageFor } from '../../core/petFacts';
-import { capRatingAfterReveal } from '../../core/scheduler';
+import {
+  capRatingAfterReveal,
+  dueDayOf,
+  previewIntervals,
+  scheduleFirstAttempt,
+  scheduleReview,
+  type SchedulerOptions,
+} from '../../core/scheduler';
 import { displayedStreak } from '../../core/streak';
 import type { PetFacts } from '../../core/types';
 import { verifyAttempt } from '../../core/verify';
 import { getAssignment, markAssignmentCompleted } from '../../data/repos/assignments';
 import { countAttemptsForProblem, insertAttempt } from '../../data/repos/attempts';
+import { getCard, saveCard } from '../../data/repos/cards';
 import { getNotes, saveNotes } from '../../data/repos/notes';
 import { getPet, savePetFacts } from '../../data/repos/pet';
-import { currentMoment, type AppContext } from './context';
+import { currentMoment, type AppContext, type Moment } from './context';
 import { buildTodayView } from './today';
 import { requireProblem, toSummary } from './views';
 
+export function schedulerOptions(moment: Moment): SchedulerOptions {
+  return {
+    targetRetention: moment.settings.targetRetention,
+    timeZone: moment.timeZone,
+    boundaryHour: moment.settings.dayBoundaryHour,
+  };
+}
+
 export function getReportContext(ctx: AppContext, problemId: number): ReportContext {
   const problem = requireProblem(ctx.db, problemId);
+  const moment = currentMoment(ctx);
   return {
     problem: toSummary(problem),
     kind: countAttemptsForProblem(ctx.db, problemId) === 0 ? 'first_solve' : 'review',
     hasKeyInsight: getNotes(ctx.db, problemId).keyInsight !== null,
-    nextReviewInDays: null, // Filled in once the scheduler is wired (SAN-111).
+    nextReviewInDays: previewIntervals(getCard(ctx.db, problemId), moment.now, schedulerOptions(moment)),
   };
 }
 
@@ -68,13 +85,22 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
       notes: input.notes === '' ? null : input.notes,
     });
 
+    // Every attempt creates or updates the problem's review card, including one rated Again:
+    // a problem the user could not solve is exactly the one that should come back soon.
+    const existingCard = getCard(ctx.db, problem.id);
+    const options = schedulerOptions(moment);
+    const card = existingCard
+      ? scheduleReview(existingCard, rating, moment.now, options)
+      : scheduleFirstAttempt(problem.id, rating, moment.now, options);
+    saveCard(ctx.db, card, attemptedAt);
+
     const after = applyAttempt(before, { paraDay: moment.today, rating });
     savePetFacts(ctx.db, after);
 
     const assignment = getAssignment(ctx.db, moment.today);
     if (assignment && assignment.problemId === problem.id) markAssignmentCompleted(ctx.db, moment.today);
 
-    return { attempt, before, after };
+    return { attempt, before, after, card };
   });
 
   ctx.notifyChanged();
@@ -99,7 +125,10 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
       previousStage: stageFor(before.growthSolves),
       growthSolves: after.growthSolves,
     },
-    nextReviewDay: null, // Filled in once the scheduler is wired (SAN-111).
+    nextReviewDay:
+      outcome.card.status === 'active'
+        ? dueDayOf(outcome.card, afterMoment.timeZone, afterMoment.settings.dayBoundaryHour)
+        : null,
     today: buildTodayView(ctx, afterMoment),
   };
 }

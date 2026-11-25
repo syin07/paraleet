@@ -117,6 +117,7 @@ export function swapToday(ctx: AppContext, problemId: number): TodayView {
   ctx.db.transaction(() => {
     const input = readAssignmentInput(ctx, moment);
     const current = ensureAssignment(ctx, moment, input);
+    if (current?.completed) throw new Error("Today's problem is already done, so there is nothing to swap");
     const candidates = swapCandidates(input, current?.problemId ?? null);
     const allowed = candidates.reviews.some((review) => review.problemId === problemId) || candidates.plan.includes(problemId);
     if (!allowed) throw new Error('That problem is not one of the swap choices for today');

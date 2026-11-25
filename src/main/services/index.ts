@@ -19,6 +19,7 @@ import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, swapToday } from './today';
 
 export type { AppContext } from './context';
+export { reconcile, type ReconcileResult } from './reconcile';
 
 /**
  * The UI never hands main a URL to open. Main opens only links stored in the database, and only

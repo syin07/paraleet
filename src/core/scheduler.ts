@@ -72,6 +72,9 @@ function toFsrsCard(state: SchedulerState, today: ParaDay): Card | null {
   if (fsrsState !== State.Learning && fsrsState !== State.Review && fsrsState !== State.Relearning) return null;
   // Same bounds the library enforces on a memory state.
   if (stability < MIN_STABILITY || difficulty < MIN_DIFFICULTY || difficulty > MAX_DIFFICULTY) return null;
+  // A card with history always knows when it was last reviewed. Without that day the gap would
+  // silently count as zero and the next interval would be far too short.
+  if (lastReviewDay === null) return null;
   const card: Card = {
     due: daySpace(today),
     stability,
@@ -82,7 +85,7 @@ function toFsrsCard(state: SchedulerState, today: ParaDay): Card | null {
     lapses,
     state: fsrsState,
   };
-  if (lastReviewDay !== null) card.last_review = daySpace(daysBetween(lastReviewDay, today) < 0 ? today : lastReviewDay);
+  card.last_review = daySpace(daysBetween(lastReviewDay, today) < 0 ? today : lastReviewDay);
   return card;
 }
 

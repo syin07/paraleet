@@ -7,7 +7,7 @@ import { CHANGED_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { registerBridge } from './bridge';
 import { FakeClock, systemClock, type Clock } from './clock';
-import { createDayWatcher, createHandlers, type AppContext } from './services';
+import { createDayWatcher, createHandlers, reconcile, type AppContext } from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
 
 const TICK_MS = 30_000;
@@ -81,6 +81,15 @@ function start(): void {
     },
     randomSeed: () => randomInt(0, 2 ** 31 - 1),
   };
+
+  // Attempts are the source of truth: bring the stored streak, totals and review cards in line
+  // with them before anything is shown.
+  const repaired = reconcile(ctx);
+  if (repaired.petFactsRepaired || repaired.cardsRebuilt > 0) {
+    console.warn(
+      `ParaLeet reconciled its data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt.`,
+    );
+  }
 
   // The bridge answers only the main frame of the app's own windows, showing the app's own page.
   registerBridge(createHandlers(ctx), (event) => {
