@@ -755,6 +755,8 @@ test.describe('a confirmation in flight', () => {
     await dialog.getByRole('button', { name: 'Archive plan' }).click();
     await page.keyboard.press('Escape');
     await page.mouse.click(5, 5);
+    // The close icon is the one control still enabled while the command runs.
+    await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     // The command finishes, and only then does the dialog go.
@@ -763,7 +765,7 @@ test.describe('a confirmation in flight', () => {
     expect(await page.evaluate(() => (globalThis as unknown as { __calls: number }).__calls)).toBe(1);
   });
 
-  test('a failure while Escape was pressed still lands in the dialog', async ({ page }) => {
+  test('a failure while the close icon was pressed still lands in the dialog', async ({ page }) => {
     await openScreen(page, 'plan', 'plan-active');
     await replaceMethod(
       page,
@@ -773,7 +775,9 @@ test.describe('a confirmation in flight', () => {
     await page.getByRole('button', { name: 'Archive', exact: true }).click();
     const dialog = confirmDialog(page, 'Archive this plan?');
     await dialog.getByRole('button', { name: 'Archive plan' }).click();
-    await page.keyboard.press('Escape');
+    // Escape alone would prove nothing here: focus has left the disabled buttons, so the key
+    // never reaches the dialog. The close icon does reach it.
+    await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('alert')).toContainText('Could not archive.');
     // Free again: Cancel works.
