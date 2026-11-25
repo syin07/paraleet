@@ -38,7 +38,8 @@ export function hardenWindow(window: BrowserWindow): void {
   window.webContents.on('will-navigate', (event) => event.preventDefault());
 }
 
-export function createMainWindow(): BrowserWindow {
+/** `path` is the screen to open on, for example `/settings`. */
+export function createMainWindow(path = ''): BrowserWindow {
   const window = new BrowserWindow({
     ...MAIN_WINDOW_DEFAULT,
     minWidth: MAIN_WINDOW_MIN.width,
@@ -56,6 +57,6 @@ export function createMainWindow(): BrowserWindow {
   });
   hardenWindow(window);
   window.once('ready-to-show', () => window.show());
-  loadRenderer(window);
+  loadRenderer(window, path);
   return window;
 }

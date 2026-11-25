@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { Card, EmptyState, Page, QueryNotice } from '../../components/Layout';
 import { ReportDialog } from '../../components/ReportForm';
 import { formatDay } from '../../lib/format';
+import { useHashAction } from '../../lib/navigation';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
 import { DueReviews } from './DueReviews';
 import { PetStage } from './PetStage';
@@ -19,7 +20,16 @@ export function TodayScreen() {
   // Reloads by itself when a report or a swap changes the day, so no manual refresh is needed.
   const query = useBridgeQuery(() => api().getToday());
   const [reportFor, setReportFor] = useState<number | null>(null);
-  const [swapping, setSwapping] = useState(false);
+  const [swapOpened, setSwapOpened] = useState(false);
+  // The pet's right-click menu opens this screen with the swap dialog already up. Each request
+  // is answered once: closing the dialog marks the requests so far as handled.
+  const swapRequests = useHashAction('today', 'swap');
+  const [handledSwapRequests, setHandledSwapRequests] = useState(0);
+  const swapping = swapOpened || swapRequests > handledSwapRequests;
+  const setSwapping = (open: boolean): void => {
+    setSwapOpened(open);
+    if (!open) setHandledSwapRequests(swapRequests);
+  };
   // The pasted link of the add dialog, or null while it is closed.
   const [addingUrl, setAddingUrl] = useState<string | null>(null);
   const quickLogInput = useRef<HTMLInputElement>(null);

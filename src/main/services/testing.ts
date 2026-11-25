@@ -12,6 +12,8 @@ export interface TestApp {
   handlers: BridgeHandlers;
   /** Links the app tried to open in the browser. */
   openedUrls: string[];
+  /** What the services asked of the windows, in order. */
+  windowCalls: string[];
   /** How many times the app told its windows that something changed. */
   changes: () => number;
   close(): void;
@@ -28,10 +30,18 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
   const clock = new FakeClock(options.now ?? noonLA('2026-11-25'), options.timeZone ?? TEST_ZONE);
   const { db } = openDatabase(options.path ?? ':memory:', clock.now().toISOString());
   const openedUrls: string[] = [];
+  const windowCalls: string[] = [];
   let changeCount = 0;
   const ctx: AppContext = {
     db,
     clock,
+    windows: {
+      showMain: (screen) => windowCalls.push(`showMain:${screen ?? ''}`),
+      movePetBy: (dx, dy) => windowCalls.push(`movePetBy:${dx},${dy}`),
+      endPetDrag: () => windowCalls.push('endPetDrag'),
+      setPetInteractive: (interactive) => windowCalls.push(`setPetInteractive:${interactive}`),
+      showPetMenu: () => windowCalls.push('showPetMenu'),
+    },
     notifyChanged: () => {
       changeCount += 1;
     },
@@ -46,6 +56,7 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
     clock,
     handlers: createHandlers(ctx),
     openedUrls,
+    windowCalls,
     changes: () => changeCount,
     close: () => db.close(),
   };

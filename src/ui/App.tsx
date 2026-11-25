@@ -86,7 +86,14 @@ export function App() {
       }
     }
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    // Main can ask this window to show a screen, for example from the pet's right-click menu.
+    const stopNavigating = api().onNavigate((path) => {
+      window.location.hash = path;
+    });
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      stopNavigating();
+    };
   }, []);
 
   const Screen = SCREEN_VIEWS[screen];

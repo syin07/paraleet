@@ -1,5 +1,5 @@
 // The use-case layer: one handler per bridge method. Electron-free, so it is unit-tested directly.
-import type { BridgeHandlers } from '../../bridge/contract';
+import type { BridgeHandlers, Done } from '../../bridge/contract';
 import { paraDayOf } from '../../core/day';
 import { getNotes } from '../../data/repos/notes';
 import { getProblem } from '../../data/repos/problems';
@@ -18,7 +18,7 @@ import {
 import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
-export type { AppContext } from './context';
+export type { AppContext, WindowPort } from './context';
 export { reconcile, type ReconcileResult } from './reconcile';
 
 /**
@@ -32,6 +32,11 @@ function isWebLink(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+function done(action: () => void): Done {
+  action();
+  return { ok: true };
 }
 
 export function createHandlers(ctx: AppContext): BridgeHandlers {
@@ -63,6 +68,11 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     parseProblemUrl: ({ url }) => parseProblemUrl(ctx, url),
     addProblem: (input) => addProblem(ctx, input),
     setEquippedAccessories: ({ accessories }) => setEquippedAccessories(ctx, accessories),
+    showMainWindow: ({ screen }) => done(() => ctx.windows.showMain(screen)),
+    movePetWindowBy: ({ dx, dy }) => done(() => ctx.windows.movePetBy(dx, dy)),
+    endPetDrag: () => done(() => ctx.windows.endPetDrag()),
+    setPetInteractive: ({ interactive }) => done(() => ctx.windows.setPetInteractive(interactive)),
+    showPetMenu: () => done(() => ctx.windows.showPetMenu()),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

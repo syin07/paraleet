@@ -26,6 +26,10 @@ import type { BridgeMethodName } from './channels';
 
 // ---------- Inputs (validated in main) ----------
 
+/** The main window's screens, as used in its URL hash. */
+export const MAIN_SCREENS = ['today', 'problems', 'plan', 'stats', 'settings'] as const;
+export type MainScreen = (typeof MAIN_SCREENS)[number];
+
 const problemId = z.number().int().positive();
 const problemRef = z.object({ problemId });
 const shortText = (max: number) => z.string().trim().max(max);
@@ -71,6 +75,19 @@ export const inputSchemas = {
   setEquippedAccessories: z.object({
     accessories: z.array(z.enum(ACCESSORY_IDS)).max(ACCESSORY_IDS.length),
   }),
+  /** Shows and focuses the main window, optionally on a given screen. */
+  showMainWindow: z.object({ screen: z.enum(MAIN_SCREENS).nullable() }),
+  /** Pet window only: moves it while the user drags the bird. Whole screen points. */
+  movePetWindowBy: z.object({
+    dx: z.number().int().min(-4000).max(4000),
+    dy: z.number().int().min(-4000).max(4000),
+  }),
+  /** Pet window only: the drag ended, remember where the window is. */
+  endPetDrag: z.undefined(),
+  /** Pet window only: true while the pointer is over the bird or its bubble; elsewhere clicks pass through. */
+  setPetInteractive: z.object({ interactive: z.boolean() }),
+  /** Pet window only: opens the right-click menu at the pointer. */
+  showPetMenu: z.undefined(),
   getSettings: z.undefined(),
   updateSettings: settingsPatchSchema,
 } as const satisfies Record<BridgeMethodName, z.ZodType>;
@@ -226,6 +243,11 @@ export type AddProblemResult =
   | { ok: true; problem: ProblemSummary; created: boolean }
   | { ok: false; reason: string };
 
+/** The answer of a command that returns nothing. */
+export interface Done {
+  ok: true;
+}
+
 export interface BridgeOutputs {
   getToday: TodayView;
   swapToday: TodayView;
@@ -246,6 +268,11 @@ export interface BridgeOutputs {
   parseProblemUrl: ParsedProblemUrl;
   addProblem: AddProblemResult;
   setEquippedAccessories: TodayView;
+  showMainWindow: Done;
+  movePetWindowBy: Done;
+  endPetDrag: Done;
+  setPetInteractive: Done;
+  showPetMenu: Done;
   getSettings: Settings;
   updateSettings: Settings;
 }
@@ -266,6 +293,8 @@ export type ParaLeetApi = {
 } & {
   /** Calls `listener` whenever data changed or the day rolled over. Returns an unsubscribe function. */
   onChanged(listener: () => void): () => void;
+  /** Calls `listener` with a path such as `/settings` when main asks this window to show a screen. */
+  onNavigate(listener: (path: string) => void): () => void;
 };
 
 /** What main implements: one handler per method. */

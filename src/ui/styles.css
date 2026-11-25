@@ -160,6 +160,12 @@
   }
 }
 
+/* The floating pet window shows only the bird: no page background at all. */
+html[data-window='pet'],
+html[data-window='pet'] body {
+  background: transparent;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
