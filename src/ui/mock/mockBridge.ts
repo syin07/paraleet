@@ -501,6 +501,17 @@ function createApi(state: MockState): ParaLeetApi {
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
+      // The real app validates in main; the same limits here let UI tests exercise a refused save.
+      const time = /^([01]\d|2[0-3]):[0-5]\d$/;
+      if (patch.dayBoundaryHour !== undefined && !(Number.isInteger(patch.dayBoundaryHour) && patch.dayBoundaryHour >= 0 && patch.dayBoundaryHour <= 23)) {
+        throw new Error('The day boundary must be a whole hour from 0 to 23');
+      }
+      for (const value of [patch.firstReminderTime, patch.eveningReminderTime]) {
+        if (value !== undefined && !time.test(value)) throw new Error('Use a 24-hour time like 16:00');
+      }
+      if (patch.targetRetention !== undefined && !(patch.targetRetention >= 0.7 && patch.targetRetention <= 0.97)) {
+        throw new Error('Target retention must be between 0.7 and 0.97');
+      }
       state.settings = { ...state.settings, ...patch };
       changed();
       return { ...state.settings };
@@ -546,6 +557,13 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     midway(state);
     state.unlockedAccessories = ['scarf', 'bow_tie'];
     state.equippedAccessories = ['scarf'];
+    assignToday(state);
+  },
+  /** The default history with three accessories unlocked and two worn. */
+  accessories: (state) => {
+    midway(state);
+    state.unlockedAccessories = ['scarf', 'bow_tie', 'crown'];
+    state.equippedAccessories = ['scarf', 'crown'];
     assignToday(state);
   },
   /** First launch: nothing logged, the first starter problem assigned. */
