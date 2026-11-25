@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReportContext, ReportResult } from '../../bridge/contract';
 import { RATING_LABELS, RATING_MEANINGS, RATINGS, type Rating } from '../../core/types';
 import { api } from '../bridge';
-import { cx, plural } from '../lib/format';
+import { cx, problemTitle } from '../lib/format';
+import { formatInterval } from './formatInterval';
 import { PlatformBadge, StatusBadge } from './Badges';
 import { Button } from './Button';
 import { Field, Input, Textarea } from './Field';
@@ -220,7 +221,7 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
     rating === 'again'
       ? 'Counts for today. Para gets a crumb.'
       : days !== undefined
-        ? `Next review in about ${plural(days, 'day')}`
+        ? `Next review ${formatInterval(days)}`
         : null;
   const selectedStop = rating ?? RATINGS.find((candidate) => !(revealed && CAPPED.has(candidate)));
 
@@ -344,7 +345,7 @@ export function ReportDialog({ problemId, onClose }: { problemId: number; onClos
       subtitle={
         context && (
           <span className="flex items-center gap-2">
-            <span className="min-w-0 truncate">{context.problem.title}</span>
+            <span className="min-w-0 truncate">{problemTitle(context.problem)}</span>
             <PlatformBadge platform={context.problem.platform} />
           </span>
         )

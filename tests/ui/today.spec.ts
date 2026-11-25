@@ -116,7 +116,7 @@ test.describe('the report form', () => {
     await page.keyboard.press('1');
     await expect(form.getByText('Counts for today. Para gets a crumb.')).toBeVisible();
     await page.keyboard.press('3');
-    await expect(form.getByTestId('report-hint')).toHaveText(/^Next review in about \d+ days?$/);
+    await expect(form.getByTestId('report-hint')).toHaveText(/^Next review (tomorrow|in .+)$/);
     await page.keyboard.press('Enter');
     await expect(form).toHaveCount(0);
     expect(await lastRating(page, 1)).toBe('good');
@@ -204,6 +204,7 @@ test.describe('the report form', () => {
     await openScreen(page, 'today');
     await quickLogPick(page, 'two sum', /^1\. Two Sum/);
     const form = dialog(page);
+    await expect(form).toContainText('1. Two Sum');
     await form.getByRole('radio', { name: /^Easy/ }).click();
     await form.getByRole('button', { name: 'Reveal key insight' }).click();
     await expect(form.getByLabel(/Key insight/)).toHaveValue(/Store each value's index/);
