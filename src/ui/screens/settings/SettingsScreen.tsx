@@ -3,6 +3,7 @@ import { Select } from '../../components/Field';
 import { QueryNotice } from '../../components/Layout';
 import { Toast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { LearningPlansGroup } from './LearningPlansGroup';
 import { AccessoryChips, DraftInput, Group, Row, Segmented, sameValue, type SegmentOption } from './SettingsParts';
 import { useSettingsModel, type RowKey } from './useSettingsModel';
 
@@ -134,6 +135,13 @@ export function SettingsScreen() {
           <AccessoryChips unlocked={model.unlocked} equipped={model.equipped} onChange={(next) => void model.setEquipped(next)} />
         </Row>
       </Group>
+
+      <LearningPlansGroup
+        model={settings.planModel}
+        saveModel={(planModel) => save('planModel', { planModel })}
+        modelError={rowError('planModel')}
+        clearError={model.clearError}
+      />
 
       <Group title="Account handles">
         <Row

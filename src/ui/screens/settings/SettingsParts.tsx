@@ -24,11 +24,14 @@ export function Row({
   description,
   error,
   stacked = false,
+  notice,
   children,
 }: {
   label: string;
   description?: string;
   error?: string | null;
+  /** A quiet line under the row for good news or advice (a test result); an error replaces it. */
+  notice?: string;
   /** Puts the control under the label, for controls too wide to sit beside it. */
   stacked?: boolean;
   children: ReactNode;
@@ -42,10 +45,16 @@ export function Row({
         </div>
         <div className={cx(!stacked && 'shrink-0')}>{children}</div>
       </div>
-      {error && (
+      {error ? (
         <p role="alert" className="mt-1.5 text-sm text-hard-text">
           {error}
         </p>
+      ) : (
+        notice && (
+          <p aria-live="polite" className="mt-1.5 text-sm text-fg-secondary">
+            {notice}
+          </p>
+        )
       )}
     </div>
   );
