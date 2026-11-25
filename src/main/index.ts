@@ -1,6 +1,6 @@
 // Electron main process: app lifecycle, the database, the bridge and the windows.
 import { randomInt } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { uptime } from 'node:os';
 import {
@@ -60,14 +60,20 @@ if (process.env.PARALEET_USER_DATA_DIR) {
 let quietActivationUntil = 0;
 /**
  * A model for end-to-end tests: it answers from a JSON file the test writes (an array, consumed
- * in order), so a test can build answers from the problem IDs it sees in the running app.
- * Each entry is `{ "plan": <the model's JSON answer> }` or `{ "error": "<message>" }`.
+ * in order). Each entry is `{ "plan": <the model's JSON answer> }` or `{ "error": "<message>" }`.
+ * What it was asked is written next to that file, as `<file>.calls.json`, so a test can read the
+ * candidates the app sent and build an answer from them.
  */
 function scriptedModels(file: string): ModelAccess {
   let used = 0;
+  const calls: { model: string; system: string; turns: { role: string; text: string }[] }[] = [];
   return {
     client: () => ({
-      complete: async () => {
+      complete: async (input) => {
+        // A test that did not bring answers gets a failure, never the network.
+        if (file === '') throw new LlmError('other', 'The test model has no answers.');
+        calls.push({ model: input.model, system: input.system, turns: input.turns.map((turn) => ({ ...turn })) });
+        writeFileSync(`${file}.calls.json`, JSON.stringify(calls));
         const answers = JSON.parse(readFileSync(file, 'utf8')) as ({ plan?: unknown; error?: string } | undefined)[];
         const next = answers[used];
         used += 1;
@@ -242,9 +248,9 @@ function start(): void {
         },
   );
   const models: ModelAccess =
-    isE2E && process.env.PARALEET_E2E_LLM_ANSWERS
-      ? scriptedModels(process.env.PARALEET_E2E_LLM_ANSWERS)
-      : { client: createAnthropicClient, listModels };
+    isE2E
+      ? scriptedModels(process.env.PARALEET_E2E_LLM_ANSWERS ?? '')
+      : { client: (apiKey) => createAnthropicClient(apiKey), listModels: (apiKey) => listModels(apiKey) };
 
   const ctx: AppContext = {
     db,

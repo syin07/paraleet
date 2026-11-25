@@ -138,6 +138,12 @@ export async function launchApp(options: {
    * page; use `mainPage()` once something has opened the main window.
    */
   atLogin?: boolean;
+  /**
+   * A JSON file of answers for the scripted model that stands in for Anthropic: an array of
+   * `{ "plan": ... }` or `{ "error": "..." }`, used in order. The app writes what it asked the
+   * model to `<file>.calls.json`. Without it, plan generation would reach for the network.
+   */
+  llmAnswersFile?: string;
 }): Promise<RunningApp> {
   const app = await electron.launch({
     args: [ROOT],
@@ -150,6 +156,7 @@ export async function launchApp(options: {
       PARALEET_FAKE_TZ: options.timeZone ?? TEST_ZONE,
       PARALEET_E2E_UNHATCHED: options.hatched === false ? '1' : '0',
       PARALEET_E2E_AT_LOGIN: options.atLogin ? '1' : '0',
+      PARALEET_E2E_LLM_ANSWERS: options.llmAnswersFile ?? '',
     },
   });
   // A login launch has no main window, unless Para has not hatched yet: then it always shows.

@@ -19,3 +19,4 @@ One short file per non-obvious choice: context, decision, alternatives rejected.
 | [0013](0013-menu-bar-and-card.md) | The menu bar icon and the compact card window |
 | [0014](0014-catalog.md) | The problem catalog |
 | [0015](0015-reminders-and-login.md) | Daily reminders and launch at login |
+| [0016](0016-learning-plans.md) | Learning plans, the model and the API key |
