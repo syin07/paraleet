@@ -54,6 +54,7 @@ interface MockState {
   unlockedAccessories: AccessoryId[];
   equippedAccessories: AccessoryId[];
   hatched: boolean;
+  windowCalls: string[];
 }
 
 // A few non-LeetCode problems so every platform shows up in the mock. Mock data only.
@@ -116,6 +117,7 @@ function baseState(): MockState {
     unlockedAccessories: [],
     equippedAccessories: [],
     hatched: true,
+    windowCalls: [],
   };
 }
 
@@ -498,6 +500,28 @@ function createApi(state: MockState): ParaLeetApi {
       return todayView(state);
     },
 
+    // Window commands do nothing in a browser; they are recorded so tests can see them.
+    showMainWindow: async ({ screen }) => {
+      state.windowCalls.push(`showMainWindow:${screen ?? ''}`);
+      return { ok: true };
+    },
+    movePetWindowBy: async ({ dx, dy }) => {
+      state.windowCalls.push(`movePetWindowBy:${dx},${dy}`);
+      return { ok: true };
+    },
+    endPetDrag: async () => {
+      state.windowCalls.push('endPetDrag');
+      return { ok: true };
+    },
+    setPetInteractive: async ({ interactive }) => {
+      state.windowCalls.push(`setPetInteractive:${interactive}`);
+      return { ok: true };
+    },
+    showPetMenu: async () => {
+      state.windowCalls.push('showPetMenu');
+      return { ok: true };
+    },
+
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
@@ -523,6 +547,9 @@ function createApi(state: MockState): ParaLeetApi {
         listeners.delete(listener);
       };
     },
+
+    // Nothing asks a browser tab to navigate.
+    onNavigate: () => () => undefined,
   };
 }
 
@@ -602,7 +629,7 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
 declare global {
   interface Window {
     /** Mock-only inspection hook for UI tests. */
-    __paraleetMock?: { openedUrls(): string[]; now: string };
+    __paraleetMock?: { openedUrls(): string[]; windowCalls(): string[]; now: string };
   }
 }
 
@@ -611,5 +638,9 @@ export function installMockBridge(scenario: string | null): void {
   const state = baseState();
   (SCENARIOS[scenario ?? 'default'] ?? SCENARIOS.default)?.(state);
   window.paraleet = createApi(state);
-  window.__paraleetMock = { openedUrls: () => [...state.opened], now: MOCK_NOW };
+  window.__paraleetMock = {
+    openedUrls: () => [...state.opened],
+    windowCalls: () => [...state.windowCalls],
+    now: MOCK_NOW,
+  };
 }

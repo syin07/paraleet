@@ -1,5 +1,6 @@
 // What the use-case layer needs from the outside world. Nothing in src/main/services imports
 // Electron, so every service runs under the unit-test runner with a real SQLite database.
+import type { MainScreen } from '../../bridge/contract';
 import { effectiveToday, paraDayOf } from '../../core/day';
 import type { Settings } from '../../core/settings';
 import type { ParaDay } from '../../core/types';
@@ -8,9 +9,20 @@ import { ensurePet, type PetRecord } from '../../data/repos/pet';
 import { getSettings } from '../../data/repos/settings';
 import type { Clock } from '../clock';
 
+/** What the services ask of the windows. Implemented with Electron in main, faked in tests. */
+export interface WindowPort {
+  showMain(screen: MainScreen | null): void;
+  movePetBy(dx: number, dy: number): void;
+  /** The drag ended: remember where the pet window is. */
+  endPetDrag(): void;
+  setPetInteractive(interactive: boolean): void;
+  showPetMenu(): void;
+}
+
 export interface AppContext {
   db: Db;
   clock: Clock;
+  windows: WindowPort;
   /** Tells every window that data changed, so they refetch. */
   notifyChanged(): void;
   /** Opens a link in the default browser. */

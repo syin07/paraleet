@@ -2,13 +2,14 @@
 import { randomInt } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, powerMonitor, shell } from 'electron';
-import { CHANGED_EVENT } from '../bridge/channels';
+import { app, BrowserWindow, dialog, powerMonitor, screen, shell } from 'electron';
+import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { registerBridge } from './bridge';
 import { FakeClock, systemClock, type Clock } from './clock';
 import { createDayWatcher, createHandlers, reconcile, type AppContext } from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
+import { PetWindowController } from './windows/petWindow';
 
 const TICK_MS = 30_000;
 
@@ -25,19 +26,52 @@ if (process.env.PARALEET_USER_DATA_DIR) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let petWindow: PetWindowController | null = null;
 let db: Db | null = null;
 
-function showMainWindow(): void {
+let dockTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The Dock icon is hidden while only the pet is showing, like a menu bar app. It stays when the
+ * main window is open, and also when the pet is hidden, so the app can always be reached.
+ *
+ * macOS is fussy about this: a request to hide made while a window is still closing, or within a
+ * second of the icon being shown, is silently ignored. So the decision is made a moment after the
+ * event, the icon is only touched when it is wrong, and the result is checked again afterwards.
+ */
+function updateDock(attempt = 0): void {
+  if (!app.dock) return;
+  if (dockTimer) clearTimeout(dockTimer);
+  dockTimer = setTimeout(
+    () => {
+      dockTimer = null;
+      if (!app.dock) return;
+      const mainOpen = mainWindow !== null && !mainWindow.isDestroyed();
+      const wanted = mainOpen || !petWindow?.isVisible();
+      if (app.dock.isVisible() === wanted) return;
+      if (wanted) void app.dock.show();
+      else app.dock.hide();
+      if (attempt < 8) updateDock(attempt + 1);
+    },
+    attempt === 0 ? 150 : 500,
+  );
+}
+
+/** Shows the main window, creating it if needed. `path` is the screen to show, such as `/settings`. */
+function showMainWindow(path = ''): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    if (path !== '') mainWindow.webContents.send(NAVIGATE_EVENT, path);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
     return;
   }
-  mainWindow = createMainWindow();
+  mainWindow = createMainWindow(path);
   mainWindow.on('closed', () => {
     mainWindow = null;
+    updateDock();
   });
+  updateDock();
 }
 
 function createClock(): Clock {
@@ -64,10 +98,31 @@ function start(): void {
   }
 
   const openedUrls: string[] = [];
+  const pet = new PetWindowController(
+    db,
+    clock,
+    {
+      openMain: (target) => showMainWindow(target ? `/${target}` : ''),
+      openSwap: () => showMainWindow('/today/swap'),
+      quit: () => app.quit(),
+    },
+    () => updateDock(),
+  );
+  petWindow = pet;
+
   const ctx: AppContext = {
     db,
     clock,
+    windows: {
+      showMain: (target) => showMainWindow(target ? `/${target}` : ''),
+      movePetBy: (dx, dy) => pet.moveBy(dx, dy),
+      endPetDrag: () => pet.endDrag(),
+      setPetInteractive: (interactive) => pet.setInteractive(interactive),
+      showPetMenu: () => pet.showMenu(),
+    },
     notifyChanged: () => {
+      // A settings change may show or hide the pet.
+      pet.sync();
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CHANGED_EVENT);
       }
@@ -109,23 +164,53 @@ function start(): void {
   });
 
   const dayWatcher = createDayWatcher(ctx);
-  dayWatcher.check();
-  setInterval(() => dayWatcher.check(), TICK_MS);
-  powerMonitor.on('resume', () => dayWatcher.check());
-  powerMonitor.on('unlock-screen', () => dayWatcher.check());
+  // One tick does everything that depends on the clock. Long timers are not trusted (PRD section 9).
+  const tick = (): void => {
+    dayWatcher.check();
+    pet.sync();
+  };
+  tick();
+  setInterval(tick, TICK_MS);
+  powerMonitor.on('resume', tick);
+  powerMonitor.on('unlock-screen', tick);
+  // A display was unplugged or rearranged: bring the pet back onto a visible screen.
+  screen.on('display-removed', tick);
+  screen.on('display-metrics-changed', tick);
 
   if (isE2E && clock instanceof FakeClock) {
     // Reached from tests through Playwright's electronApp.evaluate.
     (globalThis as Record<string, unknown>).__paraleetTest = {
       setNow: (iso: string) => {
         clock.set(iso);
-        dayWatcher.check();
+        tick();
       },
       setTimeZone: (timeZone: string) => {
         clock.setTimeZone(timeZone);
-        dayWatcher.check();
+        tick();
       },
       openedUrls: () => [...openedUrls],
+      // Native windows and menus cannot be driven from the page, so tests reach them here.
+      pet: () => {
+        const window = pet.current();
+        return {
+          exists: window !== null,
+          visible: pet.isVisible(),
+          bounds: window?.getBounds() ?? null,
+          alwaysOnTop: window?.isAlwaysOnTop() ?? false,
+          onAllWorkspaces: window?.isVisibleOnAllWorkspaces() ?? false,
+          focusable: window?.isFocusable() ?? true,
+          focused: window?.isFocused() ?? false,
+          clickThrough: pet.isClickThrough(),
+        };
+      },
+      petMenuLabels: () => pet.menuTemplate().map((item) => item.label ?? item.type ?? ''),
+      clickPetMenu: (label: string) => {
+        const item = pet.menuTemplate().find((entry) => entry.label === label);
+        if (!item?.click) throw new Error(`No pet menu item "${label}"`);
+        (item.click as () => void)();
+      },
+      dockVisible: () => app.dock?.isVisible() ?? true,
+      mainWindowOpen: () => mainWindow !== null && !mainWindow.isDestroyed(),
     };
   }
 
@@ -136,11 +221,11 @@ if (!app.requestSingleInstanceLock()) {
   // Only one instance of the app can run at a time (PRD section 9).
   app.quit();
 } else {
-  app.on('second-instance', showMainWindow);
-  app.on('activate', showMainWindow);
+  app.on('second-instance', () => showMainWindow());
+  app.on('activate', () => showMainWindow());
   app.on('window-all-closed', () => {
     // Stay running on macOS; the pet and the menu bar icon keep the app alive.
-    if (process.platform !== 'darwin' || isE2E) app.quit();
+    if (process.platform !== 'darwin') app.quit();
   });
   app.on('will-quit', () => {
     db?.close();

@@ -8,7 +8,8 @@ Keep this file accurate at the end of every session (PRD section 2).
 
 ```
 ┌──────────────────────── Electron main process (Node) ────────────────────────┐
-│  src/main/index.ts        app lifecycle, single-instance lock, timers          │
+│  src/main/index.ts        app lifecycle, single-instance lock, timers, Dock    │
+│  src/main/windows/*       main window, floating pet window, window placement   │
 │  src/main/bridge.ts       one IPC handler per bridge method, zod-validated     │
 │  src/main/services/*      use cases: today, report, problems, settings         │
 │        │                  (no Electron imports; unit-tested with real SQLite)  │
@@ -25,6 +26,13 @@ Keep this file accurate at the end of every session (PRD section 2).
 │  src/ui/*                 React screens; window.paraleet is their only door     │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+There are two windows, both loading the same renderer bundle:
+
+- **The main window** (`windows/mainWindow.ts`): the sidebar and screens. Closing it leaves the app running.
+- **The pet window** (`windows/petWindow.ts`, route `#/pet`, UI in `src/ui/windows/pet/`): 240×250, transparent, frameless, always on top, on every desktop, never focused. Clicks pass through except over the bird. `PetWindowController.sync()` makes it match the `petVisible` setting and the "hide for 1 hour" timer; it runs on launch, on every data change, on the 30-second tick and when displays change. `windows/placement.ts` is the pure geometry that keeps the bird on a visible screen. See decision 0010.
+
+Services never import Electron. When a use case needs a window to do something it calls `ctx.windows` (`WindowPort` in `services/context.ts`), which main implements and tests fake.
 
 ## Modules
 
@@ -77,7 +85,8 @@ Plan tables arrive with M3 as migration 2.
 
 - `src/bridge/channels.ts` lists the method names. `src/bridge/contract.ts` gives each an input schema and an output type.
 - Main validates every input with zod and accepts calls only from the main frame of the app's own windows.
-- The UI gets `window.paraleet` with one async function per method and `onChanged(listener)`.
+- The UI gets `window.paraleet` with one async function per method, `onChanged(listener)` and `onNavigate(listener)`. Main sends `paraleet:navigate` with a path such as `/settings` to move the main window to a screen.
+- Window commands (`showMainWindow`, `movePetWindowBy`, `endPetDrag`, `setPetInteractive`, `showPetMenu`) are ordinary bridge methods whose handlers call `ctx.windows`.
 - In a plain browser there is no preload, so `src/ui/main.tsx` installs `src/ui/mock/mockBridge.ts`, an in-memory implementation of the same contract with named scenarios.
 
 ## Security posture

@@ -6,6 +6,9 @@ export const IPC_PREFIX = 'paraleet:';
 /** Sent from main to every window when data changed or the ParaLeet day rolled over. */
 export const CHANGED_EVENT = 'paraleet:changed';
 
+/** Sent from main to the main window to move it to a screen, for example `/settings` or `/today/swap`. */
+export const NAVIGATE_EVENT = 'paraleet:navigate';
+
 export const BRIDGE_METHODS = [
   'getToday',
   'swapToday',
@@ -24,6 +27,11 @@ export const BRIDGE_METHODS = [
   'parseProblemUrl',
   'addProblem',
   'setEquippedAccessories',
+  'showMainWindow',
+  'movePetWindowBy',
+  'endPetDrag',
+  'setPetInteractive',
+  'showPetMenu',
   'getSettings',
   'updateSettings',
 ] as const;

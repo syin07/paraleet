@@ -322,6 +322,17 @@ Mobbin query: `virtual pet app onboarding`, platform ios; `onboarding set remind
 - Duolingo's goal picker is removed; the daily goal is fixed at one problem.
 - The paywall and account steps are removed entirely.
 
+### 11. Pet window
+
+The floating window that shows only Para (PRD section 11). No reference app was used; the layout follows the PRD.
+
+- **Window:** 240×250 points, fully transparent, no frame, no shadow. Nothing is drawn except the bird and, on hover, its bubble.
+- **Bird:** 128 points square, centred horizontally, 8 points above the bottom edge. Pixel art is scaled with nearest-neighbor only. Cursor `grab`, `grabbing` while pressed.
+- **Speech bubble:** appears only while the pointer is over the bird, 12 points above it, centred. The bubble only informs: clicks on it pass through to whatever is underneath. Pixel font (`font-pixel`) 8px with 14px line height, `text-fg` on `bg-surface`, a 2px `line` border with square corners, padding 8px, 208px wide at most, long titles wrap. A three-step pixel tail points down at the bird. This is the only place the pixel font is used for running text.
+- **Bubble text:** today's line from Para when there is one; otherwise the problem and platform when not fed ("121. Best Time to Buy and Sell Stock on LeetCode?"), the streak when fed ("12-day streak!"), and "Log any problem and I get fed!" when nothing is assigned.
+- **Click** opens the main window (the compact card from SAN-115 replaces this). **Drag** moves the window. **Right-click** opens a native menu: Open ParaLeet, Swap today's problem…, Hide Para for 1 hour, Settings…, Quit ParaLeet.
+- **States:** idle (bird only), hover (bird and bubble). No focus ring: the window never takes keyboard focus, and everything it does is also reachable from the main window and the menu.
+
 ## D. Shared components
 
 All sizes use the tokens in B. Every interactive element shows `--focus-ring` on keyboard focus and has a disabled state at 40% opacity with no hover change.
