@@ -17,7 +17,10 @@ export type EffectKind =
   | 'exclaim'
   | 'sparkle'
   | 'twinkle'
-  | 'seedThought';
+  | 'seedThought'
+  | 'dot1'
+  | 'dots2'
+  | 'dots3';
 
 export interface Effect {
   kind: EffectKind;
@@ -109,12 +112,17 @@ const HUNGRY: Maker = (stage) => {
   ];
 };
 
-const CHECKING: Maker = () => [
-  pose({ head: [-2, 1], eyes: 'narrow' }),
-  pose({ head: [-1, 1], eyes: 'narrow' }),
-  pose({ head: [0, 1], eyes: 'narrow' }),
-  pose({ head: [-1, 1], eyes: 'narrow' }),
-];
+const CHECKING: Maker = (stage) => {
+  const [fx, fy] = STAGES[stage].fx;
+  const dots = (kind: 'dot1' | 'dots2' | 'dots3'): Effect[] => [{ kind, x: fx + 1, y: fy + 5 }];
+  // Thinking dots build up while the head sweeps in and out, as if reading.
+  return [
+    pose({ head: [-2, 1], eyes: 'narrow', effects: dots('dot1') }),
+    pose({ head: [-1, 1], eyes: 'narrow', effects: dots('dots2') }),
+    pose({ head: [0, 1], eyes: 'narrow', effects: dots('dots3') }),
+    pose({ head: [-1, 1], eyes: 'narrow', effects: dots('dots2') }),
+  ];
+};
 
 const EATING: Maker = (stage) => {
   const spec = STAGES[stage];

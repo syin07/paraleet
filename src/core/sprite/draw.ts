@@ -45,7 +45,10 @@ const GLYPHS: Record<EffectKind, { rows: Rows; legend: Partial<Record<string, Co
   exclaim: { rows: ['X', 'X', 'X', '.', 'X'], legend: { X: 'mark' } },
   sparkle: { rows: ['.X.', 'XXX', '.X.'], legend: { X: 'sparkle' } },
   twinkle: { rows: ['X'], legend: { X: 'sparkle' } },
-  seedThought: { rows: ['.XX.', 'XllX', 'XssX', '.XX.'], legend: { X: 'mark', l: 'seedLight', s: 'seed' } },
+  seedThought: { rows: ['.XXX.', 'XllsX', 'XsssX', '.XXX.'], legend: { X: 'beak', l: 'seedLight', s: 'seed' } },
+  dot1: { rows: ['X'], legend: { X: 'note' } },
+  dots2: { rows: ['X.X'], legend: { X: 'note' } },
+  dots3: { rows: ['X.X.X'], legend: { X: 'note' } },
 };
 
 const SEED_ROWS: Rows = ['lls', 'sss'];
@@ -227,10 +230,11 @@ export function inEgg(x: number, y: number): boolean {
   return inEllipse(x, y, 16, 19.5, 10.5, 10) || inEllipse(x, y, 16, 14.5, 8.5, 8.5);
 }
 
-const RIM_TEETH = [1, -1, -2, 0, 1, -1, -3, -1, 0, 1, -2, -1, 0, 1, -1, -2, 0, -1, 1, -1, -2, 0];
-/** The jagged top edge of the lower half of the shell. */
+// The jagged top edge of the lower half of the shell, as rows above or below 21 for x = 5 to 27.
+// Low and calm on the left, where the beak is, and tall on the right, where the crack runs.
+const RIM_TEETH = [-1, 0, -1, 0, -1, 1, -1, -2, 0, 1, -1, -2, 0, 1, -1, -3, -1, 0, -2, -3, 0, 1, 0];
 export function rimY(x: number): number {
-  return 21 + (RIM_TEETH[((x % RIM_TEETH.length) + RIM_TEETH.length) % RIM_TEETH.length] ?? 0);
+  return 21 + (RIM_TEETH[Math.min(Math.max(x - 5, 0), RIM_TEETH.length - 1)] ?? 0);
 }
 
 function shadedEgg(g: Grid, keep: (x: number, y: number) => boolean, dx = 0, dy = 0): void {

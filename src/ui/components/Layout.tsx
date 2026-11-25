@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cx } from '../lib/format';
-import { PetPlaceholder } from './PetPlaceholder';
+import type { Mood } from '../../core/types';
+import { SAMPLE_SEED, Sprite } from './Sprite';
 
 /** The standard page frame: a title row, then the content, on the app's 960px column. */
 export function Page({
@@ -60,16 +61,19 @@ export function EmptyState({
   title,
   line,
   action,
+  mood = 'content',
   className,
 }: {
   title: string;
+  /** What Para is doing beside the words. Content unless the screen says otherwise. */
+  mood?: Mood;
   line?: ReactNode;
   action?: ReactNode;
   className?: string;
 }) {
   return (
     <div className={cx('flex flex-col items-center justify-center px-6 py-12 text-center', className)}>
-      <PetPlaceholder size={64} />
+      <Sprite seed={SAMPLE_SEED} stage="adult" mood={mood} size={64} decorative />
       <div className="mt-4 text-md font-semibold text-fg">{title}</div>
       {line && <div className="mt-1 max-w-sm text-base text-fg-muted">{line}</div>}
       {action && <div className="mt-4">{action}</div>}
