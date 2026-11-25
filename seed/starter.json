@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-25T10:47:35.002Z",
+  "generatedAt": "2026-11-25T15:02:34.871Z",
   "source": "LeetCode GraphQL (question metadata), fetched by scripts/seed/build-starter.ts",
   "problems": [
     {
@@ -428,7 +428,8 @@
       "difficultyNorm": 3,
       "topics": [
         "arrays-hashing",
-        "graphs"
+        "graphs",
+        "union-find"
       ],
       "sourceTags": [
         "Array",

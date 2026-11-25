@@ -219,13 +219,14 @@ describe('adding and finding problems', () => {
   it('adds a new problem once and returns the existing one after that', async () => {
     app = createTestApp();
     const input = {
-      url: 'https://leetcode.com/problems/trapping-rain-water/',
-      title: 'Trapping Rain Water',
+      // Not in the catalog, so this is a new problem the user types in.
+      url: 'https://leetcode.com/problems/a-problem-the-catalog-lacks/',
+      title: 'A problem the catalog lacks',
       difficultyRaw: 'Hard',
       topics: ['two-pointers' as const],
     };
     const first = await app.handlers.addProblem(input);
-    expect(first).toMatchObject({ ok: true, created: true, problem: { difficultyNorm: 5, platformId: 'trapping-rain-water' } });
+    expect(first).toMatchObject({ ok: true, created: true, problem: { difficultyNorm: 5, platformId: 'a-problem-the-catalog-lacks' } });
     const second = await app.handlers.addProblem(input);
     expect(second).toMatchObject({ ok: true, created: false });
     expect(first.ok && second.ok && first.problem.id === second.problem.id).toBe(true);
@@ -233,24 +234,25 @@ describe('adding and finding problems', () => {
 
   it('recognizes CSES, Codeforces and other sites, and normalizes their difficulty', async () => {
     app = createTestApp();
-    const cf = await app.handlers.parseProblemUrl({ url: 'codeforces.com/contest/1352/problem/c' });
+    // 2172E is rated but below the catalog's solved-count floor, so it is not in the catalog.
+    const cf = await app.handlers.parseProblemUrl({ url: 'codeforces.com/contest/2172/problem/e' });
     expect(cf).toMatchObject({
       ok: true,
       platform: 'codeforces',
-      platformId: '1352C',
-      canonicalUrl: 'https://codeforces.com/problemset/problem/1352/C',
+      platformId: '2172E',
+      canonicalUrl: 'https://codeforces.com/problemset/problem/2172/E',
       known: null,
     });
     const added = await app.handlers.addProblem({
-      url: 'https://codeforces.com/contest/1352/problem/C',
-      title: 'K-th Not Divisible by n',
+      url: 'https://codeforces.com/contest/2172/problem/E',
+      title: 'Number Maze',
       difficultyRaw: '1200',
       topics: ['math', 'binary-search'],
     });
     expect(added).toMatchObject({ ok: true, created: true, problem: { platform: 'codeforces', difficultyNorm: 2 } });
     // A different spelling of the same link is the same problem.
     const again = await app.handlers.addProblem({
-      url: 'https://m1.codeforces.com/problemset/problem/01352/C?locale=en',
+      url: 'https://m1.codeforces.com/problemset/problem/02172/E?locale=en',
       title: 'Something else',
       difficultyRaw: null,
       topics: [],
@@ -258,12 +260,12 @@ describe('adding and finding problems', () => {
     expect(again).toMatchObject({ ok: true, created: false });
 
     const cses = await app.handlers.addProblem({
-      url: 'https://cses.fi/problemset/task/1068/',
-      title: 'Weird Algorithm',
+      url: 'https://cses.fi/problemset/task/99999999/',
+      title: 'A task the catalog lacks',
       difficultyRaw: null,
       topics: ['implementation'],
     });
-    expect(cses).toMatchObject({ ok: true, problem: { platform: 'cses', platformId: '1068', difficultyNorm: null } });
+    expect(cses).toMatchObject({ ok: true, created: true, problem: { platform: 'cses', platformId: '99999999', difficultyNorm: null } });
 
     const other = await app.handlers.addProblem({
       url: 'https://atcoder.jp/contests/abc300/tasks/abc300_a/?utm_source=x',
@@ -275,6 +277,22 @@ describe('adding and finding problems', () => {
       ok: true,
       problem: { platform: 'other', url: 'https://atcoder.jp/contests/abc300/tasks/abc300_a', difficultyNorm: 1 },
     });
+  });
+
+  it('knows catalog problems on every platform: parse returns them and adding creates nothing', async () => {
+    app = createTestApp();
+    const links = [
+      { url: 'https://leetcode.com/problems/trapping-rain-water/', platform: 'leetcode', platformId: 'trapping-rain-water', title: 'Trapping Rain Water' },
+      { url: 'https://cses.fi/problemset/task/1068/', platform: 'cses', platformId: '1068', title: 'Weird Algorithm' },
+      { url: 'https://codeforces.com/contest/1352/problem/C', platform: 'codeforces', platformId: '1352C', title: 'K-th Not Divisible by n' },
+    ];
+    for (const link of links) {
+      const parsed = await app.handlers.parseProblemUrl({ url: link.url });
+      expect(parsed).toMatchObject({ ok: true, platform: link.platform, platformId: link.platformId });
+      expect(parsed.ok && parsed.known?.title).toBe(link.title);
+      const added = await app.handlers.addProblem({ url: link.url, title: 'Typed title', difficultyRaw: null, topics: [] });
+      expect(added).toMatchObject({ ok: true, created: false, problem: { platformId: link.platformId, title: link.title } });
+    }
   });
 
   it('refuses a platform page that is not a problem, with a reason', async () => {

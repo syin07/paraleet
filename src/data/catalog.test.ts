@@ -33,15 +33,6 @@ const CATALOGS = { leetcode: catalogLeetcode, cses: catalogCses, codeforces: cat
 function freshDb(): Db {
   const db = new Db(':memory:');
   migrate(db);
-  // TEMPORARY until the lead's migration 002 is on this branch: stand-in for its catalog schema.
-  if (!db.all<{ name: string }>('PRAGMA table_info(problems)').some((column) => column.name === 'solved_count')) {
-    db.exec(`ALTER TABLE problems ADD COLUMN solved_count INTEGER CHECK (solved_count IS NULL OR solved_count >= 0);
-      CREATE TABLE catalog_sources (
-        platform TEXT PRIMARY KEY CHECK (platform IN ('leetcode', 'cses', 'codeforces')),
-        source TEXT NOT NULL, generated_at TEXT NOT NULL,
-        problem_count INTEGER NOT NULL CHECK (problem_count >= 0), loaded_at TEXT NOT NULL
-      );`);
-  }
   return db;
 }
 
