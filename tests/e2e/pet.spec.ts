@@ -161,7 +161,7 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
   }
 });
 
-test('the pet opens the main window, offers its menu, and can be hidden', async () => {
+test('the pet opens the card, offers its menu, and can be hidden', async () => {
   const data = makeUserDataDir();
   let running: RunningApp | null = null;
   try {
@@ -215,8 +215,13 @@ test('the pet opens the main window, offers its menu, and can be hidden', async 
     // Hiding the Dock icon must not take the pet with it.
     expect(await running.pet()).toMatchObject({ visible: true, alwaysOnTop: true, onAllWorkspaces: true });
 
-    // A click on the bird brings the main window back.
+    // A click on the bird opens the card, not the main window; "Open ParaLeet" there brings the
+    // main window back and closes the card.
     await pet.getByTestId('pet-bird').click();
+    const card = await running.cardPage();
+    expect(await running.mainWindowOpen()).toBe(false);
+    await card.getByRole('button', { name: 'Open ParaLeet' }).click();
+    await expect.poll(async () => (await running?.card())?.exists).toBe(false);
     await expect.poll(() => running?.mainWindowOpen()).toBe(true);
     await expect.poll(() => running?.dockVisible()).toBe(true);
 

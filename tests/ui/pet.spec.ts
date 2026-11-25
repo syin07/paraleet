@@ -196,16 +196,17 @@ test('a long problem title wraps inside the window', async ({ page }) => {
   await capture(page, 'pet-window-long-title');
 });
 
-test('a click opens the main window', async ({ page }) => {
+test('a click opens the card beside the pet', async ({ page }) => {
   await openPet(page);
   await page.getByTestId('pet-bird').click();
   const calls = await windowCalls(page);
-  expect(calls).toContain('showMainWindow:');
+  expect(calls).toContain('showCard:pet');
+  expect(calls).not.toContain('showMainWindow:');
   expect(calls.filter((call) => call.startsWith('movePetWindowBy:'))).toEqual([]);
   expect(calls).not.toContain('endPetDrag');
 });
 
-test('a drag moves the pet and does not open the main window', async ({ page }) => {
+test('a drag moves the pet and does not open the card', async ({ page }) => {
   await openPet(page);
   await page.mouse.move(120, 180);
   await page.mouse.down();
@@ -220,6 +221,7 @@ test('a drag moves the pet and does not open the main window', async ({ page }) 
     .reduce((sum, [dx = 0, dy = 0]) => ({ x: sum.x + dx, y: sum.y + dy }), { x: 0, y: 0 });
   expect(total).toEqual({ x: 30, y: 20 });
   expect(calls.at(-1)).toBe('endPetDrag');
+  expect(calls).not.toContain('showCard:pet');
   expect(calls).not.toContain('showMainWindow:');
 });
 
@@ -231,15 +233,16 @@ test('a tiny wobble of the pointer still counts as a click', async ({ page }) =>
   await page.mouse.up();
   const calls = await windowCalls(page);
   expect(calls.filter((call) => call.startsWith('movePetWindowBy:'))).toEqual([]);
-  expect(calls).toContain('showMainWindow:');
+  expect(calls).toContain('showCard:pet');
   expect(calls).not.toContain('endPetDrag');
 });
 
-test('right-click asks for the menu and never opens the main window', async ({ page }) => {
+test('right-click asks for the menu and never opens the card or the main window', async ({ page }) => {
   await openPet(page);
   await page.getByTestId('pet-bird').click({ button: 'right' });
   const calls = await windowCalls(page);
   expect(calls).toContain('showPetMenu');
+  expect(calls).not.toContain('showCard:pet');
   expect(calls).not.toContain('showMainWindow:');
 });
 
@@ -294,5 +297,5 @@ test('a drag whose release never arrives stops following the pointer', async ({ 
   const later = await windowCalls(page);
   expect(later.filter((call) => call.startsWith('movePetWindowBy:')).length).toBe(movesBefore);
   expect(later.filter((call) => call === 'endPetDrag').length).toBe(1);
-  expect(later).not.toContain('showMainWindow:');
+  expect(later).not.toContain('showCard:pet');
 });

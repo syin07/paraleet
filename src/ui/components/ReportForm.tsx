@@ -232,7 +232,9 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
 
   return (
     <div onKeyDown={onFormKeyDown}>
-      <div role="radiogroup" aria-label="Rating" className="grid grid-cols-4 gap-2">
+      {/* Four across needs the main window's width. In the card the meanings would wrap to five
+          lines, so the ratings sit two by two. */}
+      <div role="radiogroup" aria-label="Rating" className={cx('grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-4')}>
         {RATINGS.map((value, index) => {
           const selected = rating === value;
           const disabled = revealed && CAPPED.has(value);

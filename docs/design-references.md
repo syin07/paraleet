@@ -294,10 +294,12 @@ Mobbin query: `menu bar app popover`, platform web; fallback `today widget with 
 - Divider 12px margins.
 - Row 2: label "TODAY'S PROBLEM" caps muted; title `--text-md` semibold (2 lines max, ellipsis); metadata line platform badge and difficulty text.
 - Row 3, 16px below: two buttons full width split 50/50, 8px gap, `--control-md`: primary "Open problem", secondary "I solved it".
-- Footer link row, 12px below: ghost sm "Open ParaLeet" left, ghost sm "Swap" right.
+- Footer link row, 12px below: ghost sm "Open ParaLeet" left, ghost sm "Swap" right (only while a problem is waiting). "Swap" opens the main window on Today with the swap choices showing. Every action that opens the main window closes the card.
 - "I solved it" turns the card into the report form (screen 3) in place, card width 360px, with a back chevron. On submit the card shows a 1.5s confirmation ("Para ate! Streak 13") and closes, while the pet plays its animation.
-- Fed state: Row 2 shows a green check and "Fed for today", the buttons become one secondary "Log another problem".
+- Fed state: Row 2 shows a green check and "Fed for today", the buttons become one secondary "Log another problem" (opens Today in the main window). With nothing assigned: one line saying any logged problem feeds Para, and a primary "Log a problem".
+- As built: the streak is left out of row 1 while it is zero. The confirmation stays 3s instead of 1.5s when there is news to read (Para grew, an accessory was unlocked). An attempt rated Again says "Para had a nibble."
 - Esc or clicking elsewhere closes it. It never steals focus from other apps until clicked.
+- If today's problem cannot be loaded: "Something went wrong", one muted line, and a secondary "Open ParaLeet". Never a blank card.
 
 **ParaLeet adaptation**
 - Calendar's next event becomes today's problem; "Join" becomes "Open problem"; "I solved it" is the second action.
@@ -331,7 +333,7 @@ The floating window that shows only Para (PRD section 11). No reference app was 
 - **Speech bubble:** 12 points above the bird, centred. Pixel font (`font-pixel`) 8px with 14px line height, `text-fg` on `bg-surface`, a 2px `line` border with square corners, padding 8px, 208px wide at most, long text wraps (the line is cut after four rows, the fact after three). A three-step pixel tail points down at the bird. The bubble only informs: clicks on it pass through to whatever is underneath.
 - **Bubble text:** first Para's line for the day and mood, in its own voice. Under it, in `text-fg-secondary`, the plain fact: today's problem and platform when not fed ("LeetCode · 121. Best Time to Buy and Sell Stock", platform first so a long title is what gets cut), the streak when fed ("12-day streak"), or "Any problem feeds me" when nothing is assigned. The fact is left out when the line already says it.
 - **When it shows:** while the pointer is over the bird, and by itself during Para's short shows: checking a report, eating, nibbling, and the "missed you" greeting. The greeting counts as seen once the pointer has been on the bird or the bird was clicked.
-- **Click** opens the main window (the compact card from SAN-115 replaces this). **Drag** moves the window. **Right-click** opens a native menu: Open ParaLeet, Swap today's problem…, Hide Para for 1 hour, Settings…, Quit ParaLeet.
+- **Click** opens the compact card beside the bird (section 9); a second click closes it. **Drag** moves the window. **Right-click** opens a native menu: Open ParaLeet, Swap today's problem…, Hide Para for 1 hour, Settings…, Quit ParaLeet.
 - **States:** idle (bird only), hover (bird and bubble). No focus ring: the window never takes keyboard focus, and everything it does is also reachable from the main window and the menu.
 
 ## D. Shared components
@@ -364,7 +366,7 @@ Sizes: sm 24px tall, 8px padding, `--text-sm`; md 32px, 12px padding, `--text-ba
 
 **Progress bar**: track `--bg-sunken`, radius 999px, height 6px (inline) or 8px (topic coverage); fill `--accent`; complete at 100% stays `--accent` with a small green check beside the count. Always paired with a tabular "done / total" label in `--text-sm`.
 
-**Segmented rating buttons**: 4 equal cells, 8px gaps, 72px tall (56px in the compact card), radius 8px, `--bg-sunken` with 1px `--border`. Content: label `--text-md` semibold, meaning `--text-xs` muted, shortcut digit top-left. Hover `--surface-raised`. Selected `--accent-subtle`, `--accent-border`, label `--accent`. Single-select, arrow keys move, 1 to 4 select. Generic segmented control (range, size): one 32px container `--bg-sunken` radius 6px, 2px inner padding, segments radius 4px, selected segment `--surface-raised` with `--text-primary`.
+**Segmented rating buttons**: 4 equal cells, 8px gaps, 72px tall (in the compact card: two rows of two, 56px at least, so a meaning takes two or three lines instead of five), radius 8px, `--bg-sunken` with 1px `--border`. Content: label `--text-md` semibold, meaning `--text-xs` muted, shortcut digit top-left. Hover `--surface-raised`. Selected `--accent-subtle`, `--accent-border`, label `--accent`. Single-select, arrow keys move, 1 to 4 select. Generic segmented control (range, size): one 32px container `--bg-sunken` radius 6px, 2px inner padding, segments radius 4px, selected segment `--surface-raised` with `--text-primary`.
 
 **Modal**: centered, width 480px (forms) or 520px (add problem), max height 80vh with an internal scroll, `--surface`, radius 12px, 1px `--border`, `--shadow-popover`, 24px padding, backdrop `--overlay`. Header title `--text-lg` semibold plus close icon button; footer right-aligned buttons, 8px gap, primary last. Opens with a 200ms fade and 8px rise. Esc closes; focus is trapped.
 
