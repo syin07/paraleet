@@ -206,6 +206,15 @@ describe('editing a draft', () => {
       'That problem cannot take this place. Pick one from the list.',
     );
     await expect(later(() => app.handlers.swapPlanItem({ planId: plan.id, problemId: ids[4]!, replacementId: ids[5]! }))).rejects.toThrow(/cannot take this place/);
+    // So is a real catalog problem of another topic: a swap keeps the rule the model's answer is held to.
+    const graphs = candidatesFor(app.ctx, { ...request, topics: ['graphs'] }).get('graphs') ?? [];
+    const outsider = graphs.find((candidate) => !candidate.topics.includes('binary-search'));
+    expect(outsider).toBeDefined();
+    const before = order(await app.handlers.getPlan({ planId: plan.id }));
+    await expect(later(() => app.handlers.swapPlanItem({ planId: plan.id, problemId: ids[4]!, replacementId: outsider!.id }))).rejects.toThrow(
+      /cannot take this place/,
+    );
+    expect(order(await app.handlers.getPlan({ planId: plan.id }))).toEqual(before);
   });
 
   it('does not let the last problem be removed, or an active plan be edited', async () => {
