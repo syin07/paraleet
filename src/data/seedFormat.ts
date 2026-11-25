@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { TOPIC_IDS } from '../core/topics';
 import { PLATFORMS } from '../core/types';
-import { adapterFor } from '../platforms';
+import { adapterFor, recognizeUrl } from '../platforms';
 
 export const seedProblemSchema = z.object({
   platform: z.enum(PLATFORMS),
@@ -57,8 +57,16 @@ export function validateSeedProblems(problems: readonly SeedProblem[]): string[]
     if (!adapter.isValidId(problem.platformId)) errors.push(`${where}: malformed ID`);
     const canonical = adapter.buildUrl(problem.platformId);
     if (problem.url !== canonical) errors.push(`${where}: URL ${problem.url} is not the canonical ${canonical}`);
-    if (adapter.parseUrl(new URL(problem.url)) !== problem.platformId) {
-      errors.push(`${where}: URL does not parse back to the ID`);
+    // The app must identify the seed's link exactly as the seed does, or the user could add the
+    // same problem a second time by pasting its link.
+    const recognized = recognizeUrl(problem.url);
+    if (
+      !recognized.ok ||
+      recognized.platform !== problem.platform ||
+      recognized.platformId !== problem.platformId ||
+      recognized.canonicalUrl !== problem.url
+    ) {
+      errors.push(`${where}: the app would not recognize this link as ${problem.platform}:${problem.platformId}`);
     }
     if (adapter.normalizeDifficulty(problem.difficultyRaw) !== problem.difficultyNorm) {
       errors.push(`${where}: normalized difficulty does not match "${problem.difficultyRaw}"`);

@@ -62,12 +62,20 @@ export function otherDueReviews(input: AssignmentInput, assignedProblemId: numbe
     .slice(0, MAX_DUE_REVIEWS_SHOWN);
 }
 
-/** What the user may swap today's problem for. */
+/**
+ * What the user may swap today's problem for: the other due reviews (the same list Today shows),
+ * and the next plan problems. A plan problem that is today's problem or a due review is skipped,
+ * so nothing is offered twice and up to 5 real choices are listed.
+ */
 export function swapCandidates(input: AssignmentInput, assignedProblemId: number | null): SwapCandidates {
-  const reviews = otherDueReviews(input, assignedProblemId);
-  const shownReviewIds = new Set(reviews.map((review) => review.problemId));
-  const plan = input.planQueue
-    .slice(0, MAX_DUE_REVIEWS_SHOWN)
-    .filter((id) => id !== assignedProblemId && !shownReviewIds.has(id));
+  const due = sortedDueReviews(input);
+  const dueIds = new Set(due.map((review) => review.problemId));
+  const reviews = due.filter((review) => review.problemId !== assignedProblemId).slice(0, MAX_DUE_REVIEWS_SHOWN);
+  const plan: number[] = [];
+  for (const id of input.planQueue) {
+    if (plan.length === MAX_DUE_REVIEWS_SHOWN) break;
+    if (id === assignedProblemId || dueIds.has(id) || plan.includes(id)) continue;
+    plan.push(id);
+  }
   return { reviews, plan };
 }

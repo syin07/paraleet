@@ -31,6 +31,8 @@ npm run test:e2e   # builds the app, then drives the real thing end to end
 
 The first `npm run test:ui` on a machine needs Playwright's browser once: `npx playwright install chromium`.
 
+To put a set of screenshots on one sheet (for attaching to an issue): `npx tsx scripts/contact-sheet.ts sheet.png "Title" artifacts/screenshots today-`.
+
 ## Work on the UI without Electron
 
 ```sh

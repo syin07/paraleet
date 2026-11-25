@@ -231,6 +231,77 @@ describe('adding and finding problems', () => {
     expect(first.ok && second.ok && first.problem.id === second.problem.id).toBe(true);
   });
 
+  it('recognizes CSES, Codeforces and other sites, and normalizes their difficulty', async () => {
+    app = createTestApp();
+    const cf = await app.handlers.parseProblemUrl({ url: 'codeforces.com/contest/1352/problem/c' });
+    expect(cf).toMatchObject({
+      ok: true,
+      platform: 'codeforces',
+      platformId: '1352C',
+      canonicalUrl: 'https://codeforces.com/problemset/problem/1352/C',
+      known: null,
+    });
+    const added = await app.handlers.addProblem({
+      url: 'https://codeforces.com/contest/1352/problem/C',
+      title: 'K-th Not Divisible by n',
+      difficultyRaw: '1200',
+      topics: ['math', 'binary-search'],
+    });
+    expect(added).toMatchObject({ ok: true, created: true, problem: { platform: 'codeforces', difficultyNorm: 2 } });
+    // A different spelling of the same link is the same problem.
+    const again = await app.handlers.addProblem({
+      url: 'https://m1.codeforces.com/problemset/problem/01352/C?locale=en',
+      title: 'Something else',
+      difficultyRaw: null,
+      topics: [],
+    });
+    expect(again).toMatchObject({ ok: true, created: false });
+
+    const cses = await app.handlers.addProblem({
+      url: 'https://cses.fi/problemset/task/1068/',
+      title: 'Weird Algorithm',
+      difficultyRaw: null,
+      topics: ['implementation'],
+    });
+    expect(cses).toMatchObject({ ok: true, problem: { platform: 'cses', platformId: '1068', difficultyNorm: null } });
+
+    const other = await app.handlers.addProblem({
+      url: 'https://atcoder.jp/contests/abc300/tasks/abc300_a/?utm_source=x',
+      title: 'N-choice question',
+      difficultyRaw: 'Easy',
+      topics: [],
+    });
+    expect(other).toMatchObject({
+      ok: true,
+      problem: { platform: 'other', url: 'https://atcoder.jp/contests/abc300/tasks/abc300_a', difficultyNorm: 1 },
+    });
+  });
+
+  it('refuses a platform page that is not a problem, with a reason', async () => {
+    app = createTestApp();
+    const parsed = await app.handlers.parseProblemUrl({ url: 'https://leetcode.com/problemset/' });
+    expect(parsed).toMatchObject({ ok: false });
+    expect(!parsed.ok && parsed.reason).toMatch(/LeetCode link, but not a problem page/);
+    const added = await app.handlers.addProblem({
+      url: 'https://codeforces.com/contest/1352',
+      title: 'A contest',
+      difficultyRaw: null,
+      topics: [],
+    });
+    expect(added.ok).toBe(false);
+  });
+
+  it('stores null, never junk, for difficulty text it does not know', async () => {
+    app = createTestApp();
+    const added = await app.handlers.addProblem({
+      url: 'https://example.com/judge/problem/7',
+      title: 'Some problem',
+      difficultyRaw: 'constructor',
+      topics: [],
+    });
+    expect(added).toMatchObject({ ok: true, problem: { difficultyRaw: 'constructor', difficultyNorm: null } });
+  });
+
   it('explains why text that is not a link was refused', async () => {
     app = createTestApp();
     expect(await app.handlers.parseProblemUrl({ url: 'two sum' })).toMatchObject({ ok: false });

@@ -96,3 +96,14 @@ export function lastAttemptAt(db: Db, problemId: number): IsoInstant | null {
     ])?.attempted_at ?? null
   );
 }
+
+/** Problems that have attempts but no review card. Only possible for data from before cards existed. */
+export function listProblemsMissingCards(db: Db): number[] {
+  return db
+    .all<{ problem_id: number }>(
+      `SELECT DISTINCT a.problem_id FROM attempts a
+       WHERE NOT EXISTS (SELECT 1 FROM review_cards c WHERE c.problem_id = a.problem_id)
+       ORDER BY a.problem_id`,
+    )
+    .map((row) => row.problem_id);
+}

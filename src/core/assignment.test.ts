@@ -342,3 +342,22 @@ describe('purity', () => {
     });
   });
 });
+
+describe('swapCandidates fills its plan list with real choices', () => {
+  it('lists five plan problems even when today\'s problem is the first of the plan', () => {
+    const data = input({ planQueue: [20, 21, 22, 23, 24, 25, 26] });
+    expect(swapCandidates(data, 20).plan).toEqual([21, 22, 23, 24, 25]);
+  });
+
+  it('never offers a plan problem that is a due review, even one beyond the five shown', () => {
+    const due = [1, 2, 3, 4, 5, 6, 7].map((id) => review(id, D1));
+    const data = input({ dueReviews: due, planQueue: [7, 20, 6, 21] });
+    const candidates = swapCandidates(data, 1);
+    expect(candidates.reviews.map((item) => item.problemId)).toEqual([2, 3, 4, 5, 6]);
+    expect(candidates.plan).toEqual([20, 21]);
+  });
+
+  it('collapses a problem repeated in the plan queue', () => {
+    expect(swapCandidates(input({ planQueue: [20, 20, 21, 21, 22] }), null).plan).toEqual([20, 21, 22]);
+  });
+});
