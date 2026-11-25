@@ -70,7 +70,8 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
       };
     });
     expect(drawn?.corners).toEqual([0, 0, 0, 0]);
-    expect(drawn?.birdShare).toBeGreaterThan(0.2);
+    // A new pet is in its egg stage: a small bird in a shell, well under half of its box.
+    expect(drawn?.birdShare).toBeGreaterThan(0.08);
     expect(drawn?.birdShare).toBeLessThan(0.9);
     expect(await pet.getByRole('navigation').count()).toBe(0);
 
