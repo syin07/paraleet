@@ -1,6 +1,6 @@
 # ParaLeet status
 
-Last updated: 2026-11-25 (end of session 3, stopped at the owner's request. NOT done: four branches are unmerged. No agent and no test run is in flight; the In flight table is the truth)
+Last updated: 2026-11-25 (session 4, in progress. NOT done: three branches are unmerged; the In flight table is the truth)
 
 ## What works today
 
@@ -16,7 +16,8 @@ Last updated: 2026-11-25 (end of session 3, stopped at the owner's request. NOT 
 - The streak holds across the 04:00 boundary, restarts, sleep and time-zone changes. All data is one SQLite file.
 - Stats shows the current and longest streak, total solves, reviews done, a calendar of fed days, solves per week and topic coverage, for 12 weeks, 6 months or 1 year.
 - Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories), and now has "Learning plans": add, test and remove your Anthropic API key, and choose the model. The key is stored encrypted and never shown back.
-- Not in the app yet: the Plan screen is still a placeholder, although plans already work underneath (built and reviewed, waiting to merge). Export and import, the optional API key step of the first launch, and the installer are built on branches and not merged.
+- The Plan screen works: with an Anthropic API key saved in Settings, pick one to four topics, generate a plan, review the draft (remove, reorder, swap), activate it, and the daily problem comes from the plan. Without a key the screen says what plans need.
+- Not in the app yet: the buttons for export and import in Settings (the work underneath is merged), the optional API key step of the first launch, and the installer. All three are built on branches and not merged.
 
 ## Notes for the owner
 
@@ -32,22 +33,19 @@ M3 and M4, side by side. M3 lacks the Plan screen (SAN-130) and the first-launch
 
 ## In flight
 
-**Session 3 (2026-11-25) ended here, at the owner's request.** Merged this session, all through the gate: the stats rules (`db6b465`), SAN-134 the lost "Settings…" request (`89c87ab`), the M3 core SAN-120 to SAN-123 (`ea88274`), the `getStats` bridge (`a03c90e`), SAN-131 "Learning plans" in Settings (`aa94c95`), the Stats screen (`f69fc27`) and SAN-135 plan polish (`ce82f0e`). So the app now has a working Stats screen and the API key and model rows in Settings. Main is pushed up to this file's commit.
-
-Correction: the merge message of `f69fc27` gives wrong test counts. The real ones on that branch were 1075 unit, 222 UI and 22 end-to-end, all passing.
-
-No worker, reviewer or test run is in flight, and every worktree is clean. Every branch below is local, with its work committed.
+**Session 4 (2026-11-25).** Merged so far this session, both through the gate: SAN-132 main-process side, export and import (`8863c92`), and SAN-130, the Plan screen (`acb4ec8`). Main is NOT pushed: `git push origin main` was refused by the session's permission rules, so the owner pushes (see Blockers).
 
 | Issue | What | Branch (worktree) | State and what to do |
 | --- | --- | --- | --- |
-| SAN-130 | The Plan screen | `worker/san-130-plan-screen` at `5c1b457` (`.claude/worktrees/agent-a5a3d15bdbcd7d43f`), based on old M3 `f443f0e` | Review round 2 **passed** at `3cc7b40`; `5c1b457` then fixed the reviewer's four small notes (worker reports 1062 unit and 225 UI tests passing). To do: `git rebase --onto main f443f0e` inside its worktree, `npm ci`, check, UI and end-to-end suites, a fresh reviewer for `3cc7b40..5c1b457`, merge |
-| SAN-132 | Export and import, main-process side | `lead/san-132-export-import` at `863d7ff` (`.claude/worktrees/lead-m4`), on main `f69fc27` | Round 1 **blocked** (a file could pass the check, be swapped in and then not open). Fixed in `863d7ff` (`stageCheckedImport`, `openDataFolder`). On `863d7ff`: type check, lint, 1124 unit, 222 UI and 25 end-to-end tests pass, the three in `tests/e2e/data.spec.ts` included. The round 2 reviewer was stopped before it answered. To do: rebase on main (main has gained only SAN-135 and this file since), rerun the suites, fresh reviewer (round 2), merge. Then the "Data" group in Settings (mock scenarios `data-*` exist; tell the UI to say that an import replaces the earlier backup) |
-| SAN-123 (rest) | Step 4 of the first-launch flow: the optional API key | `worker/san-123-onboarding-key` at `919690b` (`.claude/worktrees/agent-ac3dbc0838ba8d3b5`), on main `ea88274` | Worker reports 1057 unit and 198 UI tests passing. Its reviewer was stopped before it answered. Its edits to `tests/e2e/onboarding.spec.ts` have never been run. To do: rebase on main, suites, fresh reviewer, merge |
-| SAN-125 | The `.dmg`, the icon, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` at `23f0e2f` (`.claude/worktrees/agent-ab3ac71efafc0b677`), based on old M3 `e72f6de` | `npm run dist` builds `dist/ParaLeet-0.1.0.dmg` (universal, ad hoc signed, about 220 MB); `npm run dist:check` passed 14 of 14 on the packaged app. Not reviewed. To do: rebase on main (after SAN-132, then send `openDataFolder`'s problems to the log in `src/main/index.ts`); start the Intel half once under Rosetta with 40 seconds and no suite running (12 seconds was not enough to see it start); suites; reviewer; merge |
+| SAN-132 (UI side) | The "Data" group in Settings | `worker/san-132-data-group` (`.claude/worktrees/agent-a4b2b520d42c6a8ad`), stacked on main `acb4ec8` | Review round 1 **blocked** on one finding (the confirm dialog could leave out the line about replacing an earlier backup). The worker is fixing it. Then: suites, fresh reviewer, the lead's real-app walk (`tests/e2e/data-screen.spec.ts`, drafted in the session scratchpad), merge |
+| SAN-123 (rest) | Step 4 of the first-launch flow: the optional API key | `worker/san-123-onboarding-key-2` (`.claude/worktrees/agent-a966378b9d8757b05`), based on main `e29ef85`; the older `worker/san-123-onboarding-key` is superseded | Review round 2 **blocked** on two missing tests (double-finish; a slow answer). The worker is fixing them. Then: rebase on main, suites (its end-to-end tests have never been run), fresh reviewer, merge |
+| SAN-125 | The `.dmg`, the icon, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` (`.claude/worktrees/agent-ab3ac71efafc0b677`), rebased on main `acb4ec8`, plus one commit fixing two import messages | Check passes (1150 unit). To do: rebase after the two branches above merge; `npm run dist`, `npm run dist:check`; start the Intel half once under Rosetta with 40 seconds and no suite running; suites; reviewer; merge |
 
-After those: tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` (Plan, Stats, Settings, first-launch flow; tooltips use the raised surface, the topic column is 132px); screenshot sheets on Linear for SAN-130, the "Data" group and the onboarding step (SAN-124's and SAN-131's are attached); a real-app walk through Plan, Stats and Settings by the lead; `npm ci` in the main checkout, then all suites on main; DONE.
+After those: a lead branch with two real-app tests through the screens (`plan-screen.spec.ts` passes on main's tree, `data-screen.spec.ts` is drafted); tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` (Plan, Stats); screenshot sheets on Linear for the "Data" group and the onboarding step (SAN-130's is attached); `npm ci` in the main checkout, then all suites on main; DONE.
 
-Leftovers that are not work in flight: merged branches and `worktree-agent-*` branches can be deleted; `lead/m2-contract` after a look. The lead's shell ended inside `.claude/worktrees/lead-m3` (branch `lead/plan-polish`, merged).
+Follow-up to file on Linear (not on the M1 to M4 checklist): an imported database that makes the app die, not throw, while it is opened leaves the app unable to start until the files are fixed by hand (the data is safe under `paraleet.sqlite3.before-import`). A marker kept until the first successful open after a swap would cover it.
+
+Leftovers that are not work in flight: `lead/m2-contract` (two superseded work-in-progress commits) can be deleted after a look.
 
 ## Next
 
