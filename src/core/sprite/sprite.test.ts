@@ -337,6 +337,26 @@ describe('growth', () => {
     expect(tailRows(pick('long'), 'adult')).toBeGreaterThan(tailRows(pick('short'), 'adult'));
   });
 
+  it('has a square head box inside the frame that holds the eye and part of the beak', () => {
+    for (const seed of SEEDS) {
+      for (const stage of GROWTH_STAGES) {
+        const box = headBox(stage);
+        expect(box.size).toBeGreaterThan(0);
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.y).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.size).toBeLessThanOrEqual(32);
+        expect(box.y + box.size).toBeLessThanOrEqual(32);
+        const f = renderSprite(seed, stage, 'content', 0);
+        const inside = ([x, y]: [number, number]): boolean =>
+          x >= box.x && x < box.x + box.size && y >= box.y && y < box.y + box.size;
+        const eye = pixelsOf(f, 'white');
+        expect(eye.length).toBeGreaterThan(0);
+        expect(eye.every(inside), `${seed}/${stage} eye`).toBe(true);
+        expect(pixelsOf(f, 'beak').some(inside), `${seed}/${stage} beak`).toBe(true);
+      }
+    }
+  });
+
   it('puts the head box inside the frame', () => {
     for (const stage of GROWTH_STAGES) {
       const box = headBox(stage);

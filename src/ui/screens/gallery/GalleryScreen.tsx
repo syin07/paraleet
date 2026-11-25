@@ -7,6 +7,7 @@ import { Card, Page } from '../../components/Layout';
 import { Sprite } from '../../components/Sprite';
 import { cx } from '../../lib/format';
 import { Filmstrips } from './Filmstrips';
+import { HeadIcons } from './HeadIcons';
 import { HatchingPreview } from './HatchingPreview';
 
 /** Four birds that differ in every trait, so their differences show side by side. */
@@ -137,6 +138,11 @@ export function GalleryScreen() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section aria-label="Menu bar heads">
+          <SectionTitle>Menu bar heads (16, 18 and 22 px), seed {seed}</SectionTitle>
+          <HeadIcons seed={seed} accessories={worn} />
         </section>
 
         <section aria-label="Every stage and mood">

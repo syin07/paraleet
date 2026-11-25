@@ -21,13 +21,10 @@ const CHEEKS: Record<CheekShape, Rows> = {
   crescent: ['.cc', 'c..', '.cc'],
 };
 
-const BEAK_BIG: Record<'closed' | 'open', Rows> = {
-  closed: ['.eeee', 'ccccc', 'c.bbb'],
-  open: ['.eeee', 'ccccc', 'c.mmm', '..bbb'],
-};
-const BEAK_SMALL: Record<'closed' | 'open', Rows> = {
-  closed: ['.eee', 'cccc', 'c.bb'],
-  open: ['.eee', 'cccc', 'c.mm', '..bb'],
+// A small hooked beak tucked against the face: the upper beak curves down over a shorter lower one.
+const BEAK: Record<'closed' | 'open', Rows> = {
+  closed: ['.ee', 'ccc', 'cb.'],
+  open: ['.ee', 'ccc', 'cm.', '.b.'],
 };
 const BEAK_FRONT: Record<'closed' | 'open', Rows> = {
   closed: ['eeee', '.cc.', '.bb.'],
@@ -95,24 +92,23 @@ function drawTail(g: Grid, spec: StageSpec, look: Look): void {
   }
 }
 
-function inBody(spec: StageSpec, x: number, y: number, lean: number, breath: boolean): boolean {
-  const b = breath ? 0.5 : 0;
-  const c = spec.chest;
-  const r = spec.rump;
-  return (
-    inEllipse(x, y, c.cx - lean, c.cy, c.rx + b, c.ry) || inEllipse(x, y, r.cx, r.cy, r.rx + b, r.ry)
-  );
+function inSpec(e: Ellipse, x: number, y: number, dx = 0, grow = 0): boolean {
+  const a = ((e.angle ?? 0) * Math.PI) / 180;
+  return inEllipse(x, y, e.cx - dx, e.cy, e.rx + grow, e.ry, Math.cos(a), Math.sin(a));
+}
+
+function inBody(spec: StageSpec, x: number, y: number, lean: number, puff: number): boolean {
+  return inSpec(spec.chest, x, y, lean, puff) || inSpec(spec.rump, x, y, 0, puff);
 }
 
 function drawBody(g: Grid, spec: StageSpec, look: Look, pose: Pose): void {
-  const b = pose.breath ? 0.5 : 0;
   const c = spec.chest;
   const r = spec.rump;
-  g.ellipse(r.cx, r.cy, r.rx + b, r.ry, 'body');
-  g.ellipse(c.cx - pose.lean, c.cy, c.rx + b, c.ry, 'body');
+  g.ellipse(r.cx, r.cy, r.rx + pose.puff, r.ry, 'body', r.angle ?? 0);
+  g.ellipse(c.cx - pose.lean, c.cy, c.rx + pose.puff, c.ry, 'body', c.angle ?? 0);
   const belly = spec.belly;
   g.ellipse(belly.cx - pose.lean, belly.cy, belly.rx, belly.ry, BELLY_COLOR[look.traits.bellyShade], 0, (x, y) =>
-    inBody(spec, x, y, pose.lean, pose.breath),
+    inBody(spec, x, y, pose.lean, pose.puff),
   );
 }
 
@@ -125,16 +121,30 @@ function drawWing(g: Grid, spec: StageSpec, look: Look, pose: Pose): void {
   const angle = w.angle ?? 0;
   const cos = Math.cos((angle * Math.PI) / 180);
   const sin = Math.sin((angle * Math.PI) / 180);
-  // The chick has only a nub of a wing, so it gets no barring.
-  const bars = spec.tail !== null && spec.tail.base > 2;
+  const bars = spec.wingBars;
+  const barring = look.traits.barring;
+  const wingIdx = [COLOR_INDEX.wing, COLOR_INDEX.wingBar];
+  // A dark line where the wing's edge meets the tail, so the two read as separate shapes.
+  g.ellipse(
+    w.cx,
+    w.cy,
+    w.rx + 1,
+    w.ry + 1,
+    'outline',
+    angle,
+    (x, y) => !inEllipse(x, y, w.cx, w.cy, w.rx, w.ry, cos, sin) && wingIdx.includes(g.at(x + g.ox, y + g.oy)),
+  );
   g.ellipse(
     w.cx,
     w.cy,
     w.rx,
     w.ry,
     (x, y) => {
-      if (!inEllipse(x - 1, y - 1, w.cx, w.cy, w.rx, w.ry, cos, sin)) return 'wingLight';
-      return bars && barred(look.traits.barring, x, y) ? 'wingBar' : 'wing';
+      if (!inEllipse(x - 1, y - 1, w.cx, w.cy, w.rx, w.ry, cos, sin)) return 'wingEdge';
+      if (!bars) return 'wing';
+      if (barred(barring, x, y)) return 'wingBar';
+      // The light edge of a feather sits just below its dark bar, on alternate pixels only.
+      return (x + y) % 2 === 0 && barred(barring, x, y - 1) ? 'wingEdge' : 'wing';
     },
     angle,
   );
@@ -159,24 +169,26 @@ function headBottomRow(spec: StageSpec): number {
   return Math.ceil(cy + ry);
 }
 
-function drawEye(g: Grid, ex: number, ey: number, state: Pose['eyes'], tilt = 0): void {
+function drawEye(g: Grid, ex: number, ey: number, state: Pose['eyes'], big: boolean, tilt = 0): void {
   const y = ey + tilt;
+  const w = big ? 3 : 2;
+  const line = 'o'.repeat(w);
   switch (state) {
     case 'open':
-      g.stamp(['wo', 'oo'], ex, y, { o: 'outline', w: 'white' });
+      g.stamp(big ? ['woo', 'ooo', 'oo.'] : ['wo', 'oo'], ex, y, { o: 'outline', w: 'white' });
       break;
     case 'blink':
-      g.stamp(['oo'], ex, y + 1, { o: 'outline' });
+      g.stamp([line], ex, y + 1, { o: 'outline' });
       break;
     case 'closed':
-      g.stamp(['ooo'], ex - 1, y + 1, { o: 'outline' });
+      g.stamp([line], ex, y + (big ? 2 : 1), { o: 'outline' });
       break;
     case 'happy':
-      g.stamp(['.o.', 'o.o'], ex - 0, y, { o: 'outline' });
+      g.stamp(['.o.', 'o.o'], ex, y + (big ? 1 : 0), { o: 'outline' });
       break;
     case 'narrow':
-      g.stamp(['oo', '..'], ex, y + 1, { o: 'outline' });
-      g.stamp(['.ooo'], ex - 1, y - 1, { o: 'outline' });
+      g.stamp([line], ex, y + 1, { o: 'outline' });
+      g.stamp(['.ooo', 'o...'], ex - 1, y - 1, { o: 'outline' });
       break;
   }
 }
@@ -200,24 +212,25 @@ function drawHead(g: Grid, spec: StageSpec, look: Look, pose: Pose): void {
     return 'body';
   });
   // The lighter face mask around the beak and forehead.
-  g.ellipse(h.cx - 5, h.cy + 1, 2.6, 3.4, 'highlight', 0, (x, y) => inHead(x, y) && y > top);
+  g.ellipse(h.cx - 4.5, h.cy + 1.5, 2.6, 3.2, 'highlight', 0, (x, y) => inHead(x, y) && y > top);
 
   if (pose.face === 'front') {
     const tilt = pose.tilt ? 1 : 0;
-    drawEye(g, hx - 4, hy + spec.eye[1], pose.eyes);
-    drawEye(g, hx + 2, hy + spec.eye[1], pose.eyes, tilt);
+    const big = spec.bigEye;
+    drawEye(g, hx - (big ? 5 : 4), hy + spec.eye[1] + (big ? 1 : 0), pose.eyes, big);
+    drawEye(g, hx + 2, hy + spec.eye[1] + (big ? 1 : 0), pose.eyes, big, tilt);
     drawCheek(g, look.traits.cheekShape, hx - 6, hy + 1, cheekColor);
     drawCheek(g, look.traits.cheekShape, hx + 5 - CHEEKS[look.traits.cheekShape][0]!.length + 1, hy + 1 + tilt, cheekColor, true);
     g.stamp(BEAK_FRONT[pose.beak], hx - 2 + (pose.tilt ? 1 : 0), hy - 1 + (pose.tilt ? 1 : 0), BEAK_LEGEND);
   } else {
-    drawEye(g, hx + spec.eye[0], hy + spec.eye[1], pose.eyes);
+    drawEye(g, hx + spec.eye[0], hy + spec.eye[1], pose.eyes, spec.bigEye);
     drawCheek(g, look.traits.cheekShape, hx + spec.cheek[0], hy + spec.cheek[1], cheekColor);
-    const rows = (spec.smallBeak ? BEAK_SMALL : BEAK_BIG)[pose.beak];
-    g.stamp(rows, hx + spec.beak[0], hy + spec.beak[1], BEAK_LEGEND);
+    g.stamp(BEAK[pose.beak], hx + spec.beak[0], hy + spec.beak[1], BEAK_LEGEND);
   }
 
   if (spec.tuft) {
-    g.set(hx - 1, top - 1, 'body');
+    // One small curl: a column two high with a nub beside it, so the tip is a single pixel.
+    g.set(hx, top - 1, 'body');
     g.set(hx, top - 2, 'body');
     g.set(hx + 1, top - 1, 'body');
   }
@@ -252,10 +265,10 @@ function drawShell(g: Grid): void {
   shadedEgg(g, (x, y) => y >= rimY(x));
   // One crack running down from the rim.
   for (const [x, y] of [
-    [19, 23],
-    [20, 24],
-    [19, 25],
-    [20, 26],
+    [22, 25],
+    [23, 26],
+    [22, 27],
+    [23, 28],
   ] as const) {
     g.set(x, y, 'cere');
   }
@@ -285,7 +298,7 @@ const CROWN: Rows = ['g.g.g', 'ggggg', 'dgjgd'];
 const CROWN_LEGEND = { g: 'gold', d: 'goldDark', j: 'jewel' } as const;
 const CAP: Rows = ['..bbbbb..', 'bbbbbbbbb', '..ddddd..'];
 const CAP_LEGEND = { b: 'capBoard', d: 'capBand' } as const;
-const SCARF: Rows = ['ssssssss', 'sdsdsdsd', '......ss', '......sd', '......ss'];
+const SCARF: Rows = ['ssssssss', 'sdsdsdsd', '......ss', '......sd'];
 const SCARF_LEGEND = { s: 'scarf', d: 'scarfDark' } as const;
 const BOW: Rows = ['bb.bb', 'bbkbb', 'bb.bb'];
 const BOW_LEGEND = { b: 'bow', k: 'bowDark' } as const;
@@ -299,12 +312,12 @@ function drawAccessories(g: Grid, spec: StageSpec, accessories: readonly Accesso
   if (has('bow_tie')) g.stamp(BOW, hx + spec.bow[0], bottom + spec.bow[1], BOW_LEGEND);
   // A cap and a crown cannot share one head: the cap wins.
   if (has('grad_cap')) {
-    g.stamp(CAP, hx + spec.cap[0], top - 2 + spec.cap[1], CAP_LEGEND);
-    g.set(hx + spec.cap[0] + 8, top, 'gold');
+    g.stamp(CAP, hx + spec.cap[0], top - 1 + spec.cap[1], CAP_LEGEND);
     g.set(hx + spec.cap[0] + 8, top + 1, 'gold');
-    g.set(hx + spec.cap[0] + 4, top - 2, 'gold');
+    g.set(hx + spec.cap[0] + 8, top + 2, 'gold');
+    g.set(hx + spec.cap[0] + 4, top - 1, 'gold');
   } else if (has('crown')) {
-    g.stamp(CROWN, hx + spec.crown[0], top - 2 + spec.crown[1], CROWN_LEGEND);
+    g.stamp(CROWN, hx + spec.crown[0], top - 1 + spec.crown[1], CROWN_LEGEND);
   }
 }
 

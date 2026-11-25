@@ -12,7 +12,7 @@ export const PALETTE = {
   bellyAmber: '#FFB644',
   wing: '#3E3E3E',
   wingBar: '#262626',
-  wingLight: '#666666', // feather edge shine so the wing reads at small sizes
+  wingEdge: '#5A5A5A', // feather edges, used sparingly so the barring reads at 96 px
   outline: '#1A1A1A', // also the eye
   cheekGreen: '#2CBB5D',
   cheekRed: '#EF4743',

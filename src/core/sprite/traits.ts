@@ -63,4 +63,4 @@ export const BELLY_COLOR: Record<BellyShade, ColorName> = {
 };
 
 /** How long the tail is, as a share of the stage's full tail. */
-export const TAIL_FACTOR: Record<TailLength, number> = { short: 0.6, medium: 1, long: 1.3 };
+export const TAIL_FACTOR: Record<TailLength, number> = { short: 0.75, medium: 1, long: 1.15 };

@@ -104,6 +104,12 @@ test.describe('the sprite gallery', () => {
     await expect(page.getByTestId('hatching-step')).toHaveText('Frame 6 of 6', { timeout: 5000 });
   });
 
+  test('shows the menu bar heads at three sizes for every stage', async ({ page }) => {
+    // 4 stages x 3 sizes x 2 strips.
+    await expect(page.getByTestId('gallery-menubar').getByRole('img')).toHaveCount(24);
+    await expect(page.getByRole('img', { name: 'adult head at 18 pixels' })).toHaveCount(2);
+  });
+
   test('hides the filmstrips until asked', async ({ page }) => {
     await expect(page.getByTestId('filmstrips')).toHaveCount(0);
     await page.getByTestId('filmstrip-toggle').click();
@@ -115,6 +121,7 @@ test.describe('the sprite gallery', () => {
     await page.waitForTimeout(300);
     await shot(page.getByTestId('gallery-actual'), 'gallery-actual-size');
     await shot(page.getByTestId('gallery-seeds'), 'gallery-seeds');
+    await shot(page.getByTestId('gallery-menubar'), 'gallery-menubar-heads');
     // One image per stage: its row of moods.
     for (const stage of GROWTH_STAGES) await shot(page.getByTestId(`row-${stage}`), `gallery-${stage}`);
 

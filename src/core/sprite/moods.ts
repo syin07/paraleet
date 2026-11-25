@@ -35,8 +35,8 @@ export interface Pose {
   head: readonly [number, number];
   /** The chest leans this many pixels to the left; rump, tail and feet stay put. */
   lean: number;
-  /** One pixel fuller across the body (sleeping breath). */
-  breath: boolean;
+  /** Pixels of extra body width: a fluffed-up sleeper, and a slow breath on top. */
+  puff: number;
   eyes: EyeState;
   /** 'front' turns the face to look at the viewer. */
   face: 'side' | 'front';
@@ -51,7 +51,7 @@ const REST: Pose = {
   hop: 0,
   head: [0, 0],
   lean: 0,
-  breath: false,
+  puff: 0,
   eyes: 'open',
   face: 'side',
   tilt: false,
@@ -73,7 +73,7 @@ const SLEEPING: Maker = (stage) => {
     const effects: Effect[] = [];
     if (f <= 3) effects.push({ kind: 'zSmall', x: fx + f, y: fy + 8 - Math.round(f * 1.5) });
     if (f >= 2) effects.push({ kind: 'zBig', x: fx + 2 + (f - 2), y: fy + 6 - Math.round((f - 2) * 1.5) });
-    frames.push(pose({ head: [1, 2], eyes: 'closed', breath: f >= 3, effects }));
+    frames.push(pose({ head: [2, 3], eyes: 'closed', puff: f >= 3 ? 1.2 : 0.6, effects }));
   }
   return frames;
 };
@@ -104,23 +104,24 @@ const PECKISH: Maker = (stage) => {
 const HUNGRY: Maker = (stage) => {
   const [fx, fy] = STAGES[stage].fx;
   const thought: Effect = { kind: 'seedThought', x: fx + 3, y: fy };
+  // Leaning hard to the left, pecking forward and down, wings fluttering.
   return [
-    pose({ head: [-1, 1], lean: 1, beak: 'open', wing: 'upA', effects: [thought] }),
-    pose({ head: [-2, 2], lean: 1, effects: [thought] }),
-    pose({ head: [-1, 1], lean: 1, beak: 'open', wing: 'upB', effects: [thought] }),
-    pose({ head: [-2, 2], lean: 1 }),
+    pose({ head: [-3, 2], lean: 2, beak: 'open', wing: 'upA', effects: [thought] }),
+    pose({ head: [-3, 4], lean: 2, wing: 'upB', effects: [thought] }),
+    pose({ head: [-3, 2], lean: 2, beak: 'open', wing: 'upB', effects: [thought] }),
+    pose({ head: [-3, 4], lean: 2, wing: 'upA' }),
   ];
 };
 
 const CHECKING: Maker = (stage) => {
   const [fx, fy] = STAGES[stage].fx;
   const dots = (kind: 'dot1' | 'dots2' | 'dots3'): Effect[] => [{ kind, x: fx + 1, y: fy + 5 }];
-  // Thinking dots build up while the head sweeps in and out, as if reading.
+  // Stretched toward the viewer's left, one eye narrowed, the head sweeping as if reading.
   return [
-    pose({ head: [-2, 1], eyes: 'narrow', effects: dots('dot1') }),
-    pose({ head: [-1, 1], eyes: 'narrow', effects: dots('dots2') }),
-    pose({ head: [0, 1], eyes: 'narrow', effects: dots('dots3') }),
-    pose({ head: [-1, 1], eyes: 'narrow', effects: dots('dots2') }),
+    pose({ head: [-3, 2], lean: 2, eyes: 'narrow', effects: dots('dot1') }),
+    pose({ head: [-2, 2], lean: 2, eyes: 'narrow', effects: dots('dots2') }),
+    pose({ head: [-1, 2], lean: 2, eyes: 'narrow', effects: dots('dots3') }),
+    pose({ head: [-2, 2], lean: 2, eyes: 'narrow', effects: dots('dots2') }),
   ];
 };
 
