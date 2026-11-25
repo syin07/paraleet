@@ -223,7 +223,7 @@ test.describe('accessories', () => {
     await openScreen(page, 'settings', 'fresh');
     const group = page.getByRole('group', { name: 'Accessories' });
     for (const name of ['Scarf', 'Bow tie', 'Crown', 'Graduation cap']) await expect(group.getByRole('button', { name })).toBeDisabled();
-    await expect(page.getByText('Scarf: Your first attempt rated Hard')).toBeVisible();
+    await expect(page.getByText('Scarf: Solving your first Hard problem')).toBeVisible();
     await expect(page.getByText('Bow tie: A 7-day streak')).toBeVisible();
     await expect(page.getByText('Crown: A 30-day streak')).toBeVisible();
     await captureBothSizes(page, 'settings-fresh');
