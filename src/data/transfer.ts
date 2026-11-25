@@ -20,7 +20,15 @@ export const IMPORT_BACKUP_FILE_NAME = 'paraleet.sqlite3.before-import';
 /** Tables every ParaLeet database has had since its first version. */
 const REQUIRED_TABLES = ['problems', 'attempts', 'review_cards', 'pet', 'settings'] as const;
 
-const samePath = (a: string, b: string): boolean => resolve(a) === resolve(b);
+export const samePath = (a: string, b: string): boolean => resolve(a) === resolve(b);
+
+/** A failure whose message is written for the user and can be shown as it is. */
+export class TransferError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TransferError';
+  }
+}
 
 /**
  * Writes a complete copy of the database to `targetPath`, replacing a file that is there. The
@@ -29,7 +37,7 @@ const samePath = (a: string, b: string): boolean => resolve(a) === resolve(b);
  */
 export function exportDatabase(db: Db, targetPath: string): void {
   if (samePath(db.path, targetPath)) {
-    throw new Error('That is the file ParaLeet is using. Choose another place for the copy.');
+    throw new TransferError('That is the file ParaLeet is using. Choose another place for the copy.');
   }
   const temporary = `${targetPath}.partial`;
   rmSync(temporary, { force: true });
@@ -55,6 +63,36 @@ export interface DatabaseSummary {
 }
 
 export type DatabaseCheck = { ok: true; summary: DatabaseSummary } | { ok: false; reason: string };
+
+const SUMMARY_SQL =
+  'SELECT COUNT(*) AS attempts, COUNT(DISTINCT problem_id) AS problems, MIN(para_day) AS first, MAX(para_day) AS last FROM attempts';
+
+interface SummaryRow {
+  attempts: number;
+  problems: number;
+  first: string | null;
+  last: string | null;
+}
+
+function toSummary(schemaVersion: number, row: SummaryRow | undefined, longestStreak: number | undefined): DatabaseSummary {
+  return {
+    schemaVersion,
+    attempts: Number(row?.attempts ?? 0),
+    problems: Number(row?.problems ?? 0),
+    firstDay: row?.first ?? null,
+    lastDay: row?.last ?? null,
+    longestStreak: Number(longestStreak ?? 0),
+  };
+}
+
+/** What the open database holds, in the same terms as a file about to be imported. */
+export function summarizeDatabase(db: Db): DatabaseSummary {
+  return toSummary(
+    db.get<{ user_version: number }>('PRAGMA user_version')?.user_version ?? 0,
+    db.get<SummaryRow>(SUMMARY_SQL),
+    db.get<{ longest_streak: number }>('SELECT longest_streak FROM pet LIMIT 1')?.longest_streak,
+  );
+}
 
 /**
  * Looks at a file without changing it and says whether it is a ParaLeet database this app can
@@ -83,21 +121,9 @@ export function inspectDatabaseFile(path: string, latestVersion: number = LATEST
     if (integrity.length !== 1 || integrity[0]?.integrity_check !== 'ok') {
       return { ok: false, reason: 'That file is damaged and cannot be imported.' };
     }
-    const attempts = raw
-      .prepare('SELECT COUNT(*) AS attempts, COUNT(DISTINCT problem_id) AS problems, MIN(para_day) AS first, MAX(para_day) AS last FROM attempts')
-      .get() as { attempts: number; problems: number; first: string | null; last: string | null };
+    const attempts = raw.prepare(SUMMARY_SQL).get() as SummaryRow | undefined;
     const pet = raw.prepare('SELECT longest_streak FROM pet LIMIT 1').get() as { longest_streak: number } | undefined;
-    return {
-      ok: true,
-      summary: {
-        schemaVersion: version,
-        attempts: Number(attempts.attempts),
-        problems: Number(attempts.problems),
-        firstDay: attempts.first,
-        lastDay: attempts.last,
-        longestStreak: Number(pet?.longest_streak ?? 0),
-      },
-    };
+    return { ok: true, summary: toSummary(version, attempts, pet?.longest_streak) };
   } catch {
     // Not SQLite at all, a file cut short, or a database another program left half-written.
     return { ok: false, reason: 'That file is not a ParaLeet database, or it is damaged.' };
@@ -112,10 +138,10 @@ export function inspectDatabaseFile(path: string, latestVersion: number = LATEST
  */
 export function stageImport(sourcePath: string, dataDir: string): DatabaseSummary {
   if (samePath(sourcePath, join(dataDir, DATABASE_FILE_NAME))) {
-    throw new Error('That is the file ParaLeet is already using.');
+    throw new TransferError('That is the file ParaLeet is already using.');
   }
   const check = inspectDatabaseFile(sourcePath);
-  if (!check.ok) throw new Error(check.reason);
+  if (!check.ok) throw new TransferError(check.reason);
   const staged = join(dataDir, STAGED_IMPORT_FILE_NAME);
   const temporary = `${staged}.partial`;
   rmSync(temporary, { force: true });
@@ -126,6 +152,11 @@ export function stageImport(sourcePath: string, dataDir: string): DatabaseSummar
 
 export function hasStagedImport(dataDir: string): boolean {
   return existsSync(join(dataDir, STAGED_IMPORT_FILE_NAME));
+}
+
+/** True when the database an earlier import replaced is still kept next to the database. */
+export function hasImportBackup(dataDir: string): boolean {
+  return existsSync(join(dataDir, IMPORT_BACKUP_FILE_NAME));
 }
 
 export function discardStagedImport(dataDir: string): void {
@@ -142,9 +173,14 @@ export type StagedImportResult =
 
 /**
  * Swaps a staged import in. Call at launch, before the database is opened. The staged file is
- * checked again, because it may have sat on disk since an earlier run.
+ * checked again, because it may have sat on disk since an earlier run. If the swap fails half
+ * way, the database that was there is put back and the error is thrown: the user's data is never
+ * left without a file under its name. `rename` is replaceable so a test can make it fail.
  */
-export function applyStagedImport(dataDir: string): StagedImportResult {
+export function applyStagedImport(
+  dataDir: string,
+  rename: (from: string, to: string) => void = renameSync,
+): StagedImportResult {
   const staged = join(dataDir, STAGED_IMPORT_FILE_NAME);
   if (!existsSync(staged)) return { status: 'none' };
 
@@ -169,11 +205,16 @@ export function applyStagedImport(dataDir: string): StagedImportResult {
       }
     }
     rmSync(backup, { force: true });
-    renameSync(current, backup);
+    rename(current, backup);
     backupPath = backup;
   }
-  rmSync(`${current}-journal`, { force: true });
-  renameSync(staged, current);
+  try {
+    rmSync(`${current}-journal`, { force: true });
+    rename(staged, current);
+  } catch (error) {
+    if (backupPath !== null && !existsSync(current)) renameSync(backupPath, current);
+    throw error;
+  }
   return { status: 'applied', backupPath };
 }
 

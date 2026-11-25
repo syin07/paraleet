@@ -28,6 +28,10 @@ export interface TestApp {
   setModelList(next: string[] | Error): void;
   /** How many times the app told its windows that something changed. */
   changes: () => number;
+  /** What the file dialogs answer next (null is the user cancelling), and what was asked of them. */
+  dialogs: { save: string | null; open: string | null; suggestedNames: string[]; revealed: string[] };
+  /** How many times the app asked to be restarted. */
+  restarts: () => number;
   close(): void;
 }
 
@@ -49,6 +53,8 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
   const modelCalls: { apiKey: string; model: string; turns: LlmTurn[] }[] = [];
   let modelList: string[] | Error = ['claude-opus-5-5'];
   let changeCount = 0;
+  let restartCount = 0;
+  const dialogs: TestApp['dialogs'] = { save: null, open: null, suggestedNames: [], revealed: [] };
   const ctx: AppContext = {
     db,
     clock,
@@ -90,6 +96,19 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
       setCardSize: (width, height) => windowCalls.push(`setCardSize:${width}x${height}`),
       openCard: () => windowCalls.push('openCard'),
     },
+    files: {
+      chooseSavePath: async (suggestedName) => {
+        dialogs.suggestedNames.push(suggestedName);
+        return dialogs.save;
+      },
+      chooseOpenPath: async () => dialogs.open,
+      reveal: (path) => {
+        dialogs.revealed.push(path);
+      },
+    },
+    restart: () => {
+      restartCount += 1;
+    },
     notifyChanged: () => {
       changeCount += 1;
     },
@@ -114,6 +133,8 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
       modelList = next;
     },
     changes: () => changeCount,
+    dialogs,
+    restarts: () => restartCount,
     close: () => db.close(),
   };
 }

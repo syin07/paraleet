@@ -74,6 +74,10 @@ export interface RunningApp {
   setTimeZone(timeZone: string): Promise<void>;
   /** Links the app would have opened in the browser. */
   openedUrls(): Promise<string[]>;
+  /** What the save and open dialogs answer next. Null is the user cancelling; a key left out is unchanged. */
+  setDialogPaths(paths: { save?: string | null; open?: string | null }): Promise<void>;
+  /** Files the app would have shown in Finder. */
+  revealedPaths(): Promise<string[]>;
   close(): Promise<void>;
 }
 
@@ -81,6 +85,8 @@ interface TestHooks {
   setNow(iso: string): void;
   setTimeZone(timeZone: string): void;
   openedUrls(): string[];
+  setDialogPaths(paths: string): void;
+  revealedPaths(): string[];
   pet(): PetWindowFacts;
   petMenuLabels(): string[];
   clickPetMenu(label: string): void;
@@ -181,6 +187,15 @@ export async function launchApp(options: {
     setNow: (iso) => hooks((h, value) => h.setNow(value), iso),
     setTimeZone: (timeZone) => hooks((h, value) => h.setTimeZone(value), timeZone),
     openedUrls: () => hooks((h) => h.openedUrls()),
+    setDialogPaths: (paths) =>
+      hooks(
+        (h, value) => h.setDialogPaths(value),
+        JSON.stringify({
+          ...(paths.save !== undefined ? { save: paths.save ?? '' } : {}),
+          ...(paths.open !== undefined ? { open: paths.open ?? '' } : {}),
+        }),
+      ),
+    revealedPaths: () => hooks((h) => h.revealedPaths()),
     petPage: () => findWindow(app, 'pet'),
     pet: () => hooks((h) => h.pet()),
     petMenuLabels: () => hooks((h) => h.petMenuLabels()),

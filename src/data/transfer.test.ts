@@ -1,6 +1,6 @@
 // Export and import of the whole database as one file: a complete copy comes out, only a real
 // ParaLeet database goes in, and the swap at launch never loses the data it replaces.
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -14,11 +14,14 @@ import {
   DATABASE_FILE_NAME,
   discardStagedImport,
   exportDatabase,
+  hasImportBackup,
   hasStagedImport,
   IMPORT_BACKUP_FILE_NAME,
   inspectDatabaseFile,
   STAGED_IMPORT_FILE_NAME,
   stageImport,
+  summarizeDatabase,
+  TransferError,
 } from './transfer';
 import { openDatabase } from './index';
 
@@ -253,6 +256,52 @@ describe('import', () => {
     expect(hasStagedImport(dataDir)).toBe(false);
     expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(4);
     expect(existsSync(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(false);
+  });
+
+  it('puts the database back when the swap fails half way, and says so', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 7);
+    db.close();
+    stageImport(path, dataDir);
+    // The first rename (the database to its backup name) works; the second (the import into
+    // place) fails, as a full or failing disk would make it.
+    let calls = 0;
+    const failingSecond = (from: string, to: string): void => {
+      calls += 1;
+      if (calls === 2) throw new Error('rename failed');
+      renameSync(from, to);
+    };
+    expect(() => applyStagedImport(dataDir, failingSecond)).toThrow('rename failed');
+    // The user's own data is back under its name, and nothing of it was lost.
+    expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(3);
+    expect(hasImportBackup(dataDir)).toBe(false);
+    // The staged file is still there; a later launch can apply it.
+    expect(hasStagedImport(dataDir)).toBe(true);
+    expect(applyStagedImport(dataDir)).toMatchObject({ status: 'applied' });
+    expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(7);
+    expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(3);
+  });
+
+  it('says what the open database holds, in the same terms as a file to import', () => {
+    const { db, path } = makeDatabase('mine', 5);
+    expect(summarizeDatabase(db)).toEqual({
+      schemaVersion: LATEST_SCHEMA_VERSION,
+      attempts: 5,
+      problems: 5,
+      firstDay: '2026-11-01',
+      lastDay: '2026-11-05',
+      longestStreak: 5,
+    });
+    const viaFile = inspectDatabaseFile(path);
+    expect(viaFile).toEqual({ ok: true, summary: summarizeDatabase(db) });
+  });
+
+  it('refuses with a message for the user, as its own kind of error', () => {
+    const dataDir = makeDataDir(1);
+    const text = join(dir, 'notes.txt');
+    writeFileSync(text, 'not a database');
+    expect(() => stageImport(text, dataDir)).toThrow(TransferError);
+    expect(() => stageImport(join(dataDir, DATABASE_FILE_NAME), dataDir)).toThrow(TransferError);
   });
 
   it('works in a folder with no database yet', () => {

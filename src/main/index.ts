@@ -15,7 +15,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
-import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
+import { applyStagedImport, DATABASE_FILE_NAME, discardStagedImport, openDatabase, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
 import { getSettings, updateSettings } from '../data/repos/settings';
 import { createAnthropicClient, listModels } from '../llm/anthropicClient';
@@ -33,6 +33,7 @@ import {
   sendDueReminder,
   trayState,
   type AppContext,
+  type ImportOutcome,
   type ModelAccess,
   type Notice,
 } from './services';
@@ -169,6 +170,28 @@ function start(): void {
   const userData = app.getPath('userData');
   mkdirSync(userData, { recursive: true });
 
+  // An import chosen in Settings is put in place here, before the database is opened: the open
+  // database is never replaced while the app runs. The database it replaces is kept beside it.
+  let lastImport: ImportOutcome | null = null;
+  try {
+    const staged = applyStagedImport(userData);
+    if (staged.status === 'applied') lastImport = { status: 'applied' };
+    if (staged.status === 'rejected') {
+      lastImport = { status: 'rejected', reason: staged.reason };
+      console.warn(`ParaLeet did not apply the import: ${staged.reason}`);
+    }
+  } catch (error) {
+    // The swap failed and the database that was there is back in place. Do not try again at
+    // every launch: the user can choose the file again.
+    console.error('ParaLeet could not put the import in place:', error);
+    try {
+      discardStagedImport(userData);
+    } catch {
+      // Nothing more to do; the next launch checks the staged file again.
+    }
+    lastImport = { status: 'rejected', reason: 'The file could not be put in place. Your data was not changed.' };
+  }
+
   try {
     const opened = openDatabase(join(userData, DATABASE_FILE_NAME), clock.now().toISOString());
     db = opened.db;
@@ -194,6 +217,8 @@ function start(): void {
 
   const openedUrls: string[] = [];
   const notices: Notice[] = [];
+  // End-to-end runs answer the file dialogs from here and show none.
+  const testDialogs: { save: string | null; open: string | null; revealed: string[] } = { save: null, open: null, revealed: [] };
   const liveNotifications = new Set<Notification>();
   const pet = new PetWindowController(
     db,
@@ -257,7 +282,7 @@ function start(): void {
     clock,
     secrets,
     models,
-    session: newSession(),
+    session: newSession(lastImport),
     windows: {
       showMain: (target) => showMainWindow(target ? `/${target}` : ''),
       showSwap: () => showMainWindow('/today/swap'),
@@ -276,6 +301,47 @@ function start(): void {
       },
       setCardSize: (width, height) => card.setSize(width, height),
       openCard: () => card.open(pet.birdRect() ? 'pet' : 'tray'),
+    },
+    files: {
+      chooseSavePath: async (suggestedName) => {
+        if (isE2E) return testDialogs.save;
+        const options = {
+          title: 'Export ParaLeet data',
+          defaultPath: join(app.getPath('documents'), suggestedName),
+          filters: [{ name: 'ParaLeet database', extensions: ['sqlite3'] }],
+        };
+        const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+        const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+        return result.canceled || !result.filePath ? null : result.filePath;
+      },
+      chooseOpenPath: async () => {
+        if (isE2E) return testDialogs.open;
+        const options = {
+          title: 'Import ParaLeet data',
+          properties: ['openFile' as const],
+          // The backup an import leaves behind ends in ".before-import", so every file can be picked;
+          // what is picked is checked before anything changes.
+          filters: [
+            { name: 'ParaLeet database', extensions: ['sqlite3'] },
+            { name: 'All files', extensions: ['*'] },
+          ],
+        };
+        const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+        const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+        return result.canceled ? null : (result.filePaths[0] ?? null);
+      },
+      reveal: (path) => {
+        if (isE2E) testDialogs.revealed.push(path);
+        else shell.showItemInFolder(path);
+      },
+    },
+    // A moment later, so the window that asked gets its answer first. Quitting (not exiting)
+    // closes the database on the way out. End-to-end runs only quit: the test starts the app again.
+    restart: () => {
+      setTimeout(() => {
+        if (!isE2E) app.relaunch();
+        app.quit();
+      }, 200);
     },
     notifyChanged: () => {
       // A settings change may show or hide the pet; a report changes the icon and the streak.
@@ -421,6 +487,13 @@ function start(): void {
         tick();
       },
       openedUrls: () => [...openedUrls],
+      // The next answers of the save and open dialogs; an empty string is the user cancelling.
+      setDialogPaths: (paths: string) => {
+        const next = JSON.parse(paths) as { save?: string; open?: string };
+        if (next.save !== undefined) testDialogs.save = next.save === '' ? null : next.save;
+        if (next.open !== undefined) testDialogs.open = next.open === '' ? null : next.open;
+      },
+      revealedPaths: () => [...testDialogs.revealed],
       // Native windows and menus cannot be driven from the page, so tests reach them here.
       pet: () => {
         const window = pet.current();
@@ -486,7 +559,9 @@ function start(): void {
     uptimeSeconds: uptime(),
     hatched: ensurePet(database, ctx.randomSeed(), clock.now().toISOString()).hatchedAt !== null,
   });
-  if (quiet) updateDock();
+  // After an import the app comes back on Settings, where the Data group says what happened.
+  if (lastImport) showMainWindow('/settings');
+  else if (quiet) updateDock();
   else showMainWindow();
 }
 
