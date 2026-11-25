@@ -3,8 +3,12 @@ import { useEffect, useState } from 'react';
 export const SCREENS = ['today', 'problems', 'plan', 'stats', 'settings'] as const;
 export type ScreenId = (typeof SCREENS)[number];
 
-function fromHash(hash: string): ScreenId {
+/** Everything the hash can route to. The sprite gallery is a tool screen: routable, but not in the sidebar or Cmd+1..5. */
+export type RouteId = ScreenId | 'gallery';
+
+function fromHash(hash: string): RouteId {
   const name = hash.replace(/^#\/?/, '').split(/[/?]/)[0] ?? '';
+  if (name === 'gallery') return 'gallery';
   return (SCREENS as readonly string[]).includes(name) ? (name as ScreenId) : 'today';
 }
 
@@ -35,8 +39,8 @@ export function useHashAction(screen: ScreenId, action: string): number {
   return requests;
 }
 
-export function useScreen(): ScreenId {
-  const [screen, setScreen] = useState<ScreenId>(() => fromHash(window.location.hash));
+export function useScreen(): RouteId {
+  const [screen, setScreen] = useState<RouteId>(() => fromHash(window.location.hash));
   useEffect(() => {
     const onChange = (): void => setScreen(fromHash(window.location.hash));
     window.addEventListener('hashchange', onChange);

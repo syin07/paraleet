@@ -667,3 +667,27 @@ test.describe('swap failures', () => {
     await expect(dialog(page)).toHaveCount(0);
   });
 });
+
+test.describe("Today's bird", () => {
+  const birdOf = (page: Page): Locator =>
+    page.getByTestId('screen-today').getByRole('img', { name: 'Para the parakeet' });
+
+  for (const scenario of ['default', 'fed']) {
+    test(`is the pet's own bird in the "${scenario}" scenario`, async ({ page }) => {
+      await openScreen(page, 'today', scenario);
+      const pet = await page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getToday()).pet);
+      const bird = birdOf(page);
+      await expect(bird).toHaveAttribute('data-seed', String(pet.seed));
+      await expect(bird).toHaveAttribute('data-stage', pet.stage);
+      await expect(bird).toHaveAttribute('data-mood', pet.mood);
+      await expect(bird).toHaveAccessibleName(`Para the parakeet, ${pet.mood.replace('_', ' ')}`);
+    });
+  }
+
+  test('shows different moods in the two scenarios', async ({ page }) => {
+    await openScreen(page, 'today', 'default');
+    await expect(birdOf(page)).toHaveAttribute('data-mood', 'peckish');
+    await openScreen(page, 'today', 'fed');
+    await expect(birdOf(page)).toHaveAttribute('data-mood', 'content');
+  });
+});

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TodayView } from '../../../bridge/contract';
 import { api } from '../../bridge';
-import { PetPlaceholder } from '../../components/PetPlaceholder';
+import { Sprite } from '../../components/Sprite';
 import { SpeechBubble } from '../../components/SpeechBubble';
 import { PLATFORM_LABELS, problemTitle } from '../../lib/format';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
@@ -107,7 +107,7 @@ export function PetWindow() {
         data-hit
         data-testid="pet-bird"
         aria-label="Para. Click to open ParaLeet, drag to move."
-        className="cursor-grab touch-none border-0 bg-transparent p-0 outline-none active:cursor-grabbing"
+        className="block size-32 cursor-grab touch-none border-0 bg-transparent p-0 outline-none active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -120,7 +120,17 @@ export function PetWindow() {
           void api().showPetMenu();
         }}
       >
-        <PetPlaceholder size={BIRD_SIZE} />
+        {data && (
+          <Sprite
+            seed={data.pet.seed}
+            stage={data.pet.stage}
+            mood={data.pet.mood}
+            accessories={data.pet.equippedAccessories}
+            size={BIRD_SIZE}
+            animated
+            decorative
+          />
+        )}
       </button>
     </div>
   );

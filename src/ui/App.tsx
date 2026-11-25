@@ -1,10 +1,11 @@
 import { CalendarCheck, ChartColumn, ListChecks, Route, Settings, type LucideIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { api } from './bridge';
-import { PetPlaceholder } from './components/PetPlaceholder';
+import { SAMPLE_SEED, Sprite } from './components/Sprite';
 import { cx } from './lib/format';
-import { navigate, SCREENS, useScreen, type ScreenId } from './lib/navigation';
+import { navigate, SCREENS, useScreen, type RouteId, type ScreenId } from './lib/navigation';
 import { useBridgeQuery } from './lib/useBridgeQuery';
+import { GalleryScreen } from './screens/gallery/GalleryScreen';
 import { PlanScreen } from './screens/plan/PlanScreen';
 import { ProblemsScreen } from './screens/problems/ProblemsScreen';
 import { SettingsScreen } from './screens/settings/SettingsScreen';
@@ -37,7 +38,7 @@ function NavItem({ id, active }: { id: ScreenId; active: boolean }) {
   );
 }
 
-function Sidebar({ screen }: { screen: ScreenId }) {
+function Sidebar({ screen }: { screen: RouteId }) {
   const today = useBridgeQuery(() => api().getToday());
   const streak = today.data?.streak.current ?? 0;
   return (
@@ -45,7 +46,7 @@ function Sidebar({ screen }: { screen: ScreenId }) {
       {/* Room for the macOS window buttons; the strip drags the window. */}
       <div className="app-drag h-[52px] shrink-0" />
       <div className="flex h-10 items-center gap-2 px-3">
-        <PetPlaceholder size={20} />
+        <Sprite seed={SAMPLE_SEED} stage="adult" size={32} decorative />
         <span className="text-base font-semibold text-fg">ParaLeet</span>
       </div>
       <div className="mt-2 flex flex-1 flex-col gap-0.5 px-2">
@@ -64,12 +65,13 @@ function Sidebar({ screen }: { screen: ScreenId }) {
   );
 }
 
-const SCREEN_VIEWS: Record<ScreenId, () => React.JSX.Element> = {
+const SCREEN_VIEWS: Record<RouteId, () => React.JSX.Element> = {
   today: TodayScreen,
   problems: ProblemsScreen,
   plan: PlanScreen,
   stats: StatsScreen,
   settings: SettingsScreen,
+  gallery: GalleryScreen,
 };
 
 export function App() {
