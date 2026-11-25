@@ -6,10 +6,9 @@ export const PALETTE = {
   body: '#FFA116',
   bodyShade: '#E8870A', // rim shading on the back and underside, keeps the body round
   highlight: '#FFC766', // forehead and face mask
-  bellyPale: '#FFEDC4', // the four belly shades, picked by seed
-  bellyCream: '#FFDA94',
+  bellyPale: '#FFF6E0', // the three belly shades, picked by seed: all clearly lighter than the body
+  bellyCream: '#FFE29E',
   bellyHoney: '#FFC766',
-  bellyAmber: '#FFB644',
   wing: '#3E3E3E',
   wingBar: '#262626',
   wingEdge: '#5A5A5A', // feather edges, used sparingly so the barring reads at 96 px

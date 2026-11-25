@@ -67,12 +67,12 @@ type Maker = (stage: GrowthStage) => Pose[];
 
 const SLEEPING: Maker = (stage) => {
   const [fx, fy] = STAGES[stage].fx;
-  // Z's drift up and to the right; the small one leaves as the big one arrives.
+  // Z's drift up and to the right. The big one stays above the small one, so they never touch.
   const frames: Pose[] = [];
   for (let f = 0; f < 6; f++) {
     const effects: Effect[] = [];
-    if (f <= 3) effects.push({ kind: 'zSmall', x: fx + f, y: fy + 8 - Math.round(f * 1.5) });
-    if (f >= 2) effects.push({ kind: 'zBig', x: fx + 2 + (f - 2), y: fy + 6 - Math.round((f - 2) * 1.5) });
+    if (f <= 3) effects.push({ kind: 'zSmall', x: fx - 1 + f, y: fy + 10 - f });
+    if (f >= 2) effects.push({ kind: 'zBig', x: fx + (f - 2), y: fy + 1 - (f - 2) });
     frames.push(pose({ head: [2, 3], eyes: 'closed', puff: f >= 3 ? 1.2 : 0.6, effects }));
   }
   return frames;

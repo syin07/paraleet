@@ -46,7 +46,7 @@ function Sidebar({ screen }: { screen: RouteId }) {
       {/* Room for the macOS window buttons; the strip drags the window. */}
       <div className="app-drag h-[52px] shrink-0" />
       <div className="flex h-10 items-center gap-2 px-3">
-        <Sprite seed={SAMPLE_SEED} stage="adult" size={24} decorative />
+        <Sprite seed={SAMPLE_SEED} stage="adult" size={32} decorative />
         <span className="text-base font-semibold text-fg">ParaLeet</span>
       </div>
       <div className="mt-2 flex flex-1 flex-col gap-0.5 px-2">

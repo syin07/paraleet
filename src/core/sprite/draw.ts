@@ -33,8 +33,8 @@ const BEAK_FRONT: Record<'closed' | 'open', Rows> = {
 const BEAK_LEGEND = { e: 'cere', c: 'beak', b: 'beakShade', m: 'mouth' } as const;
 
 const GLYPHS: Record<EffectKind, { rows: Rows; legend: Partial<Record<string, ColorName>> }> = {
-  zSmall: { rows: ['XXX', '.X.', 'XXX'], legend: { X: 'sleepBlue' } },
-  zBig: { rows: ['XXXX', '..X.', '.X..', 'XXXX'], legend: { X: 'sleepBlue' } },
+  zSmall: { rows: ['XXXX', '..X.', '.X..', 'XXXX'], legend: { X: 'sleepBlue' } },
+  zBig: { rows: ['XXXXX', '...X.', '..X..', '.X...', 'XXXXX'], legend: { X: 'sleepBlue' } },
   heartBig: { rows: ['.X.X.', 'XXXXX', '.XXX.', '..X..'], legend: { X: 'heart' } },
   heartSmall: { rows: ['X.X', 'XXX', '.X.'], legend: { X: 'heart' } },
   note: { rows: ['.XX', '.X.', '.X.', 'XX.'], legend: { X: 'note' } },
@@ -77,7 +77,7 @@ function barred(barring: Barring, x: number, y: number): boolean {
 
 // ---- layers ---------------------------------------------------------------------------------
 
-function drawTail(g: Grid, spec: StageSpec, look: Look): void {
+function drawTail(g: Grid, spec: StageSpec, look: Look, clip?: (x: number, y: number) => boolean): void {
   const tail = spec.tail;
   if (!tail) return;
   const length = Math.max(1, Math.round(tail.base * TAIL_FACTOR[look.traits.tailLength]));
@@ -87,6 +87,7 @@ function drawTail(g: Grid, spec: StageSpec, look: Look): void {
     const left = Math.round(tail.x + tail.slope * i - width / 2);
     for (let k = 0; k < width; k++) {
       const bar = i % 3 === 2 && (k + i) % 2 === 0;
+      if (clip && !clip(left + k, tail.y + i)) continue;
       g.set(left + k, tail.y + i, bar ? 'wingBar' : 'wing');
     }
   }
@@ -240,7 +241,12 @@ function drawHead(g: Grid, spec: StageSpec, look: Look, pose: Pose): void {
 
 /** The whole egg: a wide lower ellipse under a narrower upper one. */
 export function inEgg(x: number, y: number): boolean {
-  return inEllipse(x, y, 16, 19.5, 10.5, 10) || inEllipse(x, y, 16, 14.5, 8.5, 8.5);
+  // One smooth curve, widest at row 18 and a little wider below it than above, so there are no seams.
+  const dy = y + 0.5 - 18;
+  const u = dy / (dy < 0 ? 12 : 11.5);
+  if (Math.abs(u) > 1) return false;
+  const halfWidth = 10.2 * Math.sqrt(1 - u * u) * (1 + 0.15 * u);
+  return Math.abs(x + 0.5 - 16) <= halfWidth;
 }
 
 // The jagged top edge of the lower half of the shell, as rows above or below 21 for x = 5 to 27.
@@ -265,10 +271,10 @@ function drawShell(g: Grid): void {
   shadedEgg(g, (x, y) => y >= rimY(x));
   // One crack running down from the rim.
   for (const [x, y] of [
+    [21, 24],
     [22, 25],
-    [23, 26],
+    [21, 26],
     [22, 27],
-    [23, 28],
   ] as const) {
     g.set(x, y, 'cere');
   }
@@ -299,17 +305,37 @@ const CROWN_LEGEND = { g: 'gold', d: 'goldDark', j: 'jewel' } as const;
 const CAP: Rows = ['..bbbbb..', 'bbbbbbbbb', '..ddddd..'];
 const CAP_LEGEND = { b: 'capBoard', d: 'capBand' } as const;
 const SCARF: Rows = ['ssssssss', 'sdsdsdsd', '......ss', '......sd'];
+// The band alone, longer, for when a bow tie covers its front end.
+const SCARF_BAND: Rows = ['ssssssssss', 'sdsdsdsdsd'];
 const SCARF_LEGEND = { s: 'scarf', d: 'scarfDark' } as const;
 const BOW: Rows = ['bb.bb', 'bbkbb', 'bb.bb'];
 const BOW_LEGEND = { b: 'bow', k: 'bowDark' } as const;
+
+/** A dark ring around a stamp's pixels, so it stands out from whatever it lies on. */
+function outlineStamp(g: Grid, rows: Rows, x: number, y: number): void {
+  const filled = (dx: number, dy: number): boolean => rows[dy]?.[dx] !== undefined && rows[dy]?.[dx] !== '.';
+  for (let dy = -1; dy <= rows.length; dy++) {
+    for (let dx = -1; dx <= (rows[0]?.length ?? 0); dx++) {
+      if (filled(dx, dy)) continue;
+      if (filled(dx - 1, dy) || filled(dx + 1, dy) || filled(dx, dy - 1) || filled(dx, dy + 1)) g.set(x + dx, y + dy, 'outline');
+    }
+  }
+}
 
 function drawAccessories(g: Grid, spec: StageSpec, accessories: readonly AccessoryId[]): void {
   const hx = spec.head.cx;
   const top = headTopRow(spec);
   const bottom = headBottomRow(spec);
   const has = (id: AccessoryId): boolean => accessories.includes(id);
-  if (has('scarf')) g.stamp(SCARF, hx + spec.scarf[0], bottom - 1 + spec.scarf[1], SCARF_LEGEND);
-  if (has('bow_tie')) g.stamp(BOW, hx + spec.bow[0], bottom + spec.bow[1], BOW_LEGEND);
+  const both = has('scarf') && has('bow_tie');
+  // Worn together, the scarf is only a band and the bow tie sits on it, outlined, at the throat.
+  if (has('scarf')) g.stamp(both ? SCARF_BAND : SCARF, hx + spec.scarf[0], bottom - 1 + spec.scarf[1], SCARF_LEGEND);
+  if (has('bow_tie')) {
+    const bx = hx + spec.bow[0];
+    const by = bottom + spec.bow[1] - (both ? 1 : 0);
+    if (both) outlineStamp(g, BOW, bx, by);
+    g.stamp(BOW, bx, by, BOW_LEGEND);
+  }
   // A cap and a crown cannot share one head: the cap wins.
   if (has('grad_cap')) {
     g.stamp(CAP, hx + spec.cap[0], top - 1 + spec.cap[1], CAP_LEGEND);
@@ -370,6 +396,8 @@ export function drawBird({ stage, look, pose, accessories, extra }: DrawOptions)
   g.oy = -pose.hop;
   drawTail(g, spec, look);
   drawBody(g, spec, look, pose);
+  // A puffed-up body must not paint over the tail: put the tail back wherever the rested body is not.
+  if (pose.puff > 0) drawTail(g, spec, look, (x, y) => !inBody(spec, x, y, 0, 0));
   drawWing(g, spec, look, pose);
   drawFeet(g, spec);
 

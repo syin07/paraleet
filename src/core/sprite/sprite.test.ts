@@ -12,7 +12,9 @@ import {
   SPRITE_SIZE,
   type SpriteFrame,
 } from './index';
-import { mulberry32 } from './traits';
+import { posesFor } from './moods';
+import { STAGES } from './stages';
+import { mulberry32, normalizeSeed } from './traits';
 
 const HEX = new Map<string, string>(Object.entries(PALETTE).map(([name, hex]) => [hex.toUpperCase(), name]));
 
@@ -149,18 +151,126 @@ describe('animation', () => {
     }
   });
 
-  it('changes between consecutive frames, with no big jump, including last to first', () => {
+  // The most pixels a mood really changes between neighbouring frames (last to first included),
+  // measured over 8 seeds with and without accessories. The bound is 20% above that, so a whole
+  // bird jumping 2 pixels (198 to 248 pixels) is caught in every mood that should not move it.
+  const MAX_CHANGE: Record<Mood, Record<GrowthStage, number>> = {
+    sleeping: { egg: 40, chick: 47, fledgling: 52, adult: 41 },
+    content: { egg: 110, chick: 165, fledgling: 182, adult: 202 },
+    peckish: { egg: 29, chick: 27, fledgling: 33, adult: 32 },
+    hungry: { egg: 159, chick: 203, fledgling: 218, adult: 231 },
+    checking: { egg: 103, chick: 106, fledgling: 109, adult: 108 },
+    eating: { egg: 141, chick: 191, fledgling: 185, adult: 189 },
+    nibbling: { egg: 122, chick: 168, fledgling: 165, adult: 169 },
+    missed_you: { egg: 124, chick: 191, fledgling: 208, adult: 242 },
+  };
+
+  it('changes between consecutive frames, within a bound set by what each mood really does', () => {
     for (const stage of GROWTH_STAGES) {
       for (const mood of MOODS) {
+        const bound = Math.ceil(MAX_CHANGE[mood][stage] * 1.2);
         const n = frameCount(stage, mood);
         for (let frame = 0; frame < n; frame++) {
-          const a = renderSprite(11, stage, mood, frame, ['crown']);
-          const b = renderSprite(11, stage, mood, frame + 1, ['crown']);
-          const diff = changed(a, b);
-          if (diff === 0) throw new Error(`${stage}/${mood}: frame ${frame} equals the next`);
-          if (diff > 260) throw new Error(`${stage}/${mood}: frame ${frame} jumps ${diff} pixels`);
+          for (const accessories of [[], ['crown', 'scarf', 'bow_tie'], ['grad_cap']] as AccessoryId[][]) {
+            const a = renderSprite(11, stage, mood, frame, accessories);
+            const b = renderSprite(11, stage, mood, frame + 1, accessories);
+            const diff = changed(a, b);
+            if (diff === 0) throw new Error(`${stage}/${mood}: frame ${frame} equals the next`);
+            if (diff > bound) throw new Error(`${stage}/${mood}: frame ${frame} changes ${diff} pixels, bound ${bound}`);
+          }
         }
       }
+    }
+  });
+
+  // Rows from here down hold the feet, the lower body and the tail.
+  const FLOOR: Record<GrowthStage, number> = { egg: 24, chick: 28, fledgling: 25, adult: 24 };
+  const STILL_MOODS: Mood[] = ['sleeping', 'peckish', 'checking', 'eating', 'nibbling'];
+
+  /** The pixels below the floor that must not move. A sleeper's body breathes, so it keeps only feet, tail, wing and shell. */
+  function stillPixels(f: SpriteFrame, stage: GrowthStage, mood: Mood): string {
+    const keepAll = mood !== 'sleeping';
+    const parts: string[] = [];
+    for (let y = FLOOR[stage]; y < 32; y++) {
+      for (let x = 0; x < 32; x++) {
+        const name = colorName(f, x, y);
+        // The outline follows the body, so it is left out: it moves when the chest leans.
+        if (name && name !== 'outline' && (keepAll || ['beakShade', 'wing', 'wingBar', 'wingEdge', 'shell', 'shellShade'].includes(name))) parts.push(`${x},${y},${name}`);
+      }
+    }
+    return parts.join(';');
+  }
+
+  /** True when every frame has the same still pixels as the first. */
+  function isPlanted(frames: SpriteFrame[], stage: GrowthStage, mood: Mood): boolean {
+    const first = stillPixels(frames[0] as SpriteFrame, stage, mood);
+    return frames.every((f) => stillPixels(f, stage, mood) === first);
+  }
+
+  function shiftDown(f: SpriteFrame, rows: number): SpriteFrame {
+    const pixels = new Uint8ClampedArray(4096);
+    for (let y = rows; y < 32; y++) pixels.set(f.pixels.subarray((y - rows) * 128, (y - rows + 1) * 128), y * 128);
+    return { width: 32, height: 32, pixels };
+  }
+
+  it('keeps the lower body, feet and tail identical in every frame of moods that do not hop or lean', () => {
+    for (const seed of [1, 2, 3, 4]) {
+      for (const stage of GROWTH_STAGES) {
+        for (const mood of STILL_MOODS) {
+          for (const accessories of [[], ['crown', 'scarf', 'bow_tie']] as AccessoryId[][]) {
+            const frames = Array.from({ length: frameCount(stage, mood) }, (_, i) => renderSprite(seed, stage, mood, i, accessories));
+            expect(isPlanted(frames, stage, mood), `${seed}/${stage}/${mood}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('proves the planted check has teeth: one frame shifted by 2 pixels fails it', () => {
+    for (const stage of GROWTH_STAGES) {
+      for (const mood of STILL_MOODS) {
+        const frames = Array.from({ length: frameCount(stage, mood) }, (_, i) => renderSprite(1, stage, mood, i));
+        expect(isPlanted(frames, stage, mood)).toBe(true);
+        const moved = frames.map((f, i) => (i === 1 ? shiftDown(f, 2) : f));
+        expect(isPlanted(moved, stage, mood), `${stage}/${mood}`).toBe(false);
+      }
+    }
+  });
+
+  it("never lets the two sleeping Z's touch", () => {
+    const components = (f: SpriteFrame): number => {
+      const cells = new Set(pixelsOf(f, 'sleepBlue').map(([x, y]) => `${x},${y}`));
+      let count = 0;
+      while (cells.size > 0) {
+        const start = cells.values().next().value as string;
+        const stack = [start];
+        cells.delete(start);
+        while (stack.length > 0) {
+          const [cx, cy] = (stack.pop() as string).split(',').map(Number) as [number, number];
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              const key = `${cx + dx},${cy + dy}`;
+              if (cells.delete(key)) stack.push(key);
+            }
+          }
+        }
+        count++;
+      }
+      return count;
+    };
+    for (const stage of GROWTH_STAGES) {
+      // Frames 0-1 show the small Z, 2-3 both, 4-5 the big one.
+      const expected = [1, 1, 2, 2, 1, 1];
+      expected.forEach((n, frame) => {
+        expect(components(renderSprite(5, stage, 'sleeping', frame)), `${stage} frame ${frame}`).toBe(n);
+      });
+    }
+  });
+
+  it('keeps the tail in front of a puffed-up sleeper', () => {
+    for (const stage of ['fledgling', 'adult'] as GrowthStage[]) {
+      const tail = (f: SpriteFrame): string => pixelsOf(f, 'wing', 'wingBar').filter(([x, y]) => x >= 20 && y >= 18).join(';');
+      expect(tail(renderSprite(4, stage, 'sleeping', 4))).toBe(tail(renderSprite(4, stage, 'sleeping', 0)));
     }
   });
 
@@ -255,6 +365,45 @@ describe('accessories', () => {
     }
   });
 
+  it('never covers the eye region, whatever the mood or accessory', () => {
+    const combos: AccessoryId[][] = [['scarf'], ['bow_tie'], ['crown'], ['grad_cap'], ['scarf', 'bow_tie'], ['crown', 'grad_cap', 'scarf', 'bow_tie']];
+    for (const stage of GROWTH_STAGES) {
+      const spec = STAGES[stage];
+      for (const mood of MOODS) {
+        const poses = posesFor(stage, mood);
+        for (let frame = 0; frame < poses.length; frame++) {
+          const pose = poses[frame]!;
+          // The eye, its lid or brow, and the front-facing second eye: a box that follows the head.
+          const x0 = spec.head.cx + (pose.face === 'front' ? -6 : spec.eye[0] - 1) + pose.head[0];
+          const width = pose.face === 'front' ? 12 : 6;
+          const brow = pose.eyes === 'narrow' ? 1 : 0;
+          const y0 = spec.head.cy + spec.eye[1] - brow + pose.head[1] - pose.hop;
+          const plain = renderSprite(21, stage, mood, frame);
+          for (const worn of combos) {
+            const f = renderSprite(21, stage, mood, frame, worn);
+            for (let y = y0; y < y0 + (spec.bigEye ? 4 : 3) + brow; y++) {
+              for (let x = x0; x < x0 + width; x++) {
+                expect(colorName(f, x, y), `${worn.join('+')}/${stage}/${mood}/${frame} at ${x},${y}`).toBe(colorName(plain, x, y));
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('keeps a scarf and a bow tie both visible when worn together', () => {
+    for (const stage of GROWTH_STAGES) {
+      for (const mood of MOODS) {
+        for (let frame = 0; frame < frameCount(stage, mood); frame++) {
+          const f = renderSprite(21, stage, mood, frame, ['scarf', 'bow_tie']);
+          expect(pixelsOf(f, 'scarf').length, `${stage}/${mood}/${frame} scarf`).toBeGreaterThanOrEqual(5);
+          expect(pixelsOf(f, 'bow').length, `${stage}/${mood}/${frame} bow`).toBeGreaterThanOrEqual(8);
+        }
+      }
+    }
+  });
+
   it('keeps an accessory on the head when the head moves', () => {
     // The crown's gold moves with the head: in the eating dip it sits lower than at rest.
     for (const stage of GROWTH_STAGES) {
@@ -292,6 +441,18 @@ describe('hatching', () => {
     }
   });
 
+  it('draws a clean egg: the outline only widens to the middle and then narrows', () => {
+    const widths: number[] = [];
+    const first = renderHatching(1, 0);
+    for (let y = 0; y < 32; y++) {
+      const xs = Array.from({ length: 32 }, (_, x) => x).filter((x) => hexAt(first, x, y));
+      if (xs.length > 0) widths.push((xs[xs.length - 1] as number) - (xs[0] as number) + 1);
+    }
+    const peak = widths.indexOf(Math.max(...widths));
+    for (let i = 1; i <= peak; i++) expect(widths[i], `row ${i}`).toBeGreaterThanOrEqual(widths[i - 1] as number);
+    for (let i = peak + 1; i < widths.length; i++) expect(widths[i], `row ${i}`).toBeLessThanOrEqual(widths[i - 1] as number);
+  });
+
   it('keeps changing and never leaves the margin', () => {
     for (let f = 0; f < HATCH_FRAMES; f++) {
       const a = renderHatching(1, f);
@@ -317,7 +478,7 @@ describe('growth', () => {
       const traits = describeTraits(seed);
       const cheek = traits.cheekColor === 'green' ? 'cheekGreen' : 'cheekRed';
       const other = traits.cheekColor === 'green' ? 'cheekRed' : 'cheekGreen';
-      const belly = { pale: 'bellyPale', cream: 'bellyCream', honey: 'bellyHoney', amber: 'bellyAmber' }[traits.bellyShade];
+      const belly = { pale: 'bellyPale', cream: 'bellyCream', honey: 'bellyHoney' }[traits.bellyShade];
       for (const stage of GROWTH_STAGES) {
         const f = renderSprite(seed, stage, 'content', 0);
         expect(pixelsOf(f, cheek).length).toBeGreaterThan(0);
@@ -371,6 +532,25 @@ describe('growth', () => {
 describe('traits (SAN-113)', () => {
   const seeds500 = Array.from({ length: 500 }, (_, i) => Math.floor(mulberry32(i + 1)() * 4294967296));
   const traits = seeds500.map(describeTraits);
+
+  it('keeps every belly shade clearly lighter than the body, and at least three apart', () => {
+    const lum = (hex: string): number => {
+      const n = parseInt(hex.slice(1), 16);
+      return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+    };
+    const shades = [PALETTE.bellyPale, PALETTE.bellyCream, PALETTE.bellyHoney];
+    for (const shade of shades) expect(lum(shade)).toBeGreaterThan(lum(PALETTE.body) + 25);
+    for (let i = 1; i < shades.length; i++) expect(lum(shades[i - 1] as string) - lum(shades[i] as string)).toBeGreaterThan(15);
+    expect(new Set(traits.map((x) => x.bellyShade)).size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('mixes seeds beyond 32 bits and below zero instead of folding them onto small seeds', () => {
+    expect(normalizeSeed(-1)).not.toBe(normalizeSeed(0));
+    expect(normalizeSeed(2 ** 32 + 5)).not.toBe(normalizeSeed(5));
+    expect(normalizeSeed(2 ** 32 + 5)).not.toBe(normalizeSeed(4));
+    expect(normalizeSeed(3.9)).toBe(normalizeSeed(3));
+    expect(normalizeSeed(NaN)).toBe(normalizeSeed(0));
+  });
 
   it('is stable for a seed', () => {
     for (const seed of seeds500.slice(0, 50)) expect(describeTraits(seed)).toEqual(describeTraits(seed));

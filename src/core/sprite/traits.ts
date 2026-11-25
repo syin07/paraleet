@@ -12,11 +12,16 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-/** Any number becomes a well-mixed 32-bit integer, so that nearby seeds give different birds. */
+/**
+ * Any number becomes a well-mixed 32-bit integer, so that nearby seeds give different birds.
+ * Fractions are cut off. The part beyond 32 bits is mixed in only when it is not zero, so every
+ * seed from 0 to 2^32 - 1 keeps the bird it always had, and -1 or 2^32 + 5 are different birds
+ * from 0 and 5 (they can still share a bird with some other seed by chance, as any two seeds can).
+ */
 export function normalizeSeed(seed: number): number {
   const whole = Number.isFinite(seed) ? Math.trunc(seed) : 0;
-  // Fold the part beyond 32 bits in, so that 5 and 5 + 2^32 are still different birds.
-  let h = (whole >>> 0) ^ (Math.floor(whole / 4294967296) >>> 0);
+  const high = Math.floor(whole / 4294967296) | 0;
+  let h = (whole >>> 0) ^ Math.imul(high, 0x9e3779b1);
   h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
   return (h ^ (h >>> 16)) >>> 0;
@@ -25,7 +30,7 @@ export function normalizeSeed(seed: number): number {
 export const CHEEK_SHAPES = ['dot', 'bar', 'double', 'crescent'] as const;
 export const CHEEK_COLORS = ['green', 'red'] as const;
 export const BARRINGS = ['stripes', 'scallops', 'spots', 'chevrons'] as const;
-export const BELLY_SHADES = ['pale', 'cream', 'honey', 'amber'] as const;
+export const BELLY_SHADES = ['pale', 'cream', 'honey'] as const;
 export const TAIL_LENGTHS = ['short', 'medium', 'long'] as const;
 
 export type CheekShape = (typeof CHEEK_SHAPES)[number];
@@ -59,7 +64,6 @@ export const BELLY_COLOR: Record<BellyShade, ColorName> = {
   pale: 'bellyPale',
   cream: 'bellyCream',
   honey: 'bellyHoney',
-  amber: 'bellyAmber',
 };
 
 /** How long the tail is, as a share of the stage's full tail. */

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AccessoryId, GrowthStage, Mood } from '../../core/types';
+import { wrapFrame } from '../lib/frames';
 import { frameCount, renderSprite, SPRITE_FPS, SPRITE_SIZE, type SpriteFrame } from '../../core/sprite';
 
 /** The seed used where no real one is known yet (the sidebar logo, empty states). */
@@ -25,6 +26,7 @@ export function PixelCanvas({
   decorative = false,
   className,
   testId,
+  data,
 }: {
   frame: SpriteFrame;
   /** CSS pixels, both sides. */
@@ -34,6 +36,8 @@ export function PixelCanvas({
   decorative?: boolean;
   className?: string;
   testId?: string;
+  /** Extra `data-*` attributes, without the prefix. */
+  data?: Record<string, string | number>;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -50,6 +54,7 @@ export function PixelCanvas({
       className={`pixelated shrink-0 ${className ?? ''}`}
       {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label })}
       data-testid={testId}
+      {...Object.fromEntries(Object.entries(data ?? {}).map(([k, v]) => [`data-${k}`, v]))}
     />
   );
 }
@@ -97,7 +102,7 @@ export function Sprite({
     return Array.from({ length: frameCount(stage, mood) }, (_, i) => renderSprite(seed, stage, mood, i, list));
   }, [seed, stage, mood, worn]);
 
-  const index = (playing ? tick : frame) % frames.length;
+  const index = wrapFrame(playing ? tick : frame, frames.length);
   return (
     <PixelCanvas
       frame={frames[index] as SpriteFrame}
@@ -106,6 +111,7 @@ export function Sprite({
       decorative={decorative}
       className={className}
       testId={testId}
+      data={{ seed, stage, mood }}
     />
   );
 }
