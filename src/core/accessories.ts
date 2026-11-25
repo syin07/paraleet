@@ -1,5 +1,6 @@
 // Accessories unlock at milestones and stay unlocked (PRD section 6).
-import { ACCESSORY_IDS, type AccessoryId, type Rating } from './types';
+import { applyAttempt, EMPTY_PET_FACTS, isGrowthSolve } from './petFacts';
+import { ACCESSORY_IDS, type AccessoryId, type ParaDay, type Rating } from './types';
 
 export interface MilestoneFacts {
   /** True once any growth solve (rated Hard, Good or Easy) was on a problem whose normalized difficulty is 4 or 5. */
@@ -46,4 +47,37 @@ export function unlockedAfterAttempt(
 /** The accessories in `after` that are not in `before`, for celebrating a new unlock. */
 export function newlyUnlocked(before: readonly AccessoryId[], after: readonly AccessoryId[]): AccessoryId[] {
   return ACCESSORY_IDS.filter((id) => after.includes(id) && !before.includes(id));
+}
+
+/** A problem counts as Hard for the scarf when its normalized difficulty is 4 or 5. */
+export const HARD_DIFFICULTY_NORM = 4;
+
+/** One attempt as the unlock rules see it. */
+export interface UnlockAttempt {
+  paraDay: ParaDay;
+  rating: Rating;
+  /** True when the attempted problem's normalized difficulty is 4 or 5. */
+  hardProblem: boolean;
+}
+
+/**
+ * Every accessory the attempts have unlocked, replayed in the order they were recorded exactly
+ * as reporting them one by one would have. `plansFinished` is the number of finished plans today;
+ * it is applied to every attempt, which can only unlock the graduation cap earlier in the replay
+ * and gives the same final answer.
+ */
+export function replayUnlocks(attempts: readonly UnlockAttempt[], plansFinished = 0): AccessoryId[] {
+  let facts = EMPTY_PET_FACTS;
+  let solvedHardProblem = false;
+  let unlocked: AccessoryId[] = [];
+  for (const attempt of attempts) {
+    facts = applyAttempt(facts, attempt);
+    if (attempt.hardProblem && isGrowthSolve(attempt.rating)) solvedHardProblem = true;
+    unlocked = unlockedAfterAttempt(
+      unlocked,
+      { solvedHardProblem, longestStreak: facts.longestStreak, plansFinished },
+      attempt.rating,
+    );
+  }
+  return unlocked;
 }

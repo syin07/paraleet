@@ -5,7 +5,10 @@ import {
   newlyUnlocked,
   unlockedAfterAttempt,
   type MilestoneFacts,
+  replayUnlocks,
+  type UnlockAttempt,
 } from './accessories';
+import { addDays } from './day';
 import type { AccessoryId, Rating } from './types';
 
 const none: MilestoneFacts = {
@@ -128,5 +131,69 @@ describe('unlockedAfterAttempt', () => {
   it('Again never removes anything already unlocked', () => {
     expect(unlockedAfterAttempt(['crown', 'scarf'], none, 'again')).toEqual(['scarf', 'crown']);
     expect(unlockedAfterAttempt(['crown'], none, 'good')).toEqual(['crown']);
+  });
+});
+
+describe('replayUnlocks', () => {
+  const day = (offset: number): string => addDays('2026-01-01', offset);
+  const run = (count: number, rating: UnlockAttempt['rating'], from = 0): UnlockAttempt[] =>
+    Array.from({ length: count }, (_, index) => ({ paraDay: day(from + index), rating, hardProblem: false }));
+
+  it('unlocks nothing from no attempts', () => {
+    expect(replayUnlocks([])).toEqual([]);
+  });
+
+  it('unlocks the bow tie on the seventh day in a row and the crown on the thirtieth', () => {
+    expect(replayUnlocks(run(6, 'good'))).toEqual([]);
+    expect(replayUnlocks(run(7, 'good'))).toEqual(['bow_tie']);
+    expect(replayUnlocks(run(29, 'good'))).toEqual(['bow_tie']);
+    expect(replayUnlocks(run(30, 'good'))).toEqual(['bow_tie', 'crown']);
+  });
+
+  it('keeps what a broken streak had already unlocked', () => {
+    expect(replayUnlocks([...run(7, 'easy'), ...run(2, 'easy', 20)])).toEqual(['bow_tie']);
+  });
+
+  it('unlocks the scarf for a solved Hard problem, not for an Again on one', () => {
+    expect(replayUnlocks([{ paraDay: day(0), rating: 'again', hardProblem: true }])).toEqual([]);
+    expect(replayUnlocks([{ paraDay: day(0), rating: 'hard', hardProblem: true }])).toEqual(['scarf']);
+    expect(replayUnlocks([{ paraDay: day(0), rating: 'easy', hardProblem: false }])).toEqual([]);
+  });
+
+  it('waits for an attempt that is not Again before unlocking a streak milestone', () => {
+    // Day 7 is an Again: the streak reaches 7 but nothing unlocks until the next other attempt.
+    const sixGood = run(6, 'good');
+    const againOnSeven: UnlockAttempt = { paraDay: day(6), rating: 'again', hardProblem: false };
+    expect(replayUnlocks([...sixGood, againOnSeven])).toEqual([]);
+    expect(replayUnlocks([...sixGood, againOnSeven, { paraDay: day(6), rating: 'good', hardProblem: false }])).toEqual([
+      'bow_tie',
+    ]);
+    // Even after the streak is later lost, the longest streak still counts.
+    expect(replayUnlocks([...sixGood, againOnSeven, { paraDay: day(40), rating: 'good', hardProblem: false }])).toEqual([
+      'bow_tie',
+    ]);
+  });
+
+  it('unlocks the graduation cap once a plan is finished and an attempt that is not Again follows', () => {
+    expect(replayUnlocks(run(1, 'again'), 1)).toEqual([]);
+    expect(replayUnlocks(run(1, 'good'), 1)).toEqual(['grad_cap']);
+    expect(replayUnlocks([], 1)).toEqual([]);
+  });
+
+  it('gives the same answer as reporting the attempts one at a time', () => {
+    const attempts: UnlockAttempt[] = Array.from({ length: 80 }, (_, index) => ({
+      paraDay: day(index + (index > 40 ? 5 : 0)),
+      rating: (['good', 'again', 'hard', 'easy'] as const)[(index * 7) % 4] ?? 'good',
+      hardProblem: index === 33,
+    }));
+    for (let length = 0; length <= attempts.length; length += 1) {
+      const prefix = attempts.slice(0, length);
+      const replayed = replayUnlocks(prefix);
+      // Never loses one as more attempts arrive.
+      if (length > 0) {
+        for (const id of replayUnlocks(attempts.slice(0, length - 1))) expect(replayed).toContain(id);
+      }
+    }
+    expect(replayUnlocks(attempts)).toEqual(['scarf', 'bow_tie', 'crown']);
   });
 });

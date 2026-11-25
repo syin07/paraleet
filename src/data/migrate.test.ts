@@ -25,6 +25,16 @@ const FIXTURES: Record<number, (db: Db) => void> = {
       INSERT INTO settings (key, value) VALUES ('dayBoundaryHour', '5');
     `);
   },
+  2: (db) => {
+    FIXTURES[1]?.(db);
+    db.exec(`
+      UPDATE pet SET greeted_day = '2026-11-02', reminder_first_day = '2026-11-01', reminder_evening_day = '2026-11-01',
+        hatched_at = '2026-11-01T00:05:00.000Z';
+      UPDATE problems SET solved_count = 12345 WHERE id = 1;
+      INSERT INTO catalog_sources (platform, source, generated_at, problem_count, loaded_at)
+      VALUES ('leetcode', 'test', '2026-11-01T00:00:00.000Z', 1, '2026-11-01T00:00:01.000Z');
+    `);
+  },
 };
 
 function expectDataSurvived(db: Db): void {
@@ -207,6 +217,55 @@ describe('schema rules', () => {
       }),
     ).toThrow(/synchronous/);
     expect(db.all('SELECT * FROM settings')).toEqual([]);
+    db.close();
+  });
+});
+
+describe('migration 2', () => {
+  function atVersion1(): Db {
+    const db = new Db(':memory:');
+    migrate(db, MIGRATIONS, 1);
+    return db;
+  }
+
+  it('marks a pet that has already been fed as hatched, and leaves a new one to hatch', () => {
+    const fed = atVersion1();
+    FIXTURES[1]?.(fed);
+    migrate(fed);
+    expect(fed.get<{ hatched_at: string | null }>('SELECT hatched_at FROM pet')?.hatched_at).toBe(
+      '2026-11-01T00:00:00.000Z',
+    );
+    fed.close();
+
+    const unfed = atVersion1();
+    unfed.exec("INSERT INTO pet (id, seed, created_at) VALUES (1, 7, '2026-11-20T00:00:00.000Z')");
+    migrate(unfed);
+    expect(unfed.get<{ hatched_at: string | null }>('SELECT hatched_at FROM pet')?.hatched_at).toBeNull();
+    unfed.close();
+  });
+
+  it('starts every pet with no greeting and no reminder sent, and problems with no solved count', () => {
+    const db = atVersion1();
+    FIXTURES[1]?.(db);
+    migrate(db);
+    expect(
+      db.get('SELECT greeted_day, reminder_first_day, reminder_evening_day FROM pet'),
+    ).toEqual({ greeted_day: null, reminder_first_day: null, reminder_evening_day: null });
+    expect(db.get<{ solved_count: number | null }>('SELECT solved_count FROM problems WHERE id = 1')?.solved_count).toBeNull();
+    expect(db.get<{ n: number }>('SELECT COUNT(*) AS n FROM catalog_sources')?.n).toBe(0);
+    db.close();
+  });
+
+  it('refuses a negative solved count and an unknown catalog platform', () => {
+    const db = new Db(':memory:');
+    migrate(db);
+    FIXTURES[1]?.(db);
+    expect(() => db.exec('UPDATE problems SET solved_count = -1 WHERE id = 1')).toThrow();
+    expect(() =>
+      db.exec(
+        "INSERT INTO catalog_sources (platform, source, generated_at, problem_count, loaded_at) VALUES ('other', 's', 't', 0, 't')",
+      ),
+    ).toThrow();
     db.close();
   });
 });

@@ -18,7 +18,7 @@ Para lives in a small window that floats over everything: transparent, no frame,
 
 5. **The position is saved when a drag ends,** in the `petWindowPosition` setting (the one database file). It is not saved on every move.
 
-6. **The bird, not the window, must be on a screen.** The window is 240×250 and mostly transparent; the bird is a 128-point box in it (`PET_BIRD_BOX`). `keepOnScreen` in `src/main/windows/placement.ts` leaves the window alone while at least 48 points of the bird show on some screen. Otherwise it moves the window the shortest way that puts the whole bird on the nearest screen. It runs when the window is created, when a drag ends, on every tick and when displays change. With nothing saved, the window goes to the bottom-right corner of the primary screen.
+6. **The bird, not the window, must be on a screen.** The window is 240×280 and mostly transparent; the bird is a 128-point box in it (`PET_BIRD_BOX`). `keepOnScreen` in `src/main/windows/placement.ts` leaves the window alone while at least 48 points of the bird show on some screen. Otherwise it moves the window the shortest way that puts the whole bird on the nearest screen. It runs when the window is created, when a drag ends, on every tick and when displays change. With nothing saved, the window goes to the bottom-right corner of the primary screen.
 
 7. **macOS moves a window fully onto the screen as it is shown.** So after `showInactive()` the window is put back at its exact position (`showAt`). Without this a bird left at a screen edge jumps inward on every launch.
 

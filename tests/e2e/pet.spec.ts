@@ -36,7 +36,7 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
       focusable: false,
       focused: false,
     });
-    expect(facts.bounds).toMatchObject({ width: 240, height: 250 });
+    expect(facts.bounds).toMatchObject({ width: 240, height: 280 });
 
     // The page itself is transparent: only the bird is drawn.
     const background = await pet.evaluate(() => {
@@ -58,8 +58,8 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
       const alpha = (x: number, y: number): number => bitmap[(y * width + x) * 4 + 3] ?? -1;
       const scale = width / 240;
       let solid = 0;
-      // The bird's box: 128 points wide from 56, 128 tall from 114.
-      for (let y = Math.round(114 * scale); y < Math.round(242 * scale); y += 1) {
+      // The bird's box: 128 points wide from 56, 128 tall from 144.
+      for (let y = Math.round(144 * scale); y < Math.round(272 * scale); y += 1) {
         for (let x = Math.round(56 * scale); x < Math.round(184 * scale); x += 1) {
           if (alpha(x, y) === 255) solid += 1;
         }
@@ -80,7 +80,8 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
 
     // Hovering shows today's problem and its platform.
     await pet.getByTestId('pet-bird').hover();
-    await expect(pet.getByTestId('pet-bubble')).toHaveText('1. Two Sum on LeetCode?');
+    await expect(pet.getByTestId('pet-bubble')).toContainText('Two Sum');
+    await expect(pet.getByTestId('pet-bubble')).toContainText('LeetCode');
     await expect.poll(async () => (await running?.pet())?.clickThrough).toBe(false);
     await pet.mouse.move(4, 4);
     await expect.poll(async () => (await running?.pet())?.clickThrough).toBe(true);
@@ -102,8 +103,8 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
     const birdOnAScreen = async (): Promise<boolean> => {
       const bounds = (await running!.pet()).bounds!;
       const areas = await running!.app.evaluate(({ screen }) => screen.getAllDisplays().map((d) => d.workArea));
-      // The bird is drawn from 56 to 184 points across and 114 to 242 down the 240×250 window.
-      const bird = { left: bounds.x + 56, right: bounds.x + 184, top: bounds.y + 114, bottom: bounds.y + 242 };
+      // The bird is drawn from 56 to 184 points across and 144 to 272 down the 240×280 window.
+      const bird = { left: bounds.x + 56, right: bounds.x + 184, top: bounds.y + 144, bottom: bounds.y + 272 };
       return areas.some(
         (area) =>
           bird.left >= area.x &&
@@ -184,8 +185,17 @@ test('the pet opens the main window, offers its menu, and can be hidden', async 
     await main.getByRole('button', { name: 'I solved it' }).click();
     await main.getByRole('radio', { name: /^Good/ }).click();
     await main.getByRole('button', { name: 'Feed Para' }).click();
+    // Para checks the report and eats, speaking without being hovered; the test clock is moved by
+    // hand, so each step waits for it.
+    const bubble = pet.getByTestId('pet-bubble');
+    await expect(bubble).toHaveAttribute('data-mood', 'checking');
+    await running.setNow('2026-11-25T20:00:02.500Z');
+    await expect(bubble).toHaveAttribute('data-mood', 'eating');
+    await running.setNow('2026-11-25T20:00:06.000Z');
+    await expect(bubble).toHaveCount(0);
     await pet.getByTestId('pet-bird').hover();
-    await expect(pet.getByTestId('pet-bubble')).toHaveText('1-day streak!');
+    await expect(bubble).toHaveAttribute('data-mood', 'content');
+    await expect(bubble).toContainText('1-day streak');
 
     // Closing the main window leaves Para running, with no Dock icon while only the pet shows.
     expect(await running.dockVisible()).toBe(true);

@@ -1,12 +1,19 @@
 // Launch-time self-check. `attempts` is the source of truth (PRD section 10): the stored pet
 // facts and the review cards are derived from it, so they can always be rebuilt from it.
+import { newlyUnlocked, replayUnlocks } from '../../core/accessories';
 import { recomputePetFacts } from '../../core/petFacts';
 import { scheduleFirstAttempt, scheduleReview } from '../../core/scheduler';
-import type { PetFacts, ReviewCard } from '../../core/types';
-import { listAttemptFacts, listAttemptsForProblem, listProblemsMissingCards } from '../../data/repos/attempts';
+import { ACCESSORY_IDS, type AccessoryId, type PetFacts, type ReviewCard } from '../../core/types';
+import {
+  listAttemptFacts,
+  listAttemptsForProblem,
+  listProblemsMissingCards,
+  listUnlockAttempts,
+} from '../../data/repos/attempts';
 import { saveCard } from '../../data/repos/cards';
-import { savePetFacts } from '../../data/repos/pet';
+import { savePetFacts, saveUnlockedAccessories } from '../../data/repos/pet';
 import { currentMoment, type AppContext } from './context';
+import { knownAccessories } from './pet';
 import { schedulerOptions } from './report';
 
 export interface ReconcileResult {
@@ -14,6 +21,8 @@ export interface ReconcileResult {
   petFactsRepaired: boolean;
   /** How many review cards were rebuilt for problems that had attempts but no card. */
   cardsRebuilt: number;
+  /** Accessories the attempts had earned that were not stored as unlocked, now added. */
+  accessoriesRestored: AccessoryId[];
 }
 
 function sameFacts(a: PetFacts, b: PetFacts): boolean {
@@ -53,6 +62,15 @@ export function reconcile(ctx: AppContext): ReconcileResult {
       if (card) saveCard(ctx.db, card, moment.now.toISOString());
     }
 
-    return { petFactsRepaired, cardsRebuilt: missing.length };
+    // Accessories never go away, so this only ever adds: anything the attempts earned that is
+    // not stored (a database from before accessories existed, or a lost write).
+    const stored = knownAccessories(moment.pet.unlockedAccessories);
+    const earned = replayUnlocks(listUnlockAttempts(ctx.db));
+    const accessoriesRestored = newlyUnlocked(stored, earned);
+    if (accessoriesRestored.length > 0) {
+      saveUnlockedAccessories(ctx.db, ACCESSORY_IDS.filter((id) => stored.includes(id) || earned.includes(id)));
+    }
+
+    return { petFactsRepaired, cardsRebuilt: missing.length, accessoriesRestored };
   });
 }

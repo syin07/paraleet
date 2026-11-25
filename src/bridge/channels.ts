@@ -27,6 +27,7 @@ export const BRIDGE_METHODS = [
   'parseProblemUrl',
   'addProblem',
   'setEquippedAccessories',
+  'acknowledgeGreeting',
   'showMainWindow',
   'movePetWindowBy',
   'endPetDrag',

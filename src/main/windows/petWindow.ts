@@ -10,13 +10,13 @@ import type { Clock } from '../clock';
 import { hardenWindow, loadRenderer } from './mainWindow';
 import { keepOnScreen, type Rect } from './placement';
 
-/** Room for the bird (128 points) and a speech bubble above it. */
-export const PET_WINDOW_SIZE = { width: 240, height: 250 };
+/** Room for the bird (128 points) and a speech bubble of up to seven short lines above it. */
+export const PET_WINDOW_SIZE = { width: 240, height: 280 };
 /**
  * Where the page draws the bird inside the window: 128 points, centred, 8 above the bottom edge
  * (see `src/ui/windows/pet/PetWindow.tsx`). Everything else in the window is transparent.
  */
-export const PET_BIRD_BOX: Rect = { x: 56, y: 114, width: 128, height: 128 };
+export const PET_BIRD_BOX: Rect = { x: 56, y: 144, width: 128, height: 128 };
 export const HIDE_FOR_MS = 60 * 60 * 1000;
 
 export interface PetWindowActions {

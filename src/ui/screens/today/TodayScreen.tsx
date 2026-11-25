@@ -1,11 +1,14 @@
 // The Today screen (docs/design-references.md, section 2): the pet, today's problem, other due
 // reviews, the streak and a quick way to log any other problem.
 import { useRef, useState } from 'react';
+import type { ReportResult } from '../../../bridge/contract';
+import { ACCESSORIES } from '../../../core/types';
 import { api } from '../../bridge';
 import { AddProblemDialog } from '../../components/AddProblemDialog';
 import { Button } from '../../components/Button';
 import { Card, EmptyState, Page, QueryNotice } from '../../components/Layout';
 import { ReportDialog } from '../../components/ReportForm';
+import { Toast, useToast } from '../../components/Toast';
 import { formatDay } from '../../lib/format';
 import { useHashAction } from '../../lib/navigation';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
@@ -33,7 +36,21 @@ export function TodayScreen() {
   // The pasted link of the add dialog, or null while it is closed.
   const [addingUrl, setAddingUrl] = useState<string | null>(null);
   const quickLogInput = useRef<HTMLInputElement>(null);
+  const toast = useToast(4000);
   const today = query.data;
+
+  /** After a report: say so when Para grew or an accessory was unlocked. */
+  function celebrate(result: ReportResult): void {
+    const news: string[] = [];
+    if (result.growth.stage !== result.growth.previousStage) {
+      news.push(`Para grew into ${result.growth.stage === 'adult' ? 'an adult' : `a ${result.growth.stage}`}!`);
+    }
+    if (result.unlocked.length > 0) {
+      const names = result.unlocked.map((id) => ACCESSORIES[id].label).join(' and ');
+      news.push(`New for Para: ${names}. Put it on in Settings.`);
+    }
+    if (news.length > 0) toast.show(news.join(' '));
+  }
 
   if (!today) {
     return (
@@ -99,9 +116,11 @@ export function TodayScreen() {
           problemId={reportFor}
           // A late close from this dialog must not close one opened for another problem since.
           onClose={() => setReportFor((current) => (current === reportFor ? null : current))}
+          onReported={celebrate}
         />
       )}
       {swapping && <SwapDialog currentId={assignment?.problem.id ?? null} onClose={() => setSwapping(false)} />}
+      <Toast message={toast.message} />
     </Page>
   );
 }

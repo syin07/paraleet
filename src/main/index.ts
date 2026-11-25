@@ -7,7 +7,15 @@ import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { registerBridge } from './bridge';
 import { FakeClock, systemClock, type Clock } from './clock';
-import { createDayWatcher, createHandlers, reconcile, type AppContext } from './services';
+import {
+  createDayWatcher,
+  createHandlers,
+  createMoodWatcher,
+  newSession,
+  nextCelebrationStep,
+  reconcile,
+  type AppContext,
+} from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
 import { PetWindowController } from './windows/petWindow';
 
@@ -113,6 +121,7 @@ function start(): void {
   const ctx: AppContext = {
     db,
     clock,
+    session: newSession(),
     windows: {
       showMain: (target) => showMainWindow(target ? `/${target}` : ''),
       movePetBy: (dx, dy) => pet.moveBy(dx, dy),
@@ -126,6 +135,7 @@ function start(): void {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CHANGED_EVENT);
       }
+      scheduleCelebrationStep();
     },
     openExternal: async (url) => {
       if (isE2E) {
@@ -137,13 +147,32 @@ function start(): void {
     randomSeed: () => randomInt(0, 2 ** 31 - 1),
   };
 
+  // After a report Para checks it for a moment, then eats. Each step is a mood change the windows
+  // must redraw, so a short timer tells them when the next one is due. With the test clock, time
+  // only moves when a test moves it, and the test hook below does the telling.
+  let celebrationTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleCelebrationStep(): void {
+    if (celebrationTimer) clearTimeout(celebrationTimer);
+    celebrationTimer = null;
+    if (clock instanceof FakeClock) return;
+    const next = nextCelebrationStep(ctx);
+    if (!next) return;
+    celebrationTimer = setTimeout(
+      () => {
+        celebrationTimer = null;
+        ctx.notifyChanged();
+      },
+      Math.max(next.getTime() - clock.now().getTime(), 0) + 20,
+    );
+  }
+
   // Attempts are the source of truth: bring the stored streak, totals and review cards in line
   // with them before anything is shown.
   try {
     const repaired = reconcile(ctx);
-    if (repaired.petFactsRepaired || repaired.cardsRebuilt > 0) {
+    if (repaired.petFactsRepaired || repaired.cardsRebuilt > 0 || repaired.accessoriesRestored.length > 0) {
       console.warn(
-        `ParaLeet reconciled its data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt.`,
+        `ParaLeet reconciled its data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt, ${repaired.accessoriesRestored.length} accessory unlock(s) restored.`,
       );
     }
   } catch (error) {
@@ -164,9 +193,12 @@ function start(): void {
   });
 
   const dayWatcher = createDayWatcher(ctx);
+  const moodWatcher = createMoodWatcher(ctx);
   // One tick does everything that depends on the clock. Long timers are not trusted (PRD section 9).
   const tick = (): void => {
     dayWatcher.check();
+    // A reminder time passing, night falling or a celebration ending changes how Para looks.
+    moodWatcher.check();
     pet.sync();
   };
   tick();

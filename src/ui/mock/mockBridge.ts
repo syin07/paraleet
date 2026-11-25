@@ -17,10 +17,13 @@ import type {
   ReportResult,
   TodayView,
 } from '../../bridge/contract';
+import { newlyUnlocked, unlockedAfterAttempt } from '../../core/accessories';
 import { addDays, daysBetween, weekdayIndex } from '../../core/day';
-import { applyAttempt, EMPTY_PET_FACTS, stageFor } from '../../core/petFacts';
+import { CHECKING_MS, celebrationEndsAt, deriveMood, type Celebration } from '../../core/pet';
+import { applyAttempt, EMPTY_PET_FACTS, isGrowthSolve, stageFor } from '../../core/petFacts';
+import { pickLine } from '../../core/petLines';
 import { DEFAULT_SETTINGS, type Settings } from '../../core/settings';
-import { displayedStreak, isFedOn } from '../../core/streak';
+import { displayedStreak, isFedOn, missedDays } from '../../core/streak';
 import type { TopicId } from '../../core/topics';
 import { ACCESSORY_IDS } from '../../core/types';
 import type {
@@ -55,6 +58,9 @@ interface MockState {
   equippedAccessories: AccessoryId[];
   hatched: boolean;
   windowCalls: string[];
+  /** True once the "missed you" greeting was acknowledged. */
+  greeted: boolean;
+  celebration: Celebration | null;
 }
 
 // A few non-LeetCode problems so every platform shows up in the mock. Mock data only.
@@ -118,6 +124,8 @@ function baseState(): MockState {
     equippedAccessories: [],
     hatched: true,
     windowCalls: [],
+    greeted: false,
+    celebration: null,
   };
 }
 
@@ -211,6 +219,24 @@ function cardSummary(state: MockState, problemId: number): CardSummary | null {
   };
 }
 
+const PLATFORM_NAMES: Record<string, string> = {
+  leetcode: 'LeetCode',
+  cses: 'CSES',
+  codeforces: 'Codeforces',
+  other: 'Other',
+};
+
+const LOADED_AT = Date.now();
+
+/**
+ * The mock's clock: the frozen moment plus the real time since the page loaded, so that the few
+ * seconds of checking and eating after a report play out as they do in the app. The day never
+ * changes.
+ */
+function mockNow(): Date {
+  return new Date(Date.parse(MOCK_NOW) + (Date.now() - LOADED_AT));
+}
+
 function todayView(state: MockState): TodayView {
   const streakState = {
     current: state.pet.currentStreak,
@@ -220,6 +246,19 @@ function todayView(state: MockState): TodayView {
   const monday = addDays(MOCK_TODAY, -weekdayIndex(MOCK_TODAY));
   const fedDays = new Set(state.attempts.map((attempt) => attempt.paraDay));
   const assignment = state.assignment;
+  const openProblem = assignment && !assignment.completed ? requireProblem(state, assignment.problemId) : null;
+  // The mock lives in UTC: 20:00 is after the first reminder (16:00) and before the evening one.
+  const mood = deriveMood({
+    now: mockNow(),
+    timeZone: 'UTC',
+    dayBoundaryHour: state.settings.dayBoundaryHour,
+    firstReminderTime: state.settings.firstReminderTime,
+    eveningReminderTime: state.settings.eveningReminderTime,
+    fedToday: isFedOn(streakState, MOCK_TODAY),
+    missedDays: missedDays(streakState, MOCK_TODAY),
+    greetedToday: state.greeted,
+    celebration: state.celebration,
+  });
   return {
     today: MOCK_TODAY,
     fed: isFedOn(streakState, MOCK_TODAY),
@@ -247,8 +286,15 @@ function todayView(state: MockState): TodayView {
       stage: stageFor(state.pet.growthSolves),
       growthSolves: state.pet.growthSolves,
       totalAttempts: state.pet.totalAttempts,
-      mood: isFedOn(streakState, MOCK_TODAY) ? 'content' : 'peckish',
-      line: null,
+      mood,
+      line: pickLine({
+        seed: 20261125,
+        today: MOCK_TODAY,
+        mood,
+        problemTitle: openProblem?.title ?? null,
+        platformLabel: openProblem ? (PLATFORM_NAMES[openProblem.platform] ?? null) : null,
+        streak: displayedStreak(streakState, MOCK_TODAY),
+      }),
       unlockedAccessories: ACCESSORY_IDS.filter((id) => state.unlockedAccessories.includes(id)),
       equippedAccessories: ACCESSORY_IDS.filter((id) => state.equippedAccessories.includes(id)),
       hatched: state.hatched,
@@ -359,6 +405,24 @@ function createApi(state: MockState): ParaLeetApi {
         notes: input.notes?.trim() || null,
       });
       if (state.assignment?.problemId === input.problemId) state.assignment.completed = true;
+      const unlockedBefore = ACCESSORY_IDS.filter((id) => state.unlockedAccessories.includes(id));
+      state.unlockedAccessories = unlockedAfterAttempt(
+        unlockedBefore,
+        {
+          solvedHardProblem: state.attempts.some(
+            (logged) =>
+              isGrowthSolve(logged.rating) && (requireProblem(state, logged.problemId).difficultyNorm ?? 0) >= 4,
+          ),
+          longestStreak: state.pet.longestStreak,
+          plansFinished: 0,
+        },
+        rating,
+      );
+      // Para checks the report, then eats; tell the screens at each step, as the app does.
+      const celebration: Celebration = { meal: rating === 'again' ? 'crumb' : 'full', reportedAt: mockNow() };
+      state.celebration = celebration;
+      setTimeout(changed, CHECKING_MS + 30);
+      setTimeout(changed, celebrationEndsAt(celebration).getTime() - celebration.reportedAt.getTime() + 30);
       changed();
       const today = todayView(state);
       return {
@@ -375,6 +439,7 @@ function createApi(state: MockState): ParaLeetApi {
           previousStage: stageFor(before.growthSolves),
           growthSolves: state.pet.growthSolves,
         },
+        unlocked: newlyUnlocked(unlockedBefore, state.unlockedAccessories),
         nextReviewDay: state.cards.get(input.problemId)?.dueDay ?? null,
         today,
       };
@@ -500,6 +565,14 @@ function createApi(state: MockState): ParaLeetApi {
       return todayView(state);
     },
 
+    acknowledgeGreeting: async () => {
+      if (!state.greeted) {
+        state.greeted = true;
+        changed();
+      }
+      return todayView(state);
+    },
+
     // Window commands do nothing in a browser; they are recorded so tests can see them.
     showMainWindow: async ({ screen }) => {
       state.windowCalls.push(`showMainWindow:${screen ?? ''}`);
@@ -603,6 +676,22 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
       logAttempt(state, state.assignment.problemId, MOCK_TODAY, 'good', { minutes: 11 });
       state.assignment.completed = true;
     }
+  },
+  /** Back after a few days away: Para greets with "missed you" until the greeting is seen. */
+  missed: (state) => {
+    for (let index = 0; index < 5; index += 1) {
+      const id = state.starterIds[index];
+      if (id !== undefined) logAttempt(state, id, addDays(MOCK_TODAY, -9 + index), 'good', { minutes: 14 });
+    }
+    assignToday(state);
+  },
+  /** Six days in a row through yesterday and nothing unlocked: today's solve earns the bow tie. */
+  milestone: (state) => {
+    for (let index = 0; index < 6; index += 1) {
+      const id = state.starterIds[index];
+      if (id !== undefined) logAttempt(state, id, addDays(MOCK_TODAY, -6 + index), 'good', { minutes: 14 });
+    }
+    assignToday(state);
   },
   /** More than five reviews due, to check the cap of five. */
   backlog: (state) => {

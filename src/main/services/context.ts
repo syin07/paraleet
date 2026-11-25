@@ -2,6 +2,7 @@
 // Electron, so every service runs under the unit-test runner with a real SQLite database.
 import type { MainScreen } from '../../bridge/contract';
 import { effectiveToday, paraDayOf } from '../../core/day';
+import type { Celebration } from '../../core/pet';
 import type { Settings } from '../../core/settings';
 import type { ParaDay } from '../../core/types';
 import type { Db } from '../../data/db';
@@ -19,10 +20,21 @@ export interface WindowPort {
   showPetMenu(): void;
 }
 
+/** What the app remembers only while it is running. */
+export interface SessionState {
+  /** The most recent report, while Para may still be checking it or eating. */
+  celebration: Celebration | null;
+}
+
+export function newSession(): SessionState {
+  return { celebration: null };
+}
+
 export interface AppContext {
   db: Db;
   clock: Clock;
   windows: WindowPort;
+  session: SessionState;
   /** Tells every window that data changed, so they refetch. */
   notifyChanged(): void;
   /** Opens a link in the default browser. */

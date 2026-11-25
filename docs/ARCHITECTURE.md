@@ -30,7 +30,9 @@ Keep this file accurate at the end of every session (PRD section 2).
 There are two windows, both loading the same renderer bundle:
 
 - **The main window** (`windows/mainWindow.ts`): the sidebar and screens. Closing it leaves the app running.
-- **The pet window** (`windows/petWindow.ts`, route `#/pet`, UI in `src/ui/windows/pet/`): 240×250, transparent, frameless, always on top, on every desktop, never focused. Clicks pass through except over the bird. `PetWindowController.sync()` makes it match the `petVisible` setting and the "hide for 1 hour" timer; it runs on launch, on every data change, on the 30-second tick and when displays change. `windows/placement.ts` is the pure geometry that keeps the bird on a visible screen. See decision 0010.
+- **The pet window** (`windows/petWindow.ts`, route `#/pet`, UI in `src/ui/windows/pet/`): 240×280, transparent, frameless, always on top, on every desktop, never focused. Clicks pass through except over the bird. `PetWindowController.sync()` makes it match the `petVisible` setting and the "hide for 1 hour" timer; it runs on launch, on every data change, on the 30-second tick and when displays change. `windows/placement.ts` is the pure geometry that keeps the bird on a visible screen. See decision 0010.
+
+**Para's state.** `services/pet.ts` builds the pet summary every screen shows: stage, mood, line and accessories. Mood and line are computed on each read from the clock, the settings, the stored streak facts and `ctx.session` (what the app remembers only while running: the celebration after the last report). Main tells the windows to redraw when the mood changes: a short timer for each step of a celebration (`nextCelebrationStep`) and a comparison on the 30-second tick (`createMoodWatcher`). See decision 0012.
 
 Services never import Electron. When a use case needs a window to do something it calls `ctx.windows` (`WindowPort` in `services/context.ts`), which main implements and tests fake.
 
@@ -71,15 +73,16 @@ One file, `paraleet.sqlite3`, opened with a rollback journal (not WAL) so the da
 
 | Table | Holds |
 | --- | --- |
-| `problems` | Catalog entries and user-added problems; `starter_position` orders the built-in starter list |
+| `problems` | Catalog entries and user-added problems; `starter_position` orders the built-in starter list; `solved_count` says how well known a catalog problem is |
 | `attempts` | Every reported attempt. Append-only, enforced by triggers. The source of truth |
 | `problem_notes` | Key insight, pattern tags, free notes, link to the user's solution |
 | `review_cards` | One card per attempted problem: status, due time, scheduler state as JSON |
 | `daily_assignments` | One row per ParaLeet day: the problem, why it was picked, whether it was completed |
-| `pet` | The single pet: seed, growth solves, totals, streak, last fed day, accessories |
+| `pet` | The single pet: seed, growth solves, totals, streak, last fed day, accessories, when it hatched, the day the "missed you" greeting was seen, the day each reminder was sent |
+| `catalog_sources` | Which catalog file is loaded for each platform, so a newer file loads once (used from M3) |
 | `settings` | Key-value settings as JSON, plus `meta.*` keys for internal state |
 
-Plan tables arrive with M3 as migration 2.
+Migration 2 added the pet's greeting and reminder days and the catalog bookkeeping. Plan tables arrive with M3 as migration 3.
 
 ## The bridge
 
