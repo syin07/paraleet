@@ -128,10 +128,41 @@ describe('placePopover', () => {
 });
 
 describe('workAreaFor', () => {
+  // A laptop with a 25-point menu bar, and its work area below it.
+  const laptopScreen = { bounds: { x: 0, y: 0, width: 1728, height: 1117 }, workArea: laptop };
+  const right = { bounds: { x: 1728, y: 0, width: 2560, height: 1440 }, workArea: external };
+
   it('picks the screen the rectangle is on, or the nearest', () => {
-    expect(workAreaFor({ x: 100, y: 100, width: 50, height: 50 }, [laptop, external])).toBe(laptop);
-    expect(workAreaFor({ x: 3000, y: 100, width: 50, height: 50 }, [laptop, external])).toBe(external);
-    expect(workAreaFor({ x: 9000, y: 100, width: 50, height: 50 }, [laptop, external])).toBe(external);
+    expect(workAreaFor({ x: 100, y: 100, width: 50, height: 50 }, [laptopScreen, right])).toBe(laptop);
+    expect(workAreaFor({ x: 3000, y: 100, width: 50, height: 50 }, [laptopScreen, right])).toBe(external);
+    expect(workAreaFor({ x: 9000, y: 100, width: 50, height: 50 }, [laptopScreen, right])).toBe(external);
     expect(workAreaFor({ x: 0, y: 0, width: 1, height: 1 }, [])).toBeNull();
+  });
+
+  it('keeps a menu bar icon on its own screen when another display sits right above it', () => {
+    // The external display is arranged directly above the laptop; its work area ends at y = 0.
+    const above = {
+      bounds: { x: 0, y: -1440, width: 2560, height: 1440 },
+      workArea: { x: 0, y: -1415, width: 2560, height: 1415 },
+    };
+    const icon = { x: 1500, y: 0, width: 24, height: 24 };
+    // The icon is in the laptop's menu bar: outside both work areas, and nearer the upper one.
+    expect(workAreaFor(icon, [laptopScreen, above])).toBe(laptop);
+    expect(workAreaFor(icon, [above, laptopScreen])).toBe(laptop);
+    // And the card lands just under the laptop's menu bar, not at the bottom of the upper screen.
+    const area = workAreaFor(icon, [above, laptopScreen]);
+    expect(placePopover(icon, { width: 320, height: 240 }, area ?? laptop, 'below', 4)).toEqual({ x: 1352, y: 28 });
+  });
+
+  it('works on a notched laptop, where the menu bar is taller', () => {
+    const notched = {
+      bounds: { x: 0, y: 0, width: 1512, height: 982 },
+      workArea: { x: 0, y: 37, width: 1512, height: 945 },
+    };
+    const above = {
+      bounds: { x: 0, y: -1080, width: 1920, height: 1080 },
+      workArea: { x: 0, y: -1055, width: 1920, height: 1055 },
+    };
+    expect(workAreaFor({ x: 1200, y: 6, width: 24, height: 24 }, [above, notched])).toBe(notched.workArea);
   });
 });

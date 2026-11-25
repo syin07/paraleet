@@ -4,7 +4,13 @@
 // while closed.
 import { join } from 'node:path';
 import { app, BrowserWindow, screen } from 'electron';
-import { CARD_MAX_HEIGHT, CARD_MIN_HEIGHT, CARD_WIDTH, CARD_WIDTH_REPORT, type CardAnchor } from '../../bridge/contract';
+import {
+  CARD_MAX_HEIGHT,
+  CARD_MIN_HEIGHT,
+  CARD_WIDTH,
+  CARD_WIDTH_REPORT,
+  type CardAnchor,
+} from '../../bridge/contract';
 import { hardenWindow, loadRenderer } from './mainWindow';
 import { placePopover, workAreaFor, type Rect, type Size } from './placement';
 
@@ -27,7 +33,11 @@ export class CardWindowController {
   private shown = false;
   private showTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private readonly anchors: CardAnchors) {}
+  constructor(
+    private readonly anchors: CardAnchors,
+    /** Called when the card has been shown or closed, so the Dock rule can be applied again. */
+    private readonly onVisibilityChanged: () => void = () => undefined,
+  ) {}
 
   /** Opens the card at `anchor`. Asking again from the same place closes it. */
   toggle(anchor: CardAnchor): void {
@@ -66,7 +76,9 @@ export class CardWindowController {
     this.window = window;
     hardenWindow(window);
     window.setAlwaysOnTop(true, 'floating');
-    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // `skipTransformProcessType`: without it this call would switch the whole app to a menu-bar-only
+    // process and hide the Dock icon as a side effect. The Dock is decided in one place, index.ts.
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     // A popover: it goes away when the user clicks anywhere else.
     window.on('blur', () => {
       if (this.window === window && this.shown) this.hide();
@@ -82,7 +94,10 @@ export class CardWindowController {
   hide(): void {
     const window = this.current();
     this.forget();
-    if (window) window.destroy();
+    if (window) {
+      window.destroy();
+      this.onVisibilityChanged();
+    }
   }
 
   /** The page measured its content: fit the window to it and keep it on its anchor. */
@@ -120,6 +135,7 @@ export class CardWindowController {
     // menu bar icon, so the card takes the keyboard for the report form.
     app.focus({ steal: true });
     window.focus();
+    this.onVisibilityChanged();
   }
 
   private forget(): void {
@@ -133,14 +149,21 @@ export class CardWindowController {
   /** Above the bird, or under the menu bar icon; inside the screen the anchor is on. */
   private place(): { x: number; y: number } {
     const primary = screen.getPrimaryDisplay().workArea;
-    const areas = [primary, ...screen.getAllDisplays().map((display) => display.workArea)];
+    const screens = screen.getAllDisplays().map((display) => ({ bounds: display.bounds, workArea: display.workArea }));
     const fromPet = this.anchor === 'pet';
-    const rect = (fromPet ? this.anchors.pet() : this.anchors.tray()) ?? (fromPet ? this.anchors.tray() : this.anchors.pet());
+    const rect =
+      (fromPet ? this.anchors.pet() : this.anchors.tray()) ?? (fromPet ? this.anchors.tray() : this.anchors.pet());
     if (!rect) {
       // Nothing to hang the card on: the top-right corner of the main screen, where a menu bar icon would be.
       return { x: primary.x + primary.width - this.size.width - 12, y: primary.y + 8 };
     }
-    const area = workAreaFor(rect, areas) ?? primary;
-    return placePopover(rect, this.size, area, this.anchor === 'pet' ? 'above' : 'below', this.anchor === 'pet' ? 8 : 4);
+    const area = workAreaFor(rect, screens) ?? primary;
+    return placePopover(
+      rect,
+      this.size,
+      area,
+      this.anchor === 'pet' ? 'above' : 'below',
+      this.anchor === 'pet' ? 8 : 4,
+    );
   }
 }

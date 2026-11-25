@@ -56,8 +56,12 @@ export interface RunningApp {
   trayMenuLabels(): Promise<string[]>;
   clickTrayMenu(label: string): Promise<void>;
   card(): Promise<CardFacts>;
+  /** The card loses focus, as when the user clicks elsewhere. `early`: it is opened and loses focus before it has been shown. */
+  blurCard(early?: boolean): Promise<void>;
   /** The compact card's page. Waits for it to open. */
   cardPage(): Promise<Page>;
+  /** The main window's page, waiting for it to open. For when it was closed and opened again. */
+  mainPage(): Promise<Page>;
   /** Moves the app's clock. The app re-checks the ParaLeet day at once. */
   setNow(iso: string): Promise<void>;
   setTimeZone(timeZone: string): Promise<void>;
@@ -80,6 +84,7 @@ interface TestHooks {
   trayMenuLabels(): string[];
   clickTrayMenu(label: string): void;
   card(): CardFacts;
+  blurCard(early: string): void;
 }
 
 type WindowKind = 'main' | 'pet' | 'card';
@@ -134,11 +139,17 @@ export async function launchApp(options: {
   const page = await findWindow(app, 'main');
 
   const hooks = <T>(use: (hooks: TestHooks, arg: string) => T, arg = ''): Promise<T> =>
-    app.evaluate((_electron, [body, value]) => {
-      const target = (globalThis as unknown as { __paraleetTest: TestHooks }).__paraleetTest;
-      // The function is sent as text because it must run inside the app's main process.
-      return (new Function('hooks', 'arg', `return (${body})(hooks, arg)`) as (h: TestHooks, a: string) => T)(target, value);
-    }, [use.toString(), arg] as const);
+    app.evaluate(
+      (_electron, [body, value]) => {
+        const target = (globalThis as unknown as { __paraleetTest: TestHooks }).__paraleetTest;
+        // The function is sent as text because it must run inside the app's main process.
+        return (new Function('hooks', 'arg', `return (${body})(hooks, arg)`) as (h: TestHooks, a: string) => T)(
+          target,
+          value,
+        );
+      },
+      [use.toString(), arg] as const,
+    );
 
   return {
     app,
@@ -157,7 +168,9 @@ export async function launchApp(options: {
     trayMenuLabels: () => hooks((h) => h.trayMenuLabels()),
     clickTrayMenu: (label) => hooks((h, value) => h.clickTrayMenu(value), label),
     card: () => hooks((h) => h.card()),
+    blurCard: (early = false) => hooks((h, value) => h.blurCard(value), early ? 'early' : ''),
     cardPage: () => findWindow(app, 'card'),
+    mainPage: () => findWindow(app, 'main'),
     close: () => app.close(),
   };
 }

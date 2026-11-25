@@ -67,7 +67,34 @@ export function renderHatching(seed: number, frame: number): SpriteFrame {
   return toFrame(g);
 }
 
-/** The square region of the frame that holds the head, used to cut a menu bar icon. */
+/** The square region of the frame that holds the head at rest, used to cut a menu bar icon. */
 export function headBox(stage: GrowthStage): { x: number; y: number; size: number } {
   return { ...STAGES[stage].headBox };
 }
+
+/**
+ * The head's square in one frame of a mood: the stage's box moved with the head (a leaning,
+ * pecking or tucked head, a hop), and raised a little when a crown or cap is worn so the hat is
+ * not cut off. Always inside the frame.
+ */
+export function headBoxAt(
+  stage: GrowthStage,
+  mood: Mood,
+  frame: number,
+  accessories: readonly AccessoryId[] = [],
+): { x: number; y: number; size: number } {
+  const box = STAGES[stage].headBox;
+  const poses = posesFor(stage, mood);
+  const index = Number.isFinite(frame) ? ((Math.trunc(frame) % poses.length) + poses.length) % poses.length : 0;
+  const pose = poses[index];
+  const hat = accessories.includes('crown') || accessories.includes('grad_cap') ? HAT_ROOM : 0;
+  const clamp = (value: number): number => Math.min(Math.max(value, 0), SPRITE_SIZE - box.size);
+  return {
+    x: clamp(box.x + (pose?.head[0] ?? 0)),
+    y: clamp(box.y + (pose?.head[1] ?? 0) - (pose?.hop ?? 0) - hat),
+    size: box.size,
+  };
+}
+
+/** Rows a crown or cap needs above the head box. */
+const HAT_ROOM = 2;

@@ -1,6 +1,6 @@
 // The menu bar icon's pixels: Para's head, cut from the same sprite the windows draw, so the
 // icon's expression always matches the mood (PRD section 11). Pure: no Electron, unit-tested.
-import { headBox, renderSprite } from '../core/sprite';
+import { headBoxAt, renderSprite } from '../core/sprite';
 import type { AccessoryId, GrowthStage, Mood } from '../core/types';
 
 export interface IconBitmap {
@@ -23,7 +23,8 @@ export const ICON_SCALE = 2;
 /** Para's head from the mood's first frame, scaled with nearest-neighbor. */
 export function headIcon(input: IconInput, scale: number = ICON_SCALE): IconBitmap {
   const frame = renderSprite(input.seed, input.stage, input.mood, 0, input.accessories);
-  const box = headBox(input.stage);
+  // The box follows the head: a pecking or tucked head, and room for a hat.
+  const box = headBoxAt(input.stage, input.mood, 0, input.accessories);
   const size = box.size * scale;
   const bgra = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y += 1) {

@@ -60,10 +60,7 @@ export class PetWindowController {
       // Over, or the clock was set back so far that "an hour" would last longer than an hour.
       if (remaining <= 0 || remaining > HIDE_FOR_MS) this.hiddenUntil = null;
     }
-    // Para lives in its egg in the main window until the first-launch flow has hatched it.
-    const pet = this.db.get<{ hatched_at: string | null }>('SELECT hatched_at FROM pet WHERE id = 1');
-    const hatched = pet !== undefined && pet.hatched_at !== null;
-    const wanted = settings.petVisible && this.hiddenUntil === null && hatched;
+    const wanted = settings.petVisible && this.hiddenUntil === null;
     const wasVisible = this.isVisible();
 
     if (!wanted) {

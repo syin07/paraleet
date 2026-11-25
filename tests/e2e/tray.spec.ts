@@ -50,7 +50,11 @@ test('the menu bar icon shows the mood and the streak', async () => {
     // The streak is still there after a restart.
     await running.close();
     running = await launchApp({ userDataDir: data.dir, now: '2026-11-26T00:10:00.000Z' });
-    expect(await running.tray()).toMatchObject({ exists: true, title: ' 1', tooltip: 'Para is content · 1-day streak' });
+    expect(await running.tray()).toMatchObject({
+      exists: true,
+      title: ' 1',
+      tooltip: 'Para is content · 1-day streak',
+    });
   } finally {
     await running?.close().catch(() => undefined);
     data.remove();
@@ -90,7 +94,22 @@ test('the menu bar icon opens the compact card and offers a menu', async () => {
     await expect.poll(async () => (await running?.card())?.bounds).toMatchObject({ width: 360, height: 420 });
     expect(await insideSomeScreen(running, (await running.card()).bounds!)).toBe(true);
 
+    // Opening the card leaves the Dock icon alone: the main window is open, so it stays.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(await running.dockVisible()).toBe(true);
+
     // A second click on the icon closes it.
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.exists).toBe(false);
+
+    // Clicking anywhere else closes it too: the card goes away when it loses focus.
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    await running.blurCard();
+    await expect.poll(async () => (await running?.card())?.exists).toBe(false);
+    // But losing focus before it has even appeared does not kill it: it still opens.
+    await running.blurCard(true);
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
     await running.clickTray();
     await expect.poll(async () => (await running?.card())?.exists).toBe(false);
 
@@ -135,10 +154,26 @@ test('the menu bar icon opens the compact card and offers a menu', async () => {
     await expect.poll(async () => (await running?.card())?.visible).toBe(true);
     expect((await running.card()).anchor).toBe('tray');
     await running.clickTray();
+
+    // Para hidden and the main window closed: the Dock icon is the sure way back in, and opening
+    // and closing the card must not take it away.
+    await running.page.close();
+    await expect.poll(() => running?.mainWindowOpen()).toBe(false);
+    await expect.poll(() => running?.dockVisible()).toBe(true);
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(await running.dockVisible()).toBe(true);
+    await running.clickTray();
+    await expect.poll(async () => (await running?.card())?.exists).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(await running.dockVisible()).toBe(true);
+    await running.clickTrayMenu('Open ParaLeet');
+    const reopened = await running.mainPage();
     await running.clickTrayMenu('Show Para on the desktop');
     await expect.poll(async () => (await running?.pet())?.visible).toBe(true);
     await running.clickTrayMenu('Settings…');
-    await expect(running.page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    await expect(reopened.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   } finally {
     await running?.close().catch(() => undefined);
     data.remove();

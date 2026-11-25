@@ -26,7 +26,13 @@ The PRD asks for a tiny bird head in the menu bar whose expression matches the m
 
 9. **The Dock rule is unchanged** (decision 0010): the Dock icon shows while the main window is open or Para is hidden. A crowded menu bar can hide a menu bar icon, so the icon alone is not treated as a guaranteed way back into the app.
 
-10. **Para stays in its egg until the first-launch flow is done.** The floating pet is not shown while the pet has not hatched (`pet.hatched_at` is null); finishing the flow (`completeOnboarding`) hatches it and the pet appears. End-to-end tests start hatched unless they ask otherwise (`launchApp({ hatched: false })`), so the other tests do not have to walk through the flow.
+10. **The Dock is decided in one place.** The card sets "visible on every desktop" with `skipTransformProcessType`, because without it that call turns the whole app into a menu-bar-only process and hides the Dock icon as a side effect. Showing and closing the card run the Dock rule again.
+
+11. **The card goes on the screen its anchor is on, judged by the screen's bounds.** A menu bar icon sits outside every work area, so choosing by work area can pick a display arranged above the laptop.
+
+12. **The icon's crop follows the head.** `headBoxAt(stage, mood, frame, accessories)` moves the stage's head box with the pose (a pecking or tucked head, a hop) and raises it two rows when a crown or cap is worn.
+
+13. **End-to-end tests start with Para hatched** unless they ask otherwise (`launchApp({ hatched: false })`). `completeOnboarding` exists in the bridge for the first-launch screens; hiding the floating pet until Para has hatched is switched on together with those screens, so that nobody can be left without a pet in between.
 
 ## Alternatives rejected
 

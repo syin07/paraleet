@@ -2,15 +2,7 @@
 import { randomInt } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  powerMonitor,
-  screen,
-  shell,
-  type MenuItemConstructorOptions,
-} from 'electron';
+import { app, BrowserWindow, dialog, powerMonitor, screen, shell, type MenuItemConstructorOptions } from 'electron';
 import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
@@ -135,7 +127,7 @@ function start(): void {
   petWindow = pet;
 
   // The compact card hangs on the bird or on the menu bar icon, whichever asked for it.
-  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() });
+  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() }, () => updateDock());
   const trayMenu = (): MenuItemConstructorOptions[] => [
     { label: 'Open ParaLeet', click: () => showMainWindow() },
     { label: "Swap today's problem…", click: () => showMainWindow('/today/swap') },
@@ -173,8 +165,13 @@ function start(): void {
     },
     notifyChanged: () => {
       // A settings change may show or hide the pet; a report changes the icon and the streak.
-      pet.sync();
-      tray.sync();
+      // Neither may stop the windows from hearing about a change that is already saved.
+      try {
+        pet.sync();
+        tray.sync();
+      } catch (error) {
+        console.error('ParaLeet could not update the pet window or the menu bar icon:', error);
+      }
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CHANGED_EVENT);
       }
@@ -293,6 +290,12 @@ function start(): void {
       },
       tray: () => tray.facts(),
       clickTray: () => card.toggle('tray'),
+      // What losing focus does to the card. With `early`, the card is opened and loses focus in the
+      // same breath, before it has been shown.
+      blurCard: (early: string) => {
+        if (early === 'early') card.show('tray');
+        card.current()?.emit('blur');
+      },
       trayMenuLabels: () => trayMenu().map((item) => item.label ?? item.type ?? ''),
       clickTrayMenu: (label: string) => {
         const item = trayMenu().find((entry) => entry.label === label);

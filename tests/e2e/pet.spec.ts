@@ -255,30 +255,3 @@ test('the pet opens the main window, offers its menu, and can be hidden', async 
     data.remove();
   }
 });
-
-test('Para stays in its egg until the first-launch flow is finished', async () => {
-  const data = makeUserDataDir();
-  let running: RunningApp | null = null;
-  try {
-    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:00:00.000Z', hatched: false });
-    await expect(running.page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
-    // No floating pet yet.
-    expect(await running.pet()).toMatchObject({ exists: false, visible: false });
-    // Finishing the flow hatches Para, and the floating pet appears by itself.
-    await running.page.evaluate(() =>
-      (
-        globalThis as unknown as { paraleet: { completeOnboarding(input: object): Promise<unknown> } }
-      ).paraleet.completeOnboarding({ firstReminderTime: '15:00', eveningReminderTime: '20:30' }),
-    );
-    await running.petPage();
-    await expect.poll(async () => (await running?.pet())?.visible).toBe(true);
-    // And it is still there, hatched, after a restart without the test's shortcut.
-    await running.close();
-    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:05:00.000Z', hatched: false });
-    await running.petPage();
-    await expect.poll(async () => (await running?.pet())?.visible).toBe(true);
-  } finally {
-    await running?.close().catch(() => undefined);
-    data.remove();
-  }
-});

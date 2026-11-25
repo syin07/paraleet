@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headBox, renderSprite } from '../core/sprite';
+import { headBox, headBoxAt, renderSprite } from '../core/sprite';
 import { GROWTH_STAGES, MOODS } from '../core/types';
 import { headIcon, iconKey, ICON_SCALE, streakTitle } from './trayIcon';
 
@@ -21,7 +21,7 @@ describe('headIcon', () => {
   it('copies the sprite pixels, with red and blue swapped and each pixel doubled', () => {
     const icon = headIcon(base);
     const frame = renderSprite(base.seed, base.stage, base.mood, 0, []);
-    const box = headBox(base.stage);
+    const box = headBoxAt(base.stage, base.mood, 0, []);
     let opaque = 0;
     for (let y = 0; y < icon.height; y += 1) {
       for (let x = 0; x < icon.width; x += 1) {
@@ -73,7 +73,9 @@ describe('iconKey', () => {
     expect(iconKey({ ...base, stage: 'chick' })).not.toBe(key);
     expect(iconKey({ ...base, seed: 8 })).not.toBe(key);
     expect(iconKey({ ...base, accessories: ['scarf'] })).not.toBe(key);
-    expect(iconKey({ ...base, accessories: ['crown', 'scarf'] })).toBe(iconKey({ ...base, accessories: ['scarf', 'crown'] }));
+    expect(iconKey({ ...base, accessories: ['crown', 'scarf'] })).toBe(
+      iconKey({ ...base, accessories: ['scarf', 'crown'] }),
+    );
   });
 });
 
@@ -82,5 +84,79 @@ describe('streakTitle', () => {
     expect(streakTitle(12)).toBe(' 12');
     expect(streakTitle(1)).toBe(' 1');
     expect(streakTitle(0)).toBe('');
+  });
+});
+
+describe('the head box follows the head', () => {
+  const white = (pixels: Uint8ClampedArray, x: number, y: number): boolean =>
+    pixels[(y * 32 + x) * 4] === 255 && pixels[(y * 32 + x) * 4 + 1] === 255 && pixels[(y * 32 + x) * 4 + 2] === 255;
+
+  it('stays inside the frame and keeps its size for every stage, mood, frame and hat', () => {
+    for (const stage of GROWTH_STAGES) {
+      for (const mood of MOODS) {
+        for (let frame = 0; frame < 6; frame += 1) {
+          for (const accessories of [[], ['crown'], ['grad_cap']] as const) {
+            const box = headBoxAt(stage, mood, frame, accessories);
+            expect(box.size).toBe(headBox(stage).size);
+            expect(box.x).toBeGreaterThanOrEqual(0);
+            expect(box.y).toBeGreaterThanOrEqual(0);
+            expect(box.x + box.size).toBeLessThanOrEqual(32);
+            expect(box.y + box.size).toBeLessThanOrEqual(32);
+          }
+        }
+      }
+    }
+  });
+
+  it('keeps the eye in the icon in every mood that has its eyes open', () => {
+    for (const stage of GROWTH_STAGES) {
+      for (const mood of MOODS) {
+        const frame = renderSprite(7, stage, mood, 0, []);
+        const box = headBoxAt(stage, mood, 0, []);
+        let glintInFrame = false;
+        let glintInBox = false;
+        for (let y = 0; y < 32; y += 1) {
+          for (let x = 0; x < 32; x += 1) {
+            if (!white(frame.pixels, x, y)) continue;
+            glintInFrame = true;
+            if (x >= box.x && x < box.x + box.size && y >= box.y && y < box.y + box.size) glintInBox = true;
+          }
+        }
+        // A closed or happy eye has no glint; when there is one, the icon must show it.
+        if (glintInFrame) expect(glintInBox, `${stage} ${mood}`).toBe(true);
+      }
+    }
+  });
+
+  it('moves with a head that leans or pecks, so the beak side is not cut off', () => {
+    for (const stage of GROWTH_STAGES) {
+      const rest = headBox(stage);
+      const hungry = headBoxAt(stage, 'hungry', 0, []);
+      // Hungry leans to the left: the box moves left with it (or is already at the edge).
+      expect(hungry.x).toBeLessThanOrEqual(rest.x);
+    }
+    expect(headBoxAt('adult', 'hungry', 0, []).x).toBeLessThan(headBox('adult').x);
+  });
+
+  it('leaves room above the head for a crown or a cap', () => {
+    for (const stage of GROWTH_STAGES) {
+      const bare = headBoxAt(stage, 'content', 0, []);
+      const crowned = headBoxAt(stage, 'content', 0, ['crown']);
+      expect(crowned.y).toBeLessThanOrEqual(bare.y);
+      // The crown's own pixels at the top of the head are inside the icon.
+      const plain = renderSprite(7, stage, 'content', 0, []);
+      const worn = renderSprite(7, stage, 'content', 0, ['crown']);
+      let top = 32;
+      for (let y = 0; y < 32 && top === 32; y += 1) {
+        for (let x = 0; x < 32; x += 1) {
+          const at = (y * 32 + x) * 4;
+          if (worn.pixels[at + 3] !== plain.pixels[at + 3] || worn.pixels[at] !== plain.pixels[at]) {
+            top = y;
+            break;
+          }
+        }
+      }
+      expect(top, `${stage} crown top row`).toBeGreaterThanOrEqual(crowned.y);
+    }
   });
 });
