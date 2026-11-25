@@ -340,24 +340,31 @@ function Loaded({
 
 const MAX_TAGS = 20;
 
-/** Adds every non-empty part, skipping repeats (any letter case) and stopping at the cap. */
-function mergeTags(tags: string[], parts: string[]): string[] {
+/** Adds every non-empty part, skipping repeats (any letter case) and stopping at the cap. `full` says a new tag was turned away by the cap. */
+function mergeTags(tags: string[], parts: string[]): { tags: string[]; full: boolean } {
   const next = [...tags];
+  let full = false;
   for (const part of parts) {
     const tag = part.trim().slice(0, 60);
-    if (!tag || next.length >= MAX_TAGS) continue;
+    if (!tag) continue;
     if (next.some((existing) => existing.toLowerCase() === tag.toLowerCase())) continue;
+    if (next.length >= MAX_TAGS) {
+      full = true;
+      continue;
+    }
     next.push(tag);
   }
-  return next;
+  return { tags: next, full };
 }
 
 function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
   const [text, setText] = useState('');
+  const [full, setFull] = useState(false);
 
   function add(parts: string[]): void {
     const next = mergeTags(tags, parts);
-    if (next.length !== tags.length) onChange(next);
+    setFull(next.full);
+    if (next.tags.length !== tags.length) onChange(next.tags);
   }
 
   return (
@@ -373,7 +380,10 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
               <button
                 type="button"
                 aria-label={`Remove tag ${tag}`}
-                onClick={() => onChange(tags.filter((item) => item !== tag))}
+                onClick={() => {
+                  setFull(false);
+                  onChange(tags.filter((item) => item !== tag));
+                }}
                 className="focus-ring flex h-4 w-4 items-center justify-center rounded-xs text-fg-muted hover:text-fg"
               >
                 <X className="h-3 w-3" aria-hidden />
@@ -406,6 +416,7 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
           setText('');
         }}
       />
+      {full && <div className="mt-1 text-sm text-fg-muted">{MAX_TAGS} tags at most</div>}
     </div>
   );
 }

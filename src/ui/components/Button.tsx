@@ -1,5 +1,5 @@
 import { LoaderCircle } from 'lucide-react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cx } from '../lib/format';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -30,6 +30,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   /** Square button with only an icon. Give it an `aria-label`. */
   iconOnly?: boolean;
+  /** React 19 passes `ref` as a plain prop. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 /** The one button. Variants and sizes are in docs/design-references.md, section D. */

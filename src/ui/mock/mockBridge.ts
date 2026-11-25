@@ -446,6 +446,9 @@ function createApi(state: MockState): ParaLeetApi {
     },
 
     addProblem: async (input) => {
+      // The app's Codeforces bands, so an added problem shows its difficulty color.
+      const ratingBand = (rating: number): DifficultyNorm | null =>
+        !Number.isFinite(rating) ? null : rating <= 1000 ? 1 : rating <= 1400 ? 2 : rating <= 1800 ? 3 : rating <= 2200 ? 4 : 5;
       const recognized = recognize(input.url);
       if ('reason' in recognized) return { ok: false, reason: recognized.reason };
       const existing = state.problems.find(
@@ -462,7 +465,11 @@ function createApi(state: MockState): ParaLeetApi {
         title: input.title.trim(),
         url: recognized.canonicalUrl,
         difficultyRaw,
-        difficultyNorm: difficultyRaw ? (norms[difficultyRaw.toLowerCase()] ?? null) : null,
+        difficultyNorm: difficultyRaw
+          ? recognized.platform === 'codeforces'
+            ? ratingBand(Number(difficultyRaw))
+            : (norms[difficultyRaw.toLowerCase()] ?? null)
+          : null,
         topics: [...new Set(input.topics)],
       };
       state.problems.push(problem);

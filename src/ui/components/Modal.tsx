@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cx } from '../lib/format';
 import { Button } from './Button';
 
@@ -20,6 +20,31 @@ export interface ModalProps {
 /** A centered dialog over a dark backdrop. Esc closes it and Tab stays inside it. */
 export function Modal({ title, subtitle, onClose, width = 480, footer, children }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  // Whether the body scrolls, and whether it is already at its end (the fade then has nothing to hint at).
+  const [scroll, setScroll] = useState({ scrolls: false, atEnd: true });
+
+  useEffect(() => {
+    const element = body.current;
+    if (!element) return;
+    function measure(): void {
+      if (!element) return;
+      const scrolls = element.scrollHeight - element.clientHeight > 1;
+      const atEnd = element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+      setScroll((current) => (current.scrolls === scrolls && current.atEnd === atEnd ? current : { scrolls, atEnd }));
+    }
+    measure();
+    element.addEventListener('scroll', measure);
+    // The body changes size with the window; its content changes size when fields appear.
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (content.current) observer.observe(content.current);
+    return () => {
+      element.removeEventListener('scroll', measure);
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -74,8 +99,32 @@ export function Modal({ title, subtitle, onClose, width = 480, footer, children 
           </div>
           <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={onClose} icon={<X className="h-4 w-4" />} />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="flex justify-end gap-2 px-6 pb-6">{footer}</div>}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={body} data-scrolls={scroll.scrolls} className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div ref={content}>{children}</div>
+          </div>
+          {scroll.scrolls && !scroll.atEnd && (
+            <div
+              aria-hidden
+              data-testid="modal-scroll-fade"
+              className="pointer-events-none absolute right-0 bottom-0 left-0 h-8"
+              style={{ background: 'linear-gradient(to top, var(--color-surface), transparent)' }}
+            />
+          )}
+        </div>
+        {footer && (
+          // The border is always there but only visible while the body scrolls; the negative margin
+          // keeps the layout the same either way.
+          <div
+            data-testid="modal-footer"
+            className={cx(
+              '-mt-px flex justify-end gap-2 border-t px-6 pb-6',
+              scroll.scrolls ? 'border-line-subtle pt-4' : 'border-transparent',
+            )}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

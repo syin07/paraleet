@@ -21,11 +21,13 @@ export interface AddProblemDialogProps {
   /** A link to start with, for example one the user just copied. */
   initialUrl?: string;
   /** Called with the problem to show next. `created` is false when the app already had it. */
-  onAdded: (problem: ProblemSummary, created: boolean) => void;
+  onAdded: (problem: ProblemSummary, created: boolean, report: boolean) => void;
+  /** Starts with "I solved it today" ticked, as when the dialog is opened from quick log. */
+  solvedToday?: boolean;
   onClose: () => void;
 }
 
-export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProblemDialogProps) {
+export function AddProblemDialog({ initialUrl = '', solvedToday = false, onAdded, onClose }: AddProblemDialogProps) {
   const formId = useId();
   const [url, setUrl] = useState(initialUrl);
   // The text that was last sent to parseProblemUrl, and what came back for it.
@@ -36,6 +38,7 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
   const [level, setLevel] = useState<(typeof LEVELS)[number] | null>(null);
   const [rating, setRating] = useState('');
   const [topics, setTopics] = useState<TopicId[]>([]);
+  const [report, setReport] = useState(solvedToday);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -90,7 +93,7 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
   }
 
   const ratingProblem =
-    recognized?.platform === 'codeforces' && rating.trim() !== '' && !(/^\d+$/.test(rating.trim()) && Number(rating) >= 800 && Number(rating) <= 3500)
+    recognized?.platform === 'codeforces' && rating.trim() !== '' && !(/^[1-9]\d*$/.test(rating.trim()) && Number(rating) >= 800 && Number(rating) <= 3500)
       ? 'Use a whole number from 800 to 3500'
       : null;
   const canAdd = recognized !== null && (known !== null || (title.trim() !== '' && !ratingProblem));
@@ -98,7 +101,7 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
   async function submit(): Promise<void> {
     if (!recognized || !canAdd) return;
     if (known) {
-      onAdded(known, false);
+      onAdded(known, false, report);
       return;
     }
     setSubmitting(true);
@@ -110,7 +113,7 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
         difficultyRaw: difficultyRaw(),
         topics,
       });
-      if (added.ok) onAdded(added.problem, added.created);
+      if (added.ok) onAdded(added.problem, added.created, report);
       else setSubmitError(added.reason);
     } catch (cause) {
       setSubmitError(cause instanceof Error ? cause.message : String(cause));
@@ -128,7 +131,7 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" type="submit" form={formId} disabled={!canAdd} loading={submitting}>
-            {known ? 'Open it' : 'Add problem'}
+            {known ? (report ? 'Report it' : 'Open it') : report ? 'Add and report' : 'Add problem'}
           </Button>
         </>
       }
@@ -287,6 +290,18 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
               </div>
             </div>
           </div>
+        )}
+
+        {recognized && (
+          <label className="flex cursor-pointer items-center gap-2 text-base text-fg">
+            <input
+              type="checkbox"
+              checked={report}
+              onChange={(event) => setReport(event.target.checked)}
+              className="focus-ring app-no-drag h-4 w-4 cursor-pointer accent-accent"
+            />
+            I solved it today
+          </label>
         )}
 
         {submitError && (

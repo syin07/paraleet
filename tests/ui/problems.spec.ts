@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { ParaLeetApi } from '../../src/bridge/contract';
 import { captureBothSizes, mockOpenedUrls, openScreen, WINDOW_MIN } from './screenshots';
 
 const rows = (page: Page) => page.getByTestId('problem-row');
@@ -339,6 +340,9 @@ test.describe('detail drawer', () => {
     const many = Array.from({ length: 25 }, (_, index) => `tag${index}`).join(',') + ',';
     await drawer(page).getByLabel('Add a pattern tag').fill(many);
     await expect(drawer(page).getByRole('button', { name: /^Remove tag/ })).toHaveCount(20);
+    await expect(drawer(page).getByText('20 tags at most')).toBeVisible();
+    await drawer(page).getByRole('button', { name: 'Remove tag tag0' }).click();
+    await expect(drawer(page).getByText('20 tags at most')).toHaveCount(0);
   });
 
   test('Saved only shows while the text on screen is the text that was saved', async ({ page }) => {
@@ -517,7 +521,7 @@ test.describe('add a problem', () => {
     await expect(dialog(page).getByRole('radio', { name: 'Hard' })).toHaveCount(0);
     await dialog(page).getByLabel('Title').fill('Theatre Square');
     const ratingError = dialog(page).getByText('Use a whole number from 800 to 3500');
-    for (const bad of ['abc', '100', '0000', '9999', '799', '3501', '1400.5']) {
+    for (const bad of ['abc', '100', '0000', '0800', '09999', '9999', '799', '3501', '1400.5']) {
       await dialog(page).getByLabel('Rating').fill(bad);
       await expect(ratingError).toBeVisible();
       await expect(dialog(page).getByRole('button', { name: 'Add problem' })).toBeDisabled();
@@ -601,5 +605,133 @@ test.describe('add a problem', () => {
     await dialog(page).getByLabel('Title').fill('Word Break');
     await dialog(page).getByRole('button', { name: 'Add problem' }).click();
     await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText('Word Break');
+  });
+});
+
+type Bridge = { paraleet: ParaLeetApi };
+
+test.describe('add a problem and report it', () => {
+  const report = (page: Page) => page.getByRole('dialog', { name: 'How did it go?' });
+  const box = (page: Page) => dialog(page).getByRole('checkbox', { name: 'I solved it today' });
+
+  test('from Problems "I solved it today" starts off and the button says Add problem', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await startAdding(page, 'https://leetcode.com/problems/a-brand-new-problem/');
+    await expect(box(page)).not.toBeChecked();
+    await dialog(page).getByLabel('Title').fill('A Brand New Problem');
+    await expect(dialog(page).getByRole('button', { name: 'Add problem' })).toBeEnabled();
+    await box(page).check();
+    await expect(dialog(page).getByRole('button', { name: 'Add and report' })).toBeEnabled();
+    await box(page).uncheck();
+    await dialog(page).getByRole('button', { name: 'Add problem' }).click();
+    await expect(report(page)).toHaveCount(0);
+    await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText('A Brand New Problem');
+  });
+
+  test('ticked, adding a new problem goes to the report form and then to its drawer', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await startAdding(page, 'https://leetcode.com/problems/a-brand-new-problem/');
+    await dialog(page).getByLabel('Title').fill('A Brand New Problem');
+    await box(page).check();
+    await dialog(page).getByRole('button', { name: 'Add and report' }).click();
+    await expect(report(page)).toContainText('A Brand New Problem');
+    await report(page).getByRole('radio', { name: /^Good/ }).click();
+    await report(page).getByRole('button', { name: 'Feed Para' }).click();
+    await expect(report(page)).toHaveCount(0);
+    await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText('A Brand New Problem');
+  });
+
+  test('a known link with the box ticked goes to the report form for that problem', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await startAdding(page, 'https://leetcode.com/problems/two-sum/');
+    await expect(dialog(page).getByTestId('known-problem')).toBeVisible();
+    await expect(dialog(page).getByRole('button', { name: 'Open it' })).toBeEnabled();
+    await box(page).check();
+    await expect(dialog(page).getByRole('button', { name: 'Report it' })).toBeEnabled();
+    await captureBothSizes(page, 'add-problem-known-solved-today');
+    await dialog(page).getByRole('button', { name: 'Report it' }).click();
+    await expect(report(page)).toContainText('Two Sum');
+    await report(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText('1. Two Sum');
+  });
+
+  test('a Codeforces problem added through the mock gets its difficulty band', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await startAdding(page, 'https://codeforces.com/contest/1/problem/A');
+    await dialog(page).getByLabel('Title').fill('Theatre Square');
+    await dialog(page).getByLabel('Rating').fill('1600');
+    await dialog(page).getByRole('button', { name: 'Add problem' }).click();
+    const norm = await page.evaluate(async () => {
+      const found = await (globalThis as unknown as Bridge).paraleet.searchProblems({ query: 'Theatre' });
+      return found[0]?.difficultyNorm;
+    });
+    expect(norm).toBe(3);
+  });
+});
+
+test.describe('dialogs that scroll', () => {
+  const footer = (page: Page) => dialog(page).getByTestId('modal-footer');
+  const fade = (page: Page) => dialog(page).getByTestId('modal-scroll-fade');
+
+  test('a tall add dialog at the minimum size shows that it scrolls', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await page.setViewportSize(WINDOW_MIN);
+    await startAdding(page, 'https://leetcode.com/problems/minimum-window-substring/');
+    await dialog(page).getByLabel('Title').fill('Minimum Window Substring');
+    await expect(fade(page)).toBeVisible();
+    await expect(footer(page)).not.toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    await captureBothSizes(page, 'add-problem-tall-min');
+    // Scrolled to the end, the fade has nothing left to hint at; the footer line stays.
+    await page.setViewportSize(WINDOW_MIN);
+    await dialog(page).locator('[data-scrolls]').evaluate((node) => node.scrollTo(0, node.scrollHeight));
+    await expect(fade(page)).toHaveCount(0);
+    await expect(footer(page)).not.toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  });
+
+  test('a short dialog shows no scroll hint', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await page.getByRole('button', { name: 'Add problem' }).first().click();
+    await expect(fade(page)).toHaveCount(0);
+    await expect(footer(page)).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  });
+
+  test('the hint follows the window size', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await startAdding(page, 'https://leetcode.com/problems/minimum-window-substring/');
+    await dialog(page).getByLabel('Title').fill('Minimum Window Substring');
+    await page.setViewportSize({ width: 1100, height: 1400 });
+    await expect(fade(page)).toHaveCount(0);
+    await page.setViewportSize(WINDOW_MIN);
+    await expect(fade(page)).toBeVisible();
+  });
+});
+
+test.describe('failed-save restore', () => {
+  test('a restore that was never shown does not come back later', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '1. Two Sum').click();
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as Bridge).paraleet;
+      bridge.saveProblemNotes = () => Promise.reject(new Error('The disk is full'));
+    });
+    await drawer(page).getByLabel('Notes').fill('typed, then closed');
+    // The reopened drawer loads slowly, so it is closed before it ever shows the restored text.
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as Bridge).paraleet;
+      const original = bridge.getProblemDetail;
+      bridge.getProblemDetail = async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        return original(input);
+      };
+    });
+    await page.keyboard.press('Escape');
+    await expect(drawer(page).getByText('Loading…')).toBeVisible();
+    await drawer(page).getByRole('button', { name: 'Close' }).click();
+    await expect(drawer(page)).toHaveCount(0);
+    await page.waitForTimeout(900);
+    await row(page, '1. Two Sum').click();
+    await expect(drawer(page).getByLabel('Notes')).toBeVisible();
+    await expect(drawer(page).getByLabel('Notes')).not.toHaveValue('typed, then closed');
+    await expect(drawer(page).getByRole('alert')).toHaveCount(0);
   });
 });

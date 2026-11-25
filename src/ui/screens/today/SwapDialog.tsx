@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ProblemSummary } from '../../../bridge/contract';
 import { api } from '../../bridge';
 import { DifficultyDot, PlatformBadge } from '../../components/Badges';
@@ -25,13 +25,20 @@ export function SwapDialog({ currentId, onClose }: { currentId: number | null; o
   const candidates = useBridgeQuery(() => api().getSwapCandidates());
   const [error, setError] = useState<string | null>(null);
 
+  // A ref, not state: a second click in the same tick must already see the first.
+  const inFlight = useRef(false);
+
   async function pick(problemId: number): Promise<void> {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     try {
       await api().swapToday({ problemId });
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      inFlight.current = false;
     }
   }
 

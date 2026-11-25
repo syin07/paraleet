@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode, Ref, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { cx } from '../lib/format';
 
 const SHELL =
@@ -37,6 +37,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   /** `lg` is the 40px URL field; `md` (32px) is the default. */
   size?: 'md' | 'lg';
   invalid?: boolean;
+  ref?: Ref<HTMLInputElement>;
 }
 
 export function Input({ size = 'md', invalid, className, ...rest }: InputProps) {
@@ -45,6 +46,7 @@ export function Input({ size = 'md', invalid, className, ...rest }: InputProps) 
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   invalid?: boolean;
+  ref?: Ref<HTMLTextAreaElement>;
 }
 
 export function Textarea({ invalid, className, rows = 3, ...rest }: TextareaProps) {
