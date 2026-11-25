@@ -318,7 +318,7 @@ function createApi(state: MockState): ParaLeetApi {
 
     openSolutionLink: async ({ problemId }) => {
       const url = state.notes.get(problemId)?.solutionUrl;
-      if (!url) return { opened: false };
+      if (!url || !/^https?:\/\//i.test(url)) return { opened: false };
       state.opened.push(url);
       return { opened: true };
     },

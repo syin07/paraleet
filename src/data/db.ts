@@ -58,7 +58,9 @@ export class Db {
     let result: T;
     try {
       result = work();
-      if (typeof (result as { then?: unknown } | null)?.then === 'function') {
+      if (result instanceof Promise) {
+        // Its outcome no longer matters; keep a late rejection from being reported as unhandled.
+        result.catch(() => undefined);
         throw new Error('Db.transaction: work must be synchronous, but it returned a promise');
       }
     } catch (error) {

@@ -52,6 +52,7 @@ describe('core is pure', () => {
     'export const now = new Date();',
     'export const now = Date.now();',
     'export const roll = Math.random();',
+    'export const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;',
     "export const page = fetch('https://example.com');",
     "export const page = globalThis.fetch('https://example.com');",
     'export const env = process.env.HOME;',

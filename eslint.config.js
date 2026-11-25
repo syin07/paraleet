@@ -64,7 +64,7 @@ export default tseslint.config(
   },
   {
     // core: pure TypeScript. Time and time zone are arguments, never read from the system.
-    files: ['src/core/**/*.ts'],
+    files: ['src/core/**/*.{ts,tsx}'],
     rules: {
       ...restrict(
         onlyPackages(['zod', 'ts-fsrs'], 'core is pure: the only packages it may import are zod and ts-fsrs.'),
@@ -105,6 +105,10 @@ export default tseslint.config(
         {
           selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']",
           message: 'core is deterministic. Take a seed or a random source as an argument.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='resolvedOptions']",
+          message: 'core never reads the system time zone or locale. Take the time zone as an argument.',
         },
         {
           selector: 'ImportExpression',
