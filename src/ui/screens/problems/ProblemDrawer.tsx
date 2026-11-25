@@ -22,12 +22,43 @@ function errorText(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-export function ProblemDrawer({ problemId, onClose }: { problemId: number; onClose: () => void }) {
+/** Notes the user typed that could not be saved when the drawer closed. */
+export interface FailedSave {
+  problemId: number;
+  draft: Draft;
+  message: string;
+}
+
+/**
+ * The screen gives each opening of the drawer its own `key`, so this always starts with a fresh
+ * fetch and never shows a detail loaded before the last save.
+ */
+export function ProblemDrawer({
+  problemId,
+  restore,
+  onRestoreUsed,
+  onSaveFailed,
+  onClose,
+}: {
+  problemId: number;
+  /** Text from a save that failed while the drawer was closing: shown again, with its error. */
+  restore: FailedSave | null;
+  onRestoreUsed: () => void;
+  onSaveFailed: (failed: FailedSave) => void;
+  onClose: () => void;
+}) {
   const detail = useBridgeQuery(() => api().getProblemDetail({ problemId }), [problemId]);
   const data = detail.data?.problem.id === problemId ? detail.data : undefined;
 
   return data ? (
-    <Loaded key={problemId} detail={data} reload={detail.reload} onClose={onClose} />
+    <Loaded
+      detail={data}
+      reload={detail.reload}
+      restore={restore?.problemId === problemId ? restore : null}
+      onRestoreUsed={onRestoreUsed}
+      onSaveFailed={onSaveFailed}
+      onClose={onClose}
+    />
   ) : (
     <Drawer title={detail.error ? 'Could not load this problem' : 'Loading…'} onClose={onClose}>
       {detail.error && (
@@ -39,7 +70,7 @@ export function ProblemDrawer({ problemId, onClose }: { problemId: number; onClo
   );
 }
 
-type Draft = Omit<ProblemNotes, 'problemId'>;
+export type Draft = Omit<ProblemNotes, 'problemId'>;
 
 function toDraft(notes: ProblemNotes): Draft {
   return {
@@ -50,15 +81,31 @@ function toDraft(notes: ProblemNotes): Draft {
   };
 }
 
-function Loaded({ detail, reload, onClose }: { detail: ProblemDetail; reload: () => void; onClose: () => void }) {
+function Loaded({
+  detail,
+  reload,
+  restore,
+  onRestoreUsed,
+  onSaveFailed,
+  onClose,
+}: {
+  detail: ProblemDetail;
+  reload: () => void;
+  restore: FailedSave | null;
+  onRestoreUsed: () => void;
+  onSaveFailed: (failed: FailedSave) => void;
+  onClose: () => void;
+}) {
   const { problem } = detail;
   const problemId = problem.id;
   // The drafts are what the user sees and types. Reloads after a save never overwrite them.
-  const [draft, setDraft] = useState<Draft>(() => toDraft(detail.notes));
+  const [draft, setDraft] = useState<Draft>(() => restore?.draft ?? toDraft(detail.notes));
   const draftRef = useRef(draft);
-  const savedRef = useRef(JSON.stringify(draft));
-  const [error, setError] = useState<string | null>(null);
-  const [savedNotes, setSavedNotes] = useState(false);
+  // What the app has saved; a restored draft differs from it, so it counts as unsaved.
+  const savedRef = useRef(JSON.stringify(toDraft(detail.notes)));
+  const [error, setError] = useState<string | null>(restore?.message ?? null);
+  // The notes text last saved. "Saved" shows only while the text on screen is that text.
+  const [savedText, setSavedText] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<'retire' | 'reset' | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -67,11 +114,11 @@ function Loaded({ detail, reload, onClose }: { detail: ProblemDetail; reload: ()
     setDraft(draftRef.current);
   }
 
-  /** Sends every notes field at once, so saving one never wipes another. */
-  const save = useCallback(async (): Promise<boolean> => {
+  /** Sends every notes field at once, so saving one never wipes another. Returns an error message, or null. */
+  const attempt = useCallback(async (): Promise<string | null> => {
     const current = draftRef.current;
     const snapshot = JSON.stringify(current);
-    if (snapshot === savedRef.current) return true;
+    if (snapshot === savedRef.current) return null;
     try {
       await api().saveProblemNotes({
         problemId,
@@ -81,17 +128,42 @@ function Loaded({ detail, reload, onClose }: { detail: ProblemDetail; reload: ()
         solutionUrl: current.solutionUrl?.trim() || null,
       });
       savedRef.current = snapshot;
-      setError(null);
-      setSavedNotes(true);
-      return true;
+      setSavedText(current.notes ?? '');
+      return null;
     } catch (cause) {
-      setError(errorText(cause));
-      return false;
+      return errorText(cause);
     }
   }, [problemId]);
 
-  // Save whatever is pending when the drawer closes or another problem is opened.
-  useEffect(() => () => void save(), [save]);
+  const save = useCallback(async (): Promise<boolean> => {
+    const message = await attempt();
+    setError(message);
+    return message === null;
+  }, [attempt]);
+
+  const onSaveFailedRef = useRef(onSaveFailed);
+  const onRestoreUsedRef = useRef(onRestoreUsed);
+  useEffect(() => {
+    onSaveFailedRef.current = onSaveFailed;
+    onRestoreUsedRef.current = onRestoreUsed;
+  });
+  useEffect(() => {
+    if (restore) onRestoreUsedRef.current();
+    // Only on the first render of this restored drawer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save whatever is pending when the drawer closes or another problem is opened. If that save
+  // fails, the screen opens the drawer again with the text and the error.
+  useEffect(
+    () => () => {
+      const unsaved = draftRef.current;
+      void attempt().then((message) => {
+        if (message) onSaveFailedRef.current({ problemId, draft: unsaved, message });
+      });
+    },
+    [attempt, problemId],
+  );
 
   async function act(action: 'retire' | 'reset'): Promise<void> {
     setBusy(true);
@@ -238,13 +310,10 @@ function Loaded({ detail, reload, onClose }: { detail: ProblemDetail; reload: ()
           placeholder="Anything worth remembering"
           maxLength={5000}
           value={draft.notes ?? ''}
-          onChange={(event) => {
-            edit({ notes: event.target.value });
-            setSavedNotes(false);
-          }}
+          onChange={(event) => edit({ notes: event.target.value })}
           onBlur={() => void save()}
         />
-        <div className="mt-1 h-4 text-sm text-fg-muted">{savedNotes ? 'Saved' : ''}</div>
+        <div className="mt-1 h-4 text-sm text-fg-muted">{savedText !== null && savedText === (draft.notes ?? '') ? 'Saved' : ''}</div>
       </DrawerSection>
 
       <DrawerSection label="My solution">
@@ -269,14 +338,26 @@ function Loaded({ detail, reload, onClose }: { detail: ProblemDetail; reload: ()
   );
 }
 
+const MAX_TAGS = 20;
+
+/** Adds every non-empty part, skipping repeats (any letter case) and stopping at the cap. */
+function mergeTags(tags: string[], parts: string[]): string[] {
+  const next = [...tags];
+  for (const part of parts) {
+    const tag = part.trim().slice(0, 60);
+    if (!tag || next.length >= MAX_TAGS) continue;
+    if (next.some((existing) => existing.toLowerCase() === tag.toLowerCase())) continue;
+    next.push(tag);
+  }
+  return next;
+}
+
 function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
   const [text, setText] = useState('');
 
-  function add(raw: string): void {
-    const tag = raw.trim().slice(0, 60);
-    setText('');
-    if (!tag || tags.includes(tag) || tags.length >= 20) return;
-    onChange([...tags, tag]);
+  function add(parts: string[]): void {
+    const next = mergeTags(tags, parts);
+    if (next.length !== tags.length) onChange(next);
   }
 
   return (
@@ -306,21 +387,24 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
         placeholder="Add a tag, then press Enter"
         value={text}
         onChange={(event) => {
-          const value = event.target.value;
-          if (value.includes(',')) {
-            for (const part of value.split(',').slice(0, -1)) add(part);
-            setText(value.slice(value.lastIndexOf(',') + 1));
-          } else {
-            setText(value);
-          }
+          // Everything before the last comma is a finished tag, added in one step (so a pasted
+          // list keeps every tag); what follows stays in the field.
+          const parts = event.target.value.split(',');
+          const rest = parts.pop() ?? '';
+          if (parts.length > 0) add(parts);
+          setText(rest);
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
-            add(text);
+            add([text]);
+            setText('');
           }
         }}
-        onBlur={() => add(text)}
+        onBlur={() => {
+          add([text]);
+          setText('');
+        }}
       />
     </div>
   );

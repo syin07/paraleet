@@ -175,6 +175,33 @@ test.describe('table', () => {
     expect(await folded.getAttribute('title')).toContain(',');
   });
 
+  test('the Due filter never shows how many reviews are due', async ({ page }) => {
+    await openScreen(page, 'problems', 'backlog');
+    await expect(rows(page)).toHaveCount(9);
+    // Retire one so the due count (8) differs from the logged count (9).
+    await rows(page).first().click();
+    await drawer(page).getByRole('button', { name: 'Retire card' }).click();
+    await drawer(page).getByRole('button', { name: 'Retire', exact: true }).click();
+    await expect(drawer(page).getByText('Retired', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await page.locator('button[aria-haspopup="menu"]').filter({ hasText: 'Status' }).click();
+    await expect(page.getByRole('menuitemcheckbox', { name: /\d/ })).toHaveCount(0);
+    await page.getByRole('menuitemcheckbox', { name: 'Due' }).click();
+    await page.keyboard.press('Escape');
+    await expect(rows(page)).toHaveCount(8);
+
+    const outside = await page.getByTestId('screen-problems').evaluate((node) => {
+      const copy = node.cloneNode(true) as { querySelectorAll(selector: string): { remove(): void }[]; innerText?: string; textContent: string | null };
+      copy.querySelectorAll('[data-testid="problem-row"]').forEach((element) => element.remove());
+      return copy.textContent ?? '';
+    });
+    expect(outside).not.toContain('Showing');
+    expect(outside).not.toMatch(/\b8\b/);
+    expect(outside).toContain('9 logged');
+    await expect(page.getByTestId('filter-chips')).toHaveText('DueClear');
+  });
+
   test('many problems', async ({ page }) => {
     await openScreen(page, 'problems', 'many');
     await expect(rows(page)).toHaveCount(35);
@@ -269,6 +296,121 @@ test.describe('detail drawer', () => {
     // Open is enabled for the saved link and opens it.
     await panel.getByRole('button', { name: 'Open', exact: true }).click();
     expect(await mockOpenedUrls(page)).toEqual(['https://example.com/my-binary-search']);
+  });
+
+  test('several tags pasted at once are all added and kept', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '125. Valid Palindrome').click();
+    const panel = drawer(page);
+    const field = panel.getByLabel('Add a pattern tag');
+    await field.fill('dp, greedy, bfs,');
+    for (const tag of ['dp', 'greedy', 'bfs']) await expect(panel.getByText(tag, { exact: true })).toBeVisible();
+    await expect(field).toHaveValue('');
+
+    // Text after the last comma stays in the field until Enter.
+    await field.fill('heap, two');
+    await expect(panel.getByText('heap', { exact: true })).toBeVisible();
+    await expect(field).toHaveValue(' two');
+    await field.press('Enter');
+    await expect(panel.getByText('two', { exact: true })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await row(page, '125. Valid Palindrome').click();
+    for (const tag of ['two pointers from both ends', 'dp', 'greedy', 'bfs', 'heap', 'two']) {
+      await expect(panel.getByText(tag, { exact: true })).toBeVisible();
+    }
+  });
+
+  test('pasted tags skip repeats of each other and of existing tags, whatever the case', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '125. Valid Palindrome').click();
+    const panel = drawer(page);
+    await panel.getByLabel('Add a pattern tag').fill('dp, DP, Two Pointers From Both Ends, greedy, dp,');
+    await expect(panel.getByText('greedy', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await row(page, '125. Valid Palindrome').click();
+    await expect(panel.getByRole('button', { name: /^Remove tag/ })).toHaveCount(3);
+    await expect(panel.getByText('dp', { exact: true })).toHaveCount(1);
+  });
+
+  test('no more than 20 tags are kept from one paste', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '1. Two Sum').click();
+    const many = Array.from({ length: 25 }, (_, index) => `tag${index}`).join(',') + ',';
+    await drawer(page).getByLabel('Add a pattern tag').fill(many);
+    await expect(drawer(page).getByRole('button', { name: /^Remove tag/ })).toHaveCount(20);
+  });
+
+  test('Saved only shows while the text on screen is the text that was saved', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '1. Two Sum').click();
+    // Make saving slow so the text can change while a save is in flight.
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as {
+        paraleet: { saveProblemNotes: (input: unknown) => Promise<unknown> };
+      }).paraleet;
+      const original = bridge.saveProblemNotes.bind(bridge);
+      bridge.saveProblemNotes = async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return original(input);
+      };
+    });
+    const notes = drawer(page).getByLabel('Notes');
+    await notes.fill('first version');
+    await notes.blur();
+    await notes.focus();
+    await notes.press('End');
+    await notes.pressSequentially(' and more');
+    await expect(drawer(page).getByText('Saved', { exact: true })).toHaveCount(0);
+    await page.waitForTimeout(900);
+    await expect(drawer(page).getByText('Saved', { exact: true })).toHaveCount(0);
+    await notes.blur();
+    await expect(drawer(page).getByText('Saved', { exact: true })).toBeVisible();
+  });
+
+  test('a save that fails while the drawer closes reopens it with the text and the error', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '1. Two Sum').click();
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as { paraleet: { saveProblemNotes: () => Promise<never> } }).paraleet;
+      bridge.saveProblemNotes = () => Promise.reject(new Error('The disk is full'));
+    });
+    await drawer(page).getByLabel('Notes').fill('typed, then closed');
+    await page.keyboard.press('Escape');
+    await expect(drawer(page).getByRole('alert')).toContainText('The disk is full');
+    await expect(drawer(page).getByLabel('Notes')).toHaveValue('typed, then closed');
+    // Closing again with the same text lets the user go.
+    await page.keyboard.press('Escape');
+    await expect(drawer(page)).toHaveCount(0);
+    await page.waitForTimeout(300);
+    await expect(drawer(page)).toHaveCount(0);
+  });
+
+  test('a failed save while switching problems brings the first problem back', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '1. Two Sum').click();
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as { paraleet: { saveProblemNotes: () => Promise<never> } }).paraleet;
+      bridge.saveProblemNotes = () => Promise.reject(new Error('No space left'));
+    });
+    await drawer(page).getByLabel('Notes').fill('keep me');
+    await row(page, '121. Best Time').click();
+    await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText('1. Two Sum');
+    await expect(drawer(page).getByLabel('Notes')).toHaveValue('keep me');
+    await expect(drawer(page).getByRole('alert')).toContainText('No space left');
+  });
+
+  test('going A to B to A shows the notes as last saved for A', async ({ page }) => {
+    await openScreen(page, 'problems');
+    await row(page, '1. Two Sum').click();
+    await drawer(page).getByLabel('Notes').fill('written in A');
+    await row(page, '121. Best Time').click();
+    await row(page, '1. Two Sum').click();
+    await expect(drawer(page).getByLabel('Notes')).toHaveValue('written in A');
+    await drawer(page).getByLabel('Notes').fill('written in A, then more');
+    await row(page, '20. Valid Parentheses').click();
+    await row(page, '1. Two Sum').click();
+    await expect(drawer(page).getByLabel('Notes')).toHaveValue('written in A, then more');
   });
 
   test('a field being edited is saved when the drawer closes', async ({ page }) => {
@@ -374,9 +516,17 @@ test.describe('add a problem', () => {
     await expect(dialog(page).getByTestId('recognition')).toContainText('Codeforces');
     await expect(dialog(page).getByRole('radio', { name: 'Hard' })).toHaveCount(0);
     await dialog(page).getByLabel('Title').fill('Theatre Square');
-    await dialog(page).getByLabel('Rating').fill('abc');
-    await expect(dialog(page).getByText('Use the problem rating, for example 1400')).toBeVisible();
-    await expect(dialog(page).getByRole('button', { name: 'Add problem' })).toBeDisabled();
+    const ratingError = dialog(page).getByText('Use a whole number from 800 to 3500');
+    for (const bad of ['abc', '100', '0000', '9999', '799', '3501', '1400.5']) {
+      await dialog(page).getByLabel('Rating').fill(bad);
+      await expect(ratingError).toBeVisible();
+      await expect(dialog(page).getByRole('button', { name: 'Add problem' })).toBeDisabled();
+    }
+    for (const good of ['800', '3500']) {
+      await dialog(page).getByLabel('Rating').fill(good);
+      await expect(ratingError).toHaveCount(0);
+      await expect(dialog(page).getByRole('button', { name: 'Add problem' })).toBeEnabled();
+    }
     await dialog(page).getByLabel('Rating').fill('1000');
     await dialog(page).getByRole('button', { name: 'Math' }).click();
     await dialog(page).getByRole('button', { name: 'Add problem' }).click();

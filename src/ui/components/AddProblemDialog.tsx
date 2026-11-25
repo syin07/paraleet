@@ -90,8 +90,8 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
   }
 
   const ratingProblem =
-    recognized?.platform === 'codeforces' && rating.trim() !== '' && !/^\d{3,4}$/.test(rating.trim())
-      ? 'Use the problem rating, for example 1400'
+    recognized?.platform === 'codeforces' && rating.trim() !== '' && !(/^\d+$/.test(rating.trim()) && Number(rating) >= 800 && Number(rating) <= 3500)
+      ? 'Use a whole number from 800 to 3500'
       : null;
   const canAdd = recognized !== null && (known !== null || (title.trim() !== '' && !ratingProblem));
 
@@ -215,7 +215,7 @@ export function AddProblemDialog({ initialUrl = '', onAdded, onClose }: AddProbl
             </Field>
 
             {recognized.platform === 'codeforces' && (
-              <Field label="Rating" error={ratingProblem} hint="Optional, for example 1400">
+              <Field label="Rating" error={ratingProblem} hint="Optional, from 800 to 3500">
                 <Input
                   aria-label="Rating"
                   inputMode="numeric"

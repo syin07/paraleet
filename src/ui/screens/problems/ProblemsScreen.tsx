@@ -1,7 +1,7 @@
 // Problems: everything the user has logged, with search, filters, sorting, a detail drawer and
 // "Add problem" by URL (PRD sections 5, 8 and 11; docs/design-references.md, section 4).
 import { Plus, Search, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { TOPICS, topicLabel, type TopicId } from '../../../core/topics';
 import { api } from '../../bridge';
 import { AddProblemDialog } from '../../components/AddProblemDialog';
@@ -12,12 +12,11 @@ import { PLATFORM_LABELS, type DifficultyTone } from '../../lib/format';
 import { useBridgeQuery } from '../../lib/useBridgeQuery';
 import { PLATFORMS, type Platform } from '../../../core/types';
 import { FilterMenu, type FilterOption } from './FilterMenu';
-import { ProblemDrawer } from './ProblemDrawer';
+import { ProblemDrawer, type FailedSave } from './ProblemDrawer';
 import { NoMatches, ProblemTable } from './ProblemTable';
 import {
   DEFAULT_SORT,
   filterRows,
-  hasFilters,
   NO_FILTERS,
   sortRows,
   type Filters,
@@ -47,7 +46,31 @@ export function ProblemsScreen() {
   const todayView = useBridgeQuery(() => api().getToday());
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // `nonce` changes on every opening, so each opening of the drawer fetches fresh details.
+  const [selection, setSelection] = useState<{ id: number; nonce: number } | null>(null);
+  const selectedId = selection?.id ?? null;
+  const nonce = useRef(0);
+  const [restore, setRestore] = useState<FailedSave | null>(null);
+  const lastFailure = useRef<FailedSave | null>(null);
+
+  function select(problemId: number | null): void {
+    // A drawer the user opens themselves starts a clean slate for failed saves.
+    if (problemId !== null) lastFailure.current = null;
+    if (problemId === null) setSelection(null);
+    else setSelection((current) => (current?.id === problemId ? current : { id: problemId, nonce: ++nonce.current }));
+  }
+
+  /** A save failed while the drawer closed: open that problem again with the text and the error. */
+  function onSaveFailed(failed: FailedSave): void {
+    const previous = lastFailure.current;
+    lastFailure.current = failed;
+    // The same text failing again after the user saw the error: let them close it.
+    if (previous?.problemId === failed.problemId && JSON.stringify(previous.draft) === JSON.stringify(failed.draft)) {
+      return;
+    }
+    setRestore(failed);
+    setSelection({ id: failed.problemId, nonce: ++nonce.current });
+  }
   const [adding, setAdding] = useState(false);
 
   const rows = logged.data;
@@ -87,7 +110,6 @@ export function ProblemsScreen() {
       remove: () => setFilters({ ...filters, statuses: filters.statuses.filter((item) => item !== value) }),
     })),
   ];
-  const filtering = hasFilters(filters);
   const nothingLogged = rows !== undefined && rows.length === 0;
 
   return (
@@ -188,26 +210,30 @@ export function ProblemsScreen() {
                 sort={sort}
                 onSort={changeSort}
                 selectedId={selectedId}
-                onOpen={setSelectedId}
+                onOpen={select}
                 empty={<NoMatches onClear={() => setFilters(NO_FILTERS)} />}
               />
-              {filtering && visible.length > 0 && (
-                <div className="mt-2 text-sm text-fg-muted">
-                  Showing {visible.length} of {rows.length}
-                </div>
-              )}
             </>
           )}
         </div>
       </div>
 
-      {selectedId !== null && <ProblemDrawer problemId={selectedId} onClose={() => setSelectedId(null)} />}
+      {selection && (
+        <ProblemDrawer
+          key={selection.nonce}
+          problemId={selection.id}
+          restore={restore}
+          onRestoreUsed={() => setRestore(null)}
+          onSaveFailed={onSaveFailed}
+          onClose={() => select(null)}
+        />
+      )}
       {adding && (
         <AddProblemDialog
           onClose={() => setAdding(false)}
           onAdded={(problem) => {
             setAdding(false);
-            setSelectedId(problem.id);
+            select(problem.id);
           }}
         />
       )}
