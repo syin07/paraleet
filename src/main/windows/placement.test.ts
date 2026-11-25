@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultPosition, keepOnScreen, MIN_VISIBLE, type Rect } from './placement';
+import { defaultPosition, keepOnScreen, MIN_VISIBLE, placePopover, workAreaFor, type Rect } from './placement';
 
 const laptop: Rect = { x: 0, y: 25, width: 1728, height: 1002 };
 const external: Rect = { x: 1728, y: 0, width: 2560, height: 1440 };
@@ -94,5 +94,75 @@ describe('keepOnScreen', () => {
       const once = keepOnScreen(start, size, [laptop, external], bird);
       expect(keepOnScreen(once, size, [laptop, external], bird)).toEqual(once);
     }
+  });
+});
+
+describe('placePopover', () => {
+  const card = { width: 320, height: 240 };
+
+  it('sits above its anchor, centred, when there is room', () => {
+    const birdBox: Rect = { x: 800, y: 600, width: 128, height: 128 };
+    expect(placePopover(birdBox, card, laptop, 'above')).toEqual({ x: 800 + 64 - 160, y: 600 - 8 - 240 });
+  });
+
+  it('goes below when it does not fit above', () => {
+    const nearTop: Rect = { x: 800, y: 100, width: 128, height: 128 };
+    expect(placePopover(nearTop, card, laptop, 'above')).toEqual({ x: 704, y: 100 + 128 + 8 });
+  });
+
+  it('sits under a menu bar icon, pulled in from the screen edge', () => {
+    const trayIcon: Rect = { x: 1700, y: 0, width: 24, height: 24 };
+    expect(placePopover(trayIcon, card, laptop, 'below')).toEqual({ x: 1728 - 320, y: 32 });
+    const leftIcon: Rect = { x: 2, y: 0, width: 24, height: 24 };
+    expect(placePopover(leftIcon, card, laptop, 'below', 4)).toEqual({ x: 0, y: 28 });
+  });
+
+  it('stays inside the work area even when it fits on neither side', () => {
+    const tall = { width: 360, height: 640 };
+    const middle: Rect = { x: 600, y: 400, width: 128, height: 128 };
+    const placed = placePopover(middle, tall, laptop, 'above');
+    expect(placed.y).toBeGreaterThanOrEqual(laptop.y);
+    expect(placed.y + tall.height).toBeLessThanOrEqual(laptop.y + laptop.height);
+    expect(placed.x).toBe(600 + 64 - 180);
+  });
+});
+
+describe('workAreaFor', () => {
+  // A laptop with a 25-point menu bar, and its work area below it.
+  const laptopScreen = { bounds: { x: 0, y: 0, width: 1728, height: 1117 }, workArea: laptop };
+  const right = { bounds: { x: 1728, y: 0, width: 2560, height: 1440 }, workArea: external };
+
+  it('picks the screen the rectangle is on, or the nearest', () => {
+    expect(workAreaFor({ x: 100, y: 100, width: 50, height: 50 }, [laptopScreen, right])).toBe(laptop);
+    expect(workAreaFor({ x: 3000, y: 100, width: 50, height: 50 }, [laptopScreen, right])).toBe(external);
+    expect(workAreaFor({ x: 9000, y: 100, width: 50, height: 50 }, [laptopScreen, right])).toBe(external);
+    expect(workAreaFor({ x: 0, y: 0, width: 1, height: 1 }, [])).toBeNull();
+  });
+
+  it('keeps a menu bar icon on its own screen when another display sits right above it', () => {
+    // The external display is arranged directly above the laptop; its work area ends at y = 0.
+    const above = {
+      bounds: { x: 0, y: -1440, width: 2560, height: 1440 },
+      workArea: { x: 0, y: -1415, width: 2560, height: 1415 },
+    };
+    const icon = { x: 1500, y: 0, width: 24, height: 24 };
+    // The icon is in the laptop's menu bar: outside both work areas, and nearer the upper one.
+    expect(workAreaFor(icon, [laptopScreen, above])).toBe(laptop);
+    expect(workAreaFor(icon, [above, laptopScreen])).toBe(laptop);
+    // And the card lands just under the laptop's menu bar, not at the bottom of the upper screen.
+    const area = workAreaFor(icon, [above, laptopScreen]);
+    expect(placePopover(icon, { width: 320, height: 240 }, area ?? laptop, 'below', 4)).toEqual({ x: 1352, y: 28 });
+  });
+
+  it('works on a notched laptop, where the menu bar is taller', () => {
+    const notched = {
+      bounds: { x: 0, y: 0, width: 1512, height: 982 },
+      workArea: { x: 0, y: 37, width: 1512, height: 945 },
+    };
+    const above = {
+      bounds: { x: 0, y: -1080, width: 1920, height: 1080 },
+      workArea: { x: 0, y: -1055, width: 1920, height: 1055 },
+    };
+    expect(workAreaFor({ x: 1200, y: 6, width: 24, height: 24 }, [above, notched])).toBe(notched.workArea);
   });
 });

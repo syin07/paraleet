@@ -87,3 +87,40 @@ export function keepOnScreen(
     y: Math.round(clamp(drawn.y, nearest.y, nearest.y + nearest.height - body.height) - body.y),
   };
 }
+
+/**
+ * Where a popover goes: centred on its anchor, on the preferred side when it fits there and on
+ * the other side when it does not, and always fully inside the work area.
+ */
+export function placePopover(anchor: Rect, size: Size, workArea: Rect, prefer: 'above' | 'below', gap = 8): Point {
+  const above = anchor.y - gap - size.height;
+  const below = anchor.y + anchor.height + gap;
+  const fitsAbove = above >= workArea.y;
+  const fitsBelow = below + size.height <= workArea.y + workArea.height;
+  const y = prefer === 'above' ? (fitsAbove || !fitsBelow ? above : below) : fitsBelow || !fitsAbove ? below : above;
+  const x = anchor.x + anchor.width / 2 - size.width / 2;
+  return {
+    x: Math.round(clamp(x, workArea.x, workArea.x + workArea.width - size.width)),
+    y: Math.round(clamp(y, workArea.y, workArea.y + workArea.height - size.height)),
+  };
+}
+
+/** A screen as placement sees it: its whole area, and the part windows may use. */
+export interface ScreenArea {
+  bounds: Rect;
+  workArea: Rect;
+}
+
+/**
+ * The usable area of the screen `rect` is on: the screen whose whole area holds the centre of
+ * `rect`, or the nearest one. Judged by the screen's bounds, not its work area: a menu bar icon
+ * is on its screen but outside every work area.
+ */
+export function workAreaFor(rect: Rect, screens: readonly ScreenArea[]): Rect | null {
+  const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  let best: ScreenArea | null = null;
+  for (const candidate of screens) {
+    if (best === null || distance(centre, candidate.bounds) < distance(centre, best.bounds)) best = candidate;
+  }
+  return best?.workArea ?? null;
+}

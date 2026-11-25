@@ -85,6 +85,14 @@ export class PetWindowController {
     return this.window !== null && !this.window.isDestroyed() && this.window.isVisible();
   }
 
+  /** Where the bird is on screen, or null while the pet is not showing. */
+  birdRect(): Rect | null {
+    const window = this.current();
+    if (!window || !window.isVisible()) return null;
+    const [x = 0, y = 0] = window.getPosition();
+    return { x: x + PET_BIRD_BOX.x, y: y + PET_BIRD_BOX.y, width: PET_BIRD_BOX.width, height: PET_BIRD_BOX.height };
+  }
+
   /** The window, for the trusted-sender check and for tests. */
   current(): BrowserWindow | null {
     return this.window && !this.window.isDestroyed() ? this.window : null;

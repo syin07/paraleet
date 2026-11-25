@@ -65,7 +65,7 @@ These boundaries are enforced by ESLint (`eslint.config.js`). A lint error about
 - **Attempts are append-only** and are the source of truth. Stored streak and totals must equal `recomputePetFacts(attempts)`, and stored accessory unlocks must contain `replayUnlocks(attempts)`.
 - **Mood is never stored.** It is derived on every read (`services/pet.ts`). What is only true while the app runs (the celebration after a report) lives in `ctx.session`.
 - **Bridge:** to add a method, add it to `src/bridge/channels.ts`, `src/bridge/contract.ts`, `src/main/services/index.ts` and `src/ui/mock/mockBridge.ts`. Inputs are validated in main.
-- **Windows:** services never import Electron. A use case that needs a window to act calls `ctx.windows` (`WindowPort`); main implements it and `createTestApp` fakes it. The pet window's rules are in `docs/decisions/0010-pet-window.md`.
+- **Windows:** services never import Electron. A use case that needs a window to act calls `ctx.windows` (`WindowPort`); main implements it and `createTestApp` fakes it. The pet window's rules are in `docs/decisions/0010-pet-window.md`; the menu bar icon and the compact card in `0013`.
 - **Links:** the UI never opens a URL itself and never passes one to main. It calls `openProblem` or `openSolutionLink` with a problem ID; `window.open` and `<a target="_blank">` are blocked.
 - **Transactions:** `db.transaction(work)` takes synchronous work only. Read what you will update inside the transaction, not before an `await`.
 - **UI:** use only the theme tokens in `src/ui/styles.css` and the shared components in `src/ui/components/`. Follow the screen's section in `docs/design-references.md`. Orange is the only accent.

@@ -2,9 +2,11 @@
 import { randomInt } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, powerMonitor, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, powerMonitor, screen, shell, type MenuItemConstructorOptions } from 'electron';
 import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
+import { ensurePet, saveHatched } from '../data/repos/pet';
+import { getSettings, updateSettings } from '../data/repos/settings';
 import { registerBridge } from './bridge';
 import { FakeClock, systemClock, type Clock } from './clock';
 import {
@@ -14,9 +16,12 @@ import {
   newSession,
   nextCelebrationStep,
   reconcile,
+  trayState,
   type AppContext,
 } from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
+import { TrayController } from './tray';
+import { CardWindowController } from './windows/cardWindow';
 import { PetWindowController } from './windows/petWindow';
 
 const TICK_MS = 30_000;
@@ -121,6 +126,28 @@ function start(): void {
   );
   petWindow = pet;
 
+  // The compact card hangs on the bird or on the menu bar icon, whichever asked for it.
+  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() }, () => updateDock());
+  const trayMenu = (): MenuItemConstructorOptions[] => [
+    { label: 'Open ParaLeet', click: () => showMainWindow() },
+    { label: "Swap today's problem…", click: () => showMainWindow('/today/swap') },
+    { type: 'separator' },
+    getSettings(ctx.db).petVisible
+      ? { label: 'Hide Para from the desktop', click: () => setPetVisible(false) }
+      : { label: 'Show Para on the desktop', click: () => setPetVisible(true) },
+    { label: 'Settings…', click: () => showMainWindow('/settings') },
+    { type: 'separator' },
+    { label: 'Quit ParaLeet', click: () => app.quit() },
+  ];
+  const tray: TrayController = new TrayController(() => trayState(ctx), {
+    toggleCard: () => card.toggle('tray'),
+    menu: trayMenu,
+  });
+  function setPetVisible(visible: boolean): void {
+    updateSettings(ctx.db, { petVisible: visible });
+    ctx.notifyChanged();
+  }
+
   const ctx: AppContext = {
     db,
     clock,
@@ -131,10 +158,26 @@ function start(): void {
       endPetDrag: () => pet.endDrag(),
       setPetInteractive: (interactive) => pet.setInteractive(interactive),
       showPetMenu: () => pet.showMenu(),
+      showCard: (anchor) => card.toggle(anchor),
+      // Closed a moment later, so the card's own request is answered before its window is gone.
+      // It closes the card that asked, even if another one has been opened in the meantime.
+      hideCard: () => {
+        const asking = card.current();
+        setTimeout(() => {
+          if (asking !== null && card.current() === asking) card.hide();
+        }, 0);
+      },
+      setCardSize: (width, height) => card.setSize(width, height),
     },
     notifyChanged: () => {
-      // A settings change may show or hide the pet.
-      pet.sync();
+      // A settings change may show or hide the pet; a report changes the icon and the streak.
+      // Neither may stop the windows from hearing about a change that is already saved.
+      try {
+        pet.sync();
+        tray.sync();
+      } catch (error) {
+        console.error('ParaLeet could not update the pet window or the menu bar icon:', error);
+      }
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CHANGED_EVENT);
       }
@@ -169,6 +212,12 @@ function start(): void {
     );
   }
 
+  // End-to-end tests start with Para already hatched unless they are about the first-launch flow.
+  if (isE2E && process.env.PARALEET_E2E_UNHATCHED !== '1') {
+    ensurePet(db, ctx.randomSeed(), clock.now().toISOString());
+    saveHatched(db, clock.now().toISOString());
+  }
+
   // Attempts are the source of truth: bring the stored streak, totals and review cards in line
   // with them before anything is shown.
   try {
@@ -198,11 +247,21 @@ function start(): void {
   const dayWatcher = createDayWatcher(ctx);
   const moodWatcher = createMoodWatcher(ctx);
   // One tick does everything that depends on the clock. Long timers are not trusted (PRD section 9).
+  // Each step is guarded: one that fails is logged and must not stop the others, the next tick,
+  // or the main window from opening.
+  const step = (what: string, run: () => void): void => {
+    try {
+      run();
+    } catch (error) {
+      console.error(`ParaLeet could not ${what}:`, error);
+    }
+  };
   const tick = (): void => {
-    dayWatcher.check();
+    step('check the day', () => dayWatcher.check());
     // A reminder time passing, night falling or a celebration ending changes how Para looks.
-    moodWatcher.check();
-    pet.sync();
+    step("check Para's mood", () => moodWatcher.check());
+    step('update the pet window', () => pet.sync());
+    step('update the menu bar icon', () => tray.sync());
   };
   tick();
   setInterval(tick, TICK_MS);
@@ -243,6 +302,29 @@ function start(): void {
         const item = pet.menuTemplate().find((entry) => entry.label === label);
         if (!item?.click) throw new Error(`No pet menu item "${label}"`);
         (item.click as () => void)();
+      },
+      tray: () => tray.facts(),
+      clickTray: () => card.toggle('tray'),
+      // What losing focus does to the card. With `early`, the card is opened and loses focus in the
+      // same breath, before it has been shown.
+      blurCard: (early: string) => {
+        if (early === 'early') card.show('tray');
+        card.current()?.emit('blur');
+      },
+      trayMenuLabels: () => trayMenu().map((item) => item.label ?? item.type ?? ''),
+      clickTrayMenu: (label: string) => {
+        const item = trayMenu().find((entry) => entry.label === label);
+        if (!item?.click) throw new Error(`No menu bar item "${label}"`);
+        (item.click as () => void)();
+      },
+      card: () => {
+        const window = card.current();
+        return {
+          exists: window !== null,
+          visible: card.isVisible(),
+          anchor: card.currentAnchor(),
+          bounds: window?.getBounds() ?? null,
+        };
       },
       dockVisible: () => app.dock?.isVisible() ?? true,
       mainWindowOpen: () => mainWindow !== null && !mainWindow.isDestroyed(),

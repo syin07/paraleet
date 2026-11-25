@@ -27,10 +27,13 @@ Keep this file accurate at the end of every session (PRD section 2).
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-There are two windows, both loading the same renderer bundle:
+There are three windows, all loading the same renderer bundle, and a menu bar icon:
 
 - **The main window** (`windows/mainWindow.ts`): the sidebar and screens. Closing it leaves the app running.
 - **The pet window** (`windows/petWindow.ts`, route `#/pet`, UI in `src/ui/windows/pet/`): 240×280, transparent, frameless, always on top, on every desktop, never focused. Clicks pass through except over the bird. `PetWindowController.sync()` makes it match the `petVisible` setting and the "hide for 1 hour" timer; it runs on launch, on every data change, on the 30-second tick and when displays change. `windows/placement.ts` is the pure geometry that keeps the bird on a visible screen. See decision 0010.
+
+- **The compact card** (`windows/cardWindow.ts`, route `#/card`, UI in `src/ui/windows/card/`): a small popover with today's problem, opened from the floating pet or the menu bar icon. Created on open, destroyed on close; placed by `placePopover`. See decision 0013.
+- **The menu bar icon** (`tray.ts`, pixels from `trayIcon.ts`): Para's head cut from the sprite, the streak as its title. `TrayController.sync()` runs on every change and tick and redraws only when something would look different.
 
 **Para's state.** `services/pet.ts` builds the pet summary every screen shows: stage, mood, line and accessories. Mood and line are computed on each read from the clock, the settings, the stored streak facts and `ctx.session` (what the app remembers only while running: the celebration after the last report). Main tells the windows to redraw when the mood changes: a short timer for each step of a celebration (`nextCelebrationStep`) and a comparison on the 30-second tick (`createMoodWatcher`). See decision 0012.
 
@@ -89,7 +92,7 @@ Migration 2 added the pet's greeting and reminder days and the catalog bookkeepi
 - `src/bridge/channels.ts` lists the method names. `src/bridge/contract.ts` gives each an input schema and an output type.
 - Main validates every input with zod and accepts calls only from the main frame of the app's own windows.
 - The UI gets `window.paraleet` with one async function per method, `onChanged(listener)` and `onNavigate(listener)`. Main sends `paraleet:navigate` with a path such as `/settings` to move the main window to a screen.
-- Window commands (`showMainWindow`, `movePetWindowBy`, `endPetDrag`, `setPetInteractive`, `showPetMenu`) are ordinary bridge methods whose handlers call `ctx.windows`.
+- Window commands (`showMainWindow`, `movePetWindowBy`, `endPetDrag`, `setPetInteractive`, `showPetMenu`, `showCard`, `hideCard`, `setCardSize`) are ordinary bridge methods whose handlers call `ctx.windows`.
 - In a plain browser there is no preload, so `src/ui/main.tsx` installs `src/ui/mock/mockBridge.ts`, an in-memory implementation of the same contract with named scenarios.
 
 ## Security posture
