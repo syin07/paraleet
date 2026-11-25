@@ -1,5 +1,5 @@
 import { CircleAlert, CircleCheck } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { DataInfo, DataSummary, ImportChoice } from '../../../bridge/contract';
 import { api } from '../../bridge';
 import { Button } from '../../components/Button';
@@ -75,24 +75,47 @@ function Comparison({ incoming, current }: { incoming: DataSummary; current: Dat
 type Stage = 'asking' | 'applying' | 'failed' | 'restarting';
 
 /** The confirm dialog for replacing the data. It cannot be closed while the import runs or the app restarts. */
-function ImportDialog({ offer, info, onClose }: { offer: Offer; info: DataInfo | undefined; onClose: () => void }) {
+function ImportDialog({
+  offer,
+  info,
+  setAsking,
+  onClose,
+}: {
+  offer: Offer;
+  info: DataInfo | undefined;
+  /** Tells the group whether main still holds the chosen file with nobody having said yes or no. */
+  setAsking: (asking: boolean) => void;
+  onClose: () => void;
+}) {
   const [stage, setStage] = useState<Stage>('asking');
   const [failure, setFailure] = useState('');
   const running = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // The button that had focus is busy or gone after a stage change. Put focus back inside the dialog,
+  // or Escape never reaches it.
+  useEffect(() => {
+    if (stage === 'asking') return;
+    (stage === 'failed' ? closeRef.current : bodyRef.current)?.focus();
+  }, [stage]);
 
   function cancel(): void {
     if (stage === 'applying' || stage === 'restarting') return;
     // After a failure main has already forgotten the file.
-    if (stage === 'asking')
+    if (stage === 'asking') {
+      setAsking(false);
       api()
         .cancelImport()
         .catch(() => undefined);
+    }
     onClose();
   }
 
   async function apply(): Promise<void> {
     if (running.current) return;
     running.current = true;
+    setAsking(false);
     setStage('applying');
     try {
       await api().applyImport();
@@ -104,7 +127,6 @@ function ImportDialog({ offer, info, onClose }: { offer: Offer; info: DataInfo |
     }
   }
 
-  const backupName = info?.importBackupName;
   let body: ReactNode;
   let footer: ReactNode;
   if (stage === 'restarting') {
@@ -119,7 +141,7 @@ function ImportDialog({ offer, info, onClose }: { offer: Offer; info: DataInfo |
       </div>
     );
     footer = (
-      <Button data-autofocus onClick={cancel}>
+      <Button ref={closeRef} data-autofocus onClick={cancel}>
         Close
       </Button>
     );
@@ -130,17 +152,21 @@ function ImportDialog({ offer, info, onClose }: { offer: Offer; info: DataInfo |
         <Comparison incoming={offer.incoming} current={offer.current} />
         <p className="text-base text-fg">The data in ParaLeet now will be replaced by the data in the file.</p>
         <ul className="list-disc space-y-1 pl-5 text-sm text-fg-secondary">
-          <li>
-            Your current data is kept as a backup file
-            {backupName && (
-              <>
-                {' '}
-                named <span className="text-fg">{backupName}</span>
-              </>
-            )}
-            , next to the database.
-          </li>
-          {info?.hasImportBackup && <li>That replaces the backup kept from your earlier import.</li>}
+          {info ? (
+            <>
+              <li>
+                Your current data is kept as a backup file named{' '}
+                <span className="text-fg">{info.importBackupName}</span>, next to the database.
+              </li>
+              {info.hasImportBackup && <li>That replaces the backup kept from your earlier import.</li>}
+            </>
+          ) : (
+            // The details could not be read, so no name is shown and nothing is claimed about an earlier backup.
+            <>
+              <li>Your current data is kept as a backup file next to the database.</li>
+              <li>A backup kept from an earlier import, if there is one, is replaced.</li>
+            </>
+          )}
           <li>ParaLeet restarts when the import is done.</li>
         </ul>
       </div>
@@ -165,7 +191,9 @@ function ImportDialog({ offer, info, onClose }: { offer: Offer; info: DataInfo |
       width={520}
       footer={footer}
     >
-      {body}
+      <div ref={bodyRef} tabIndex={-1} className="outline-none">
+        {body}
+      </div>
     </Modal>
   );
 }
@@ -184,11 +212,25 @@ export function DataGroup() {
 
   const [choosing, setChoosing] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  // The details are kept from the moment the dialog opened, so a refresh behind it never changes what it says.
+  // The details are read when the file is chosen and kept, so a refresh behind the dialog never changes what it says.
   const [offer, setOffer] = useState<{
     choice: Offer;
     info: DataInfo | undefined;
   } | null>(null);
+
+  // Main holds the chosen file while the dialog asks. If Settings goes away first, let it go.
+  const asking = useRef(false);
+  useEffect(
+    () => () => {
+      if (asking.current) {
+        asking.current = false;
+        api()
+          .cancelImport()
+          .catch(() => undefined);
+      }
+    },
+    [],
+  );
 
   const [finderError, setFinderError] = useState<string | null>(null);
 
@@ -214,8 +256,17 @@ export function DataGroup() {
     try {
       const choice = await api().chooseImport();
       if (!choice.chosen) return;
-      if (choice.ok) setOffer({ choice, info });
-      else setImportError(`${choice.fileName} was not imported. ${choice.reason} Nothing was changed.`);
+      if (choice.ok) {
+        asking.current = true;
+        // Read the details now: the ones from page load may be missing or old.
+        let fresh: DataInfo | undefined;
+        try {
+          fresh = await api().getDataInfo();
+        } catch {
+          fresh = undefined;
+        }
+        setOffer({ choice, info: fresh });
+      } else setImportError(`${choice.fileName} was not imported. ${choice.reason} Nothing was changed.`);
     } catch (error) {
       setImportError(`${messageOf(error)} Nothing was changed.`);
     } finally {
@@ -288,7 +339,14 @@ export function DataGroup() {
           )}
         </Row>
       </Group>
-      {offer && <ImportDialog offer={offer.choice} info={offer.info} onClose={() => setOffer(null)} />}
+      {offer && (
+        <ImportDialog
+          offer={offer.choice}
+          info={offer.info}
+          setAsking={(value) => (asking.current = value)}
+          onClose={() => setOffer(null)}
+        />
+      )}
     </>
   );
 }

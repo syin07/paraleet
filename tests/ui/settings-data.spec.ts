@@ -242,8 +242,10 @@ test.describe('Settings: Data group', () => {
     await replace.click();
     await expect(replace).toBeDisabled();
     await expect(dialog(page).getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    await page.keyboard.press('Escape');
+    // The close icon and a click outside still reach the dialog while it works, and must not close it.
+    await dialog(page).getByRole('button', { name: 'Close' }).click();
     await page.mouse.click(5, 5);
+    await page.keyboard.press('Escape');
     await expect(dialog(page)).toBeVisible();
     await expect(dialog(page)).toContainText('Restarting…');
     expect(await calls(page, 'applyImport')).toBe(1);
@@ -252,7 +254,8 @@ test.describe('Settings: Data group', () => {
     await page.waitForTimeout(300);
     await expect(dialog(page)).toContainText('Restarting…');
     await expect(dialog(page).getByRole('button', { name: 'Replace my data' })).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    await dialog(page).getByRole('button', { name: 'Close' }).click();
+    await page.mouse.click(5, 5);
     await expect(dialog(page)).toBeVisible();
     expect(await restarts(page)).toContain('restart');
     await captureBothSizes(page, 'settings-data-restarting');
@@ -269,9 +272,12 @@ test.describe('Settings: Data group', () => {
     await expect(dialog(page).getByRole('button', { name: 'Replace my data' })).toHaveCount(0);
     await expect(dialog(page).getByRole('button', { name: 'Close', exact: true }).last()).toBeVisible();
     await captureBothSizes(page, 'settings-data-apply-failed');
-    await dialog(page).getByRole('button', { name: 'Close', exact: true }).last().click();
+    // Focus is back inside the dialog, so Escape closes it.
+    await expect(dialog(page).getByRole('button', { name: 'Close', exact: true }).last()).toBeFocused();
+    await page.keyboard.press('Escape');
     await expect(dialog(page)).toHaveCount(0);
     expect(await calls(page, 'applyImport')).toBe(1);
+    expect(await calls(page, 'cancelImport')).toBe(0);
     // Starting again from Import… works.
     await importButton(page).click();
     await expect(dialog(page).getByRole('button', { name: 'Replace my data' })).toBeVisible();
@@ -332,14 +338,46 @@ test.describe('Settings: Data group', () => {
     await expect(
       group(page).getByText('/Users/you/Library/Application Support/ParaLeet/paraleet.sqlite3'),
     ).toBeVisible();
-    const lengths = await page.evaluate(() => {
-      const api = (globalThis as unknown as Host).paraleet as unknown as Record<string, { length: number }>;
-      return ['getDataInfo', 'exportData', 'chooseImport', 'applyImport', 'cancelImport', 'showDataInFinder'].map(
-        (name) => api[name]?.length,
-      );
+    await page.evaluate(() => {
+      const host = globalThis as unknown as Host & { __args?: Record<string, unknown[][]> };
+      const api = host.paraleet as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+      host.__args = {};
+      for (const name of [
+        'getDataInfo',
+        'exportData',
+        'chooseImport',
+        'applyImport',
+        'cancelImport',
+        'showDataInFinder',
+      ]) {
+        const original = api[name] as (...args: unknown[]) => Promise<unknown>;
+        api[name] = (...args: unknown[]) => {
+          (host.__args![name] ??= []).push(args);
+          return original(...args);
+        };
+      }
     });
-    expect(lengths.every((length) => length === 0)).toBe(true);
+    await exportButton(page).click();
+    await expect(group(page).getByText(/^Saved as/)).toBeVisible();
     await group(page).getByRole('button', { name: 'Show in Finder' }).click();
+    await importButton(page).click();
+    await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await importButton(page).click();
+    await dialog(page).getByRole('button', { name: 'Replace my data' }).click();
+    await expect(dialog(page)).toContainText('Restarting…');
+    const recorded = await page.evaluate(
+      () => (globalThis as unknown as { __args: Record<string, unknown[][]> }).__args,
+    );
+    for (const name of ['exportData', 'chooseImport', 'applyImport', 'cancelImport', 'showDataInFinder']) {
+      expect(recorded[name]?.length, name).toBeGreaterThan(0);
+    }
+    for (const [name, all] of Object.entries(recorded)) {
+      for (const args of all)
+        expect(
+          args.filter((arg) => arg !== undefined),
+          name,
+        ).toEqual([]);
+    }
     expect(await restarts(page)).toContain('showDataInFinder');
   });
 
@@ -367,6 +405,35 @@ test.describe('Settings: Data group', () => {
     await expect(group(page).getByText(/^Saved as/)).toBeVisible();
     await importButton(page).click();
     await expect(dialog(page)).toBeVisible();
-    await expect(dialog(page)).toContainText('a backup file, next to the database');
+    await expect(dialog(page)).toContainText('kept as a backup file next to the database');
+    await expect(dialog(page)).toContainText('A backup kept from an earlier import, if there is one, is replaced.');
+    await expect(dialog(page)).not.toContainText('named');
+    await captureBothSizes(page, 'settings-data-confirm-unknown-backup');
+  });
+
+  test('import: details read after the group loaded decide the backup line', async ({ page }) => {
+    await open(page);
+    await expect(importButton(page)).toBeEnabled();
+    // An import was applied elsewhere since the page loaded: a backup exists now.
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const original = api.getDataInfo.bind(api);
+      api.getDataInfo = async () => ({ ...(await original()), hasImportBackup: true });
+    });
+    await importButton(page).click();
+    await expect(dialog(page)).toContainText('That replaces the backup kept from your earlier import.');
+  });
+
+  test('import: leaving Settings with the dialog open lets main forget the file once', async ({ page }) => {
+    await open(page);
+    await spy(page, ['cancelImport']);
+    await importButton(page).click();
+    await expect(dialog(page)).toBeVisible();
+    await page.evaluate(() => {
+      (globalThis as unknown as { location: { hash: string } }).location.hash = '#/today';
+    });
+    await page.getByTestId('screen-today').waitFor();
+    await expect(dialog(page)).toHaveCount(0);
+    expect(await calls(page, 'cancelImport')).toBe(1);
   });
 });
