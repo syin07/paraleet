@@ -6,8 +6,12 @@ import type { Mood } from './types';
 export const CHECKING_MS = 2000;
 export const EATING_MS = 3000;
 export const NIBBLING_MS = 1500;
-/** Fed and at or after this local hour (until the day boundary), Para sleeps. */
+/**
+ * A fed Para sleeps through the night: from this local wall-clock hour up to, not including,
+ * `WAKE_HOUR`. This does not depend on the day boundary hour.
+ */
 export const BEDTIME_HOUR = 23;
+export const WAKE_HOUR = 6;
 
 const MINUTES_PER_DAY = 1440;
 
@@ -107,8 +111,8 @@ export function deriveMood(input: MoodInput): Mood {
 
   if (input.fedToday) {
     const local = localMinutesOfDay(input.now, input.timeZone);
-    const late = local >= BEDTIME_HOUR * 60 || local < input.dayBoundaryHour * 60;
-    return late ? 'sleeping' : 'content';
+    const night = local >= BEDTIME_HOUR * 60 || local < WAKE_HOUR * 60;
+    return night ? 'sleeping' : 'content';
   }
 
   const minutes = minutesIntoParaDay(input.now, input.timeZone, input.dayBoundaryHour);

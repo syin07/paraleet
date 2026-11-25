@@ -1,5 +1,5 @@
 // Accessories unlock at milestones and stay unlocked (PRD section 6).
-import { ACCESSORY_IDS, type AccessoryId } from './types';
+import { ACCESSORY_IDS, type AccessoryId, type Rating } from './types';
 
 export interface MilestoneFacts {
   /** True once any growth solve (rated Hard, Good or Easy) was on a problem whose normalized difficulty is 4 or 5. */
@@ -20,10 +20,27 @@ export function earnedAccessories(facts: MilestoneFacts): AccessoryId[] {
   return ACCESSORY_IDS.filter((id) => EARNED_WHEN[id](facts));
 }
 
-/** What to store after an update: everything already unlocked plus anything newly earned. Never removes one. */
+/**
+ * What to store after an update: everything already unlocked plus anything newly earned. Never
+ * removes one. Callers recording an attempt use `unlockedAfterAttempt`, which honors the Again rule.
+ */
 export function mergeUnlocked(alreadyUnlocked: readonly AccessoryId[], facts: MilestoneFacts): AccessoryId[] {
   const earned = new Set(earnedAccessories(facts));
   return ACCESSORY_IDS.filter((id) => earned.has(id) || alreadyUnlocked.includes(id));
+}
+
+/**
+ * What to store after an attempt. An attempt rated Again unlocks nothing (PRD section 6): the list
+ * comes back unchanged, and whatever the facts have earned is picked up by the next attempt with
+ * any other rating.
+ */
+export function unlockedAfterAttempt(
+  alreadyUnlocked: readonly AccessoryId[],
+  facts: MilestoneFacts,
+  rating: Rating,
+): AccessoryId[] {
+  if (rating === 'again') return ACCESSORY_IDS.filter((id) => alreadyUnlocked.includes(id));
+  return mergeUnlocked(alreadyUnlocked, facts);
 }
 
 /** The accessories in `after` that are not in `before`, for celebrating a new unlock. */

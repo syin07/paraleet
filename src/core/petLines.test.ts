@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays } from './day';
+import { addDays, daysBetween } from './day';
 import { LINES, MAX_LINE_LENGTH, fillTemplate, pickLine, type LineContext } from './petLines';
 import { MOODS, type Mood } from './types';
 
@@ -204,6 +204,77 @@ describe('pickLine', () => {
       let value = (seed ^ Math.imul(day + 1, 0x9e3779b1)) >>> 0;
       value = Math.imul(value ^ (value >>> 15), 0x85ebca6b) >>> 0;
       return (value ^ (value >>> 13)) >>> 0;
+    }
+  });
+
+  it('treats a blank or whitespace-only problem title or platform like null', () => {
+    for (const blank of ['', '   ', '\t\n']) {
+      for (const mood of ['peckish', 'hungry'] as const) {
+        for (let day = 0; day < 100; day += 1) {
+          for (const facts of [
+            { problemTitle: blank, platformLabel: 'LeetCode' },
+            { problemTitle: 'Two Sum', platformLabel: blank },
+            { problemTitle: blank, platformLabel: blank },
+          ]) {
+            const line = pickLine(context({ mood, today: addDays('2026-01-01', day), ...facts })) as string;
+            expect(LINES[mood]).toContain(line);
+          }
+        }
+      }
+    }
+  });
+
+  it('lets the bird seed matter: different seeds differ on at least 25% of days, per mood', () => {
+    for (const mood of MOODS) {
+      // Only moods with at least two plain lines in each half can differ between seeds.
+      const halves = [0, 1].map((h) => LINES[mood].filter((t, i) => i % 2 === h && !t.includes('{')).length);
+      if (Math.min(...halves) < 2) continue;
+      for (const [a, b] of [
+        [1, 2],
+        [100, 101],
+        [7, 8],
+      ] as const) {
+        let different = 0;
+        for (let day = 0; day < 365; day += 1) {
+          const today = addDays('2026-01-01', day);
+          const facts = { problemTitle: null, platformLabel: null, streak: 0 };
+          if (
+            pickLine(context({ mood, seed: a, today, ...facts })) !==
+            pickLine(context({ mood, seed: b, today, ...facts }))
+          )
+            different += 1;
+        }
+        expect(different, `${mood} seeds ${a} and ${b}`).toBeGreaterThanOrEqual(365 * 0.25);
+      }
+    }
+  });
+
+  it('spreads picks: no line is chosen on more than 65% of the days it was a candidate', () => {
+    const facts = { problemTitle: null, platformLabel: null, streak: 0 };
+    for (const mood of MOODS) {
+      for (const seed of seeds) {
+        const candidateDays = new Map<string, number>();
+        const pickedDays = new Map<string, number>();
+        for (let day = 0; day < 365; day += 1) {
+          const today = addDays('2026-01-01', day);
+          const parity = ((daysBetween('1970-01-01', today) % 2) + 2) % 2;
+          for (const [index, template] of LINES[mood].entries()) {
+            if (index % 2 === parity && !template.includes('{')) {
+              candidateDays.set(template, (candidateDays.get(template) ?? 0) + 1);
+            }
+          }
+          const picked = pickLine(context({ mood, seed, today, ...facts })) as string;
+          pickedDays.set(picked, (pickedDays.get(picked) ?? 0) + 1);
+        }
+        for (const [line, candidate] of candidateDays) {
+          const halfSize = LINES[mood].filter(
+            (t, i) => i % 2 === LINES[mood].indexOf(line) % 2 && !t.includes('{'),
+          ).length;
+          if (halfSize < 2) continue;
+          const share = (pickedDays.get(line) ?? 0) / candidate;
+          expect(share, `${mood} seed ${seed}: ${line}`).toBeLessThanOrEqual(0.65);
+        }
+      }
     }
   });
 

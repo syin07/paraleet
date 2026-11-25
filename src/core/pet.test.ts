@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BEDTIME_HOUR,
+  WAKE_HOUR,
   CHECKING_MS,
   EATING_MS,
   NIBBLING_MS,
@@ -140,32 +141,50 @@ describe('deriveMood: not fed', () => {
 describe('deriveMood: fed', () => {
   const fed = { fedToday: true };
 
-  it('is content during the day and sleeps from bedtime', () => {
+  it('sleeps through the night, from BEDTIME_HOUR up to WAKE_HOUR, whatever the boundary hour', () => {
     expect(BEDTIME_HOUR).toBe(23);
-    expect(mood('04:00', fed)).toBe('content');
-    expect(mood('12:00', fed)).toBe('content');
-    expect(mood('22:59', fed)).toBe('content');
-    expect(mood('23:00', fed)).toBe('sleeping');
-  });
-
-  it('sleeps through the late part of the ParaLeet day, then wakes at the boundary', () => {
-    expect(mood('01:00', fed)).toBe('sleeping');
-    expect(mood('03:59', fed)).toBe('sleeping');
-    // At 04:00 the next ParaLeet day has begun, so the caller reports fedToday false there; the
-    // mood function itself calls 04:00 daytime.
-    expect(mood('04:00', fed)).toBe('content');
-  });
-
-  it('respects the boundary hour for the late part', () => {
-    expect(mood('05:59', { ...fed, dayBoundaryHour: 6 })).toBe('sleeping');
-    expect(mood('06:00', { ...fed, dayBoundaryHour: 6 })).toBe('content');
-    expect(mood('00:00', { ...fed, dayBoundaryHour: 0 })).toBe('content');
-    expect(mood('23:00', { ...fed, dayBoundaryHour: 0 })).toBe('sleeping');
+    expect(WAKE_HOUR).toBe(6);
+    const expected: Array<[string, string]> = [
+      ['22:59', 'content'],
+      ['23:00', 'sleeping'],
+      ['02:00', 'sleeping'],
+      ['05:59', 'sleeping'],
+      ['06:00', 'content'],
+      ['12:00', 'content'],
+      ['18:00', 'content'],
+    ];
+    for (const dayBoundaryHour of [0, 4, 6, 8, 12, 23]) {
+      for (const [time, want] of expected) {
+        expect(mood(time, { ...fed, dayBoundaryHour }), `boundary ${dayBoundaryHour} at ${time}`).toBe(want);
+      }
+    }
   });
 
   it('ignores reminder times once fed', () => {
     expect(mood('17:00', fed)).toBe('content');
     expect(mood('21:00', fed)).toBe('content');
+  });
+});
+
+describe('deriveMood: daylight saving', () => {
+  // 2026-11-01: Los Angeles repeats 01:00-02:00 (PDT, then PST). The wall clock is used as it reads.
+  const instants = (utc: string) => new Date(`2026-11-01T${utc}:00Z`);
+  const overrides = { firstReminderTime: '01:30', eveningReminderTime: '03:00' };
+
+  it('turns peckish at the reminder time on the first pass of the repeated hour', () => {
+    expect(deriveMood(input({ now: instants('08:29'), ...overrides }))).toBe('sleeping'); // 01:29 PDT
+    expect(deriveMood(input({ now: instants('08:30'), ...overrides }))).toBe('peckish'); // 01:30 PDT
+  });
+
+  it('reads the second pass of the repeated hour as the wall clock says', () => {
+    expect(deriveMood(input({ now: instants('09:29'), ...overrides }))).toBe('sleeping'); // 01:29 PST
+    expect(deriveMood(input({ now: instants('09:30'), ...overrides }))).toBe('peckish'); // 01:30 PST
+    expect(deriveMood(input({ now: instants('11:00'), ...overrides }))).toBe('hungry'); // 03:00 PST
+  });
+
+  it('keeps a fed Para asleep through the repeated hour', () => {
+    expect(deriveMood(input({ now: instants('08:30'), fedToday: true }))).toBe('sleeping');
+    expect(deriveMood(input({ now: instants('09:30'), fedToday: true }))).toBe('sleeping');
   });
 });
 
@@ -279,10 +298,25 @@ describe('deriveMood: a whole day in 15-minute steps', () => {
     ]);
   });
 
-  it('fed: content, then sleeping from bedtime to the boundary', () => {
-    expect(walk({ fedToday: true })).toEqual([
-      ['00:00', 'content'],
-      ['19:00', 'sleeping'],
+  it.each([4, 12, 23])('fed, boundary %i: changes only at 23:00 and 06:00 wall-clock', (dayBoundaryHour) => {
+    const changes: Array<[string, string]> = [];
+    let previous = '';
+    // A full wall-clock day from 06:00, so the walk starts on a change.
+    for (let step = 0; step <= 96; step += 1) {
+      const now = new Date(la('06:00').getTime() + step * 15 * 60_000);
+      const current = deriveMood(input({ now, fedToday: true, dayBoundaryHour }));
+      if (current !== previous) {
+        const parts = new Intl.DateTimeFormat('en-GB', { timeZone: LA, hour: '2-digit', minute: '2-digit' }).format(
+          now,
+        );
+        changes.push([parts, current]);
+        previous = current;
+      }
+    }
+    expect(changes).toEqual([
+      ['06:00', 'content'],
+      ['23:00', 'sleeping'],
+      ['06:00', 'content'],
     ]);
   });
 });

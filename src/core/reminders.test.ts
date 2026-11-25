@@ -146,6 +146,80 @@ describe('dueReminder', () => {
   });
 });
 
+describe('dueReminder across daylight-saving changes', () => {
+  /** Sends through a ParaLeet day in 15-minute real-time steps, recording each reminder that goes out. */
+  function sendsFrom(startUtc: string, steps: number, today: string, times: { first: string; evening: string }) {
+    let sent: ReminderInput['sent'] = { first: null, evening: null };
+    const kinds: string[] = [];
+    const start = new Date(startUtc).getTime();
+    for (let step = 0; step <= steps; step += 1) {
+      const kind = dueReminder({
+        ...input('04:00'),
+        now: new Date(start + step * 15 * 60_000),
+        today,
+        firstReminderTime: times.first,
+        eveningReminderTime: times.evening,
+        sent,
+      });
+      if (kind) {
+        kinds.push(kind);
+        sent = markSent(sent, kind, today);
+      }
+    }
+    return kinds;
+  }
+
+  // 2026-03-08: Los Angeles skips 02:00-03:00. The ParaLeet day of 03-07 runs 04:00 PST to 04:00 PDT.
+  it('spring forward: a reminder time inside the skipped hour is due once, when the clock passes it', () => {
+    const start = '2026-03-07T12:00:00Z'; // 04:00 PST
+    expect(sendsFrom(start, 92, '2026-03-07', { first: '17:00', evening: '02:30' })).toEqual(['first', 'evening']);
+    expect(sendsFrom(start, 92, '2026-03-07', { first: '02:30', evening: '03:30' })).toEqual(['first', 'evening']);
+  });
+
+  it('spring forward: it is not due before the clock reaches the skipped hour', () => {
+    const before = dueReminder({
+      ...input('04:00'),
+      now: new Date('2026-03-08T09:59:00Z'), // 01:59 PST
+      today: '2026-03-07',
+      firstReminderTime: '17:00',
+      eveningReminderTime: '02:30',
+      sent: { first: '2026-03-07', evening: null },
+    });
+    expect(before).toBeNull();
+    const after = dueReminder({
+      ...input('04:00'),
+      now: new Date('2026-03-08T10:00:00Z'), // 03:00 PDT
+      today: '2026-03-07',
+      firstReminderTime: '17:00',
+      eveningReminderTime: '02:30',
+      sent: { first: '2026-03-07', evening: null },
+    });
+    expect(after).toBe('evening');
+  });
+
+  // 2026-11-01: Los Angeles repeats 01:00-02:00. The ParaLeet day of 10-31 runs 04:00 PDT to 04:00 PST.
+  it('fall back: a reminder time inside the repeated hour is due once, never twice', () => {
+    const start = '2026-10-31T11:00:00Z'; // 04:00 PDT
+    expect(sendsFrom(start, 100, '2026-10-31', { first: '01:30', evening: '03:00' })).toEqual(['first', 'evening']);
+    expect(sendsFrom(start, 100, '2026-10-31', { first: '17:00', evening: '01:30' })).toEqual(['first', 'evening']);
+  });
+
+  it('fall back: a reminder time inside the repeated hour is not sent again on the second pass', () => {
+    const sent = markSent({ first: null, evening: null }, 'evening', '2026-10-31');
+    for (const utc of ['08:30', '09:30']) {
+      const kind = dueReminder({
+        ...input('04:00'),
+        now: new Date(`2026-11-01T${utc}:00Z`),
+        today: '2026-10-31',
+        firstReminderTime: '17:00',
+        eveningReminderTime: '01:30',
+        sent,
+      });
+      expect(kind).toBeNull();
+    }
+  });
+});
+
 describe('markSent', () => {
   it('marks only the first reminder when the first is sent', () => {
     expect(markSent({ first: null, evening: null }, 'first', TODAY)).toEqual({

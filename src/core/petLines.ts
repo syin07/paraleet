@@ -92,12 +92,24 @@ function hash(text: string): number {
     value ^= text.charCodeAt(i);
     value = Math.imul(value, 0x01000193) >>> 0;
   }
-  return value;
+  // FNV-1a's low bits depend only on the low bits of the input, which would make small pools ignore
+  // the seed. The murmur3 finalizer spreads every input bit into the low bits.
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x85ebca6b) >>> 0;
+  value ^= value >>> 13;
+  value = Math.imul(value, 0xc2b2ae35) >>> 0;
+  value ^= value >>> 16;
+  return value >>> 0;
+}
+
+/** A blank or whitespace-only text counts as unknown. */
+function known(text: string | null): text is string {
+  return text !== null && text.trim() !== '';
 }
 
 function isEligible(template: string, context: LineContext): boolean {
   const needsProblem = template.includes('{title}') || template.includes('{platform}');
-  if (needsProblem && (context.problemTitle === null || context.platformLabel === null)) return false;
+  if (needsProblem && !(known(context.problemTitle) && known(context.platformLabel))) return false;
   if (template.includes('{streak}') && context.streak < 2) return false;
   return true;
 }
@@ -105,7 +117,7 @@ function isEligible(template: string, context: LineContext): boolean {
 /** Fills the placeholders; a long title is cut with an ellipsis so the line fits MAX_LINE_LENGTH. */
 export function fillTemplate(template: string, context: LineContext): string {
   const withoutTitle = template
-    .replaceAll('{platform}', context.platformLabel ?? '')
+    .replaceAll('{platform}', (context.platformLabel ?? '').trim())
     .replaceAll('{streak}', String(context.streak));
   if (!withoutTitle.includes('{title}')) return withoutTitle;
   const budget = MAX_LINE_LENGTH - (withoutTitle.length - '{title}'.length);
