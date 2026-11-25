@@ -284,3 +284,19 @@ describe('reminderText', () => {
     }
   });
 });
+
+describe('reminderText with a blank problem', () => {
+  it('falls back to the any-problem text instead of naming nothing', () => {
+    for (const problem of [
+      { title: '', platformLabel: 'LeetCode' },
+      { title: '   ', platformLabel: 'LeetCode' },
+      { title: 'Two Sum', platformLabel: ' ' },
+    ]) {
+      expect(reminderText('first', problem).body).toBe(reminderText('first', null).body);
+      expect(reminderText('evening', problem).body).toBe(reminderText('evening', null).body);
+    }
+    expect(reminderText('first', { title: ' Two Sum ', platformLabel: ' LeetCode ' }).body).toBe(
+      'Today: Two Sum on LeetCode',
+    );
+  });
+});

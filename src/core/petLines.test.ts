@@ -414,3 +414,26 @@ describe('pickLine', () => {
     expect(pickLine(context({ mood: 'nonexistent' as Mood }))).toBeNull();
   });
 });
+
+describe('fillTemplate with unusual titles', () => {
+  it('keeps a dollar sign in a title exactly as typed', () => {
+    const context = {
+      seed: 1,
+      today: '2026-11-25',
+      mood: 'peckish' as const,
+      problemTitle: "Make $$ Fast $& $' $1",
+      platformLabel: 'Other $&',
+      streak: 12,
+    };
+    for (const template of [...LINES.peckish, ...LINES.hungry]) {
+      const line = fillTemplate(template, context);
+      expect(line.length).toBeLessThanOrEqual(MAX_LINE_LENGTH);
+      expect(line).not.toMatch(/\{(title|platform|streak)\}/);
+      if (template.includes('{title}')) {
+        // The start of the title survives untouched; nothing of the template is duplicated into it.
+        expect(line).toContain('Make $$ Fast');
+        expect(line).toContain('Other $&');
+      }
+    }
+  });
+});

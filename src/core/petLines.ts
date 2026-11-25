@@ -22,9 +22,9 @@ export const LINES: Readonly<Record<Mood, readonly string[]>> = {
     'Seeds: eaten. Smugness: loading.',
     'Thank you for the snack. You are my favorite human.',
     'I have preened. I look incredible.',
-    'Chirp! That was a tasty problem.',
+    'Chirp! That hit the spot.',
     'Nothing left to do but be a lovely bird.',
-    'Problem squashed. Nice work.',
+    'Fed and fluffy. Nice work today.',
     'Just you, me, and a very full belly.',
     '{streak} days in a row. I am one lucky bird.',
     'Day {streak} of us being brilliant.',
@@ -48,11 +48,11 @@ export const LINES: Readonly<Record<Mood, readonly string[]>> = {
     'I am pecking at the screen edge, politely.',
     'Any problem feeds me. Even a small one!',
     'A seed or a solve, I am not picky.',
-    'Evening snack? I believe in you.',
+    'A snack before bed? I believe in you.',
     'I will wait here, fluffed up and hopeful.',
     'Your tiny bird is rooting for you.',
     '{title} on {platform} would hit the spot.',
-    'Dinner idea: {title}, over on {platform}.',
+    'Snack idea: {title}, over on {platform}.',
   ],
   missed_you: [
     'You are here! I missed you!',
@@ -117,13 +117,14 @@ function isEligible(template: string, context: LineContext): boolean {
 /** Fills the placeholders; a long title is cut with an ellipsis so the line fits MAX_LINE_LENGTH. */
 export function fillTemplate(template: string, context: LineContext): string {
   const withoutTitle = template
-    .replaceAll('{platform}', (context.platformLabel ?? '').trim())
-    .replaceAll('{streak}', String(context.streak));
+    .replaceAll('{platform}', () => (context.platformLabel ?? '').trim())
+    .replaceAll('{streak}', () => String(context.streak));
   if (!withoutTitle.includes('{title}')) return withoutTitle;
   const budget = MAX_LINE_LENGTH - (withoutTitle.length - '{title}'.length);
   const title = (context.problemTitle ?? '').trim();
   const shown = title.length <= budget ? title : `${title.slice(0, Math.max(budget - 1, 1)).trimEnd()}…`;
-  return withoutTitle.replace('{title}', shown);
+  // A function, so a `$` in a title is kept as typed instead of being read as a pattern.
+  return withoutTitle.replace('{title}', () => shown);
 }
 
 /**

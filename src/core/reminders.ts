@@ -47,13 +47,11 @@ export function reminderText(
   problem: { title: string; platformLabel: string } | null,
 ): { title: string; body: string } {
   const title = kind === 'first' ? 'Para is peckish' : 'Para is getting hungry';
-  if (problem)
-    return {
-      title,
-      body: `Today: ${problem.title} on ${problem.platformLabel}`,
-    };
+  const name = problem?.title.trim() ?? '';
+  const platform = problem?.platformLabel.trim() ?? '';
+  if (name !== '' && platform !== '') return { title, body: `Today: ${name} on ${platform}` };
   return {
     title,
-    body: kind === 'first' ? 'Any problem you log feeds Para.' : 'Any problem you log tonight feeds Para.',
+    body: kind === 'first' ? 'Any problem you log feeds Para.' : 'Any problem you log feeds Para. Even a small one.',
   };
 }
