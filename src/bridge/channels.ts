@@ -23,6 +23,7 @@ export const BRIDGE_METHODS = [
   'searchProblems',
   'parseProblemUrl',
   'addProblem',
+  'setEquippedAccessories',
   'getSettings',
   'updateSettings',
 ] as const;

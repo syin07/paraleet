@@ -6,14 +6,17 @@ import { z } from 'zod';
 import { settingsPatchSchema, type Settings } from '../core/settings';
 import { TOPIC_IDS, type TopicId } from '../core/topics';
 import {
+  ACCESSORY_IDS,
   PLATFORMS,
   RATINGS,
+  type AccessoryId,
   type AssignmentReason,
   type AttemptKind,
   type CardStatus,
   type DifficultyNorm,
   type GrowthStage,
   type IsoInstant,
+  type Mood,
   type ParaDay,
   type Platform,
   type ProblemNotes,
@@ -64,6 +67,10 @@ export const inputSchemas = {
     difficultyRaw: shortText(20).nullable(),
     topics: z.array(z.enum(TOPIC_IDS as [TopicId, ...TopicId[]])).max(10),
   }),
+  /** The accessories Para wears. Each must already be unlocked. */
+  setEquippedAccessories: z.object({
+    accessories: z.array(z.enum(ACCESSORY_IDS)).max(ACCESSORY_IDS.length),
+  }),
   getSettings: z.undefined(),
   updateSettings: settingsPatchSchema,
 } as const satisfies Record<BridgeMethodName, z.ZodType>;
@@ -101,10 +108,21 @@ export interface TodayAssignment {
 }
 
 export interface PetSummary {
+  /** Random per install; varies the bird's small traits. */
   seed: number;
   stage: GrowthStage;
   growthSolves: number;
   totalAttempts: number;
+  /** What Para is doing right now. Derived, never stored. */
+  mood: Mood;
+  /** Today's speech-bubble line for that mood, or null when Para has nothing to say. */
+  line: string | null;
+  /** Accessories earned so far, in the fixed order of `ACCESSORY_IDS`. */
+  unlockedAccessories: AccessoryId[];
+  /** The unlocked accessories Para is wearing. */
+  equippedAccessories: AccessoryId[];
+  /** False until the first-launch hatching flow has finished. */
+  hatched: boolean;
 }
 
 export interface StreakSummary {
@@ -227,6 +245,7 @@ export interface BridgeOutputs {
   searchProblems: ProblemSummary[];
   parseProblemUrl: ParsedProblemUrl;
   addProblem: AddProblemResult;
+  setEquippedAccessories: TodayView;
   getSettings: Settings;
   updateSettings: Settings;
 }

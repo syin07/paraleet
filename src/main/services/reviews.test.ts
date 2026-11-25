@@ -250,3 +250,30 @@ describe('reconcile at launch', () => {
     expect(getCard(app.db, id)).toEqual(original);
   });
 });
+
+describe('accessories', () => {
+  it('start with none, and only unlocked ones can be worn', async () => {
+    app = createTestApp();
+    const today = await app.handlers.getToday(undefined);
+    expect(today.pet).toMatchObject({ unlockedAccessories: [], equippedAccessories: [], hatched: false });
+    expect(() => app.handlers.setEquippedAccessories({ accessories: ['crown'] })).toThrow(/Not unlocked yet: crown/);
+
+    app.db.run(`UPDATE pet SET unlocked_accessories = '["bow_tie","scarf","not-a-real-one"]' WHERE id = 1`);
+    const worn = await app.handlers.setEquippedAccessories({ accessories: ['bow_tie', 'scarf'] });
+    // Always in the fixed order, and unknown stored values are dropped.
+    expect(worn.pet.unlockedAccessories).toEqual(['scarf', 'bow_tie']);
+    expect(worn.pet.equippedAccessories).toEqual(['scarf', 'bow_tie']);
+
+    const fewer = await app.handlers.setEquippedAccessories({ accessories: [] });
+    expect(fewer.pet.equippedAccessories).toEqual([]);
+    expect(fewer.pet.unlockedAccessories).toEqual(['scarf', 'bow_tie']);
+  });
+
+  it('gives Para a simple mood until the full rules arrive', async () => {
+    app = createTestApp();
+    const before = await app.handlers.getToday(undefined);
+    expect(before.pet).toMatchObject({ mood: 'peckish', line: null });
+    const after = await report(before.assignment?.problem.id ?? 0, 'good');
+    expect(after.today.pet.mood).toBe('content');
+  });
+});

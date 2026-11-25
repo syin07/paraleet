@@ -140,3 +140,35 @@ export interface SwapCandidates {
   /** The next plan problems, in plan order, at most 5. */
   plan: number[];
 }
+
+/**
+ * What Para is doing right now (PRD section 6). Derived from stored facts and the clock, never
+ * stored. `nibbling` is the smaller reward for an attempt rated Again: a shorter eating
+ * animation with no hearts.
+ */
+export const MOODS = [
+  'sleeping',
+  'content',
+  'peckish',
+  'hungry',
+  'checking',
+  'eating',
+  'nibbling',
+  'missed_you',
+] as const;
+export type Mood = (typeof MOODS)[number];
+
+/** Small things Para can wear, unlocked by milestones and toggled by the user (PRD section 6). */
+export const ACCESSORY_IDS = ['scarf', 'bow_tie', 'crown', 'grad_cap'] as const;
+export type AccessoryId = (typeof ACCESSORY_IDS)[number];
+
+export const ACCESSORIES: Record<AccessoryId, { label: string; unlockedBy: string }> = {
+  scarf: { label: 'Scarf', unlockedBy: 'Your first attempt rated Hard' },
+  bow_tie: { label: 'Bow tie', unlockedBy: 'A 7-day streak' },
+  crown: { label: 'Crown', unlockedBy: 'A 30-day streak' },
+  grad_cap: { label: 'Graduation cap', unlockedBy: 'Finishing your first plan' },
+};
+
+export function isAccessoryId(value: string): value is AccessoryId {
+  return (ACCESSORY_IDS as readonly string[]).includes(value);
+}
