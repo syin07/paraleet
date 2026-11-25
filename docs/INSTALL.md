@@ -51,4 +51,4 @@ xattr -dr com.apple.quarantine /Applications/ParaLeet.app
 
 ## If something goes wrong
 
-ParaLeet keeps a log next to your data: `~/Library/Application Support/ParaLeet/paraleet.log`. It holds errors, warnings and one line per launch, never your API key or anything you typed. It does hold file paths, which include your Mac's user name. Send that file along when you report a problem.
+ParaLeet keeps a log next to your data: `~/Library/Application Support/ParaLeet/paraleet.log`. It holds errors, warnings and one line per launch, never your API key, your notes or your solves. It does hold file paths, which include your Mac's user name. Send that file along when you report a problem.

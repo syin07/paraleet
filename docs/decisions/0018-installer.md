@@ -38,4 +38,5 @@ A second person must be able to install ParaLeet on another Mac from one file, w
 - The log holds file paths, which include the Mac's user name, and it holds failures of the main process only: an error inside a window's page is not written to it.
 - The Electron switch that lets the app binary be run as plain Node (`ELECTRON_RUN_AS_NODE`) is left on. Turning it off is hardening for later, not something a friend's install needs.
 - Whether macOS keeps an ad hoc signed app's login item across a restart of the Mac was not checked: that needs a logout. It is a hand check for the owner.
+- The dialog an installed app shows when its start fails is not tested: a test run has nobody to close it. The test covers the log line and that the app quits.
 - No auto-update. A new version is a new `.dmg`.

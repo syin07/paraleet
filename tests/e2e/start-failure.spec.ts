@@ -42,7 +42,7 @@ test('a start that fails is written to the log and the app quits', async () => {
     expect(existsSync(logPath)).toBe(true);
     const log = readFileSync(logPath, 'utf8');
     expect(log).toMatch(/ERROR ParaLeet could not start: Error: A test asked the start to fail\./);
-    // The start got as far as opening the database, and no half-made import is left behind.
+    // The start got as far as opening the database: the failure asked for comes late.
     expect(existsSync(join(data.dir, 'paraleet.sqlite3'))).toBe(true);
   } finally {
     data.remove();
