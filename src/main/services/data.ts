@@ -13,7 +13,7 @@ import {
   IMPORT_BACKUP_FILE_NAME,
   inspectDatabaseFile,
   samePath,
-  stageImport,
+  stageCheckedImport,
   summarizeDatabase,
   TransferError,
   type DatabaseSummary,
@@ -43,7 +43,12 @@ export function getDataInfo(ctx: AppContext): DataInfo {
 /** Asks where to save, then writes a complete copy of the database there. The API key is not in it. */
 export async function exportData(ctx: AppContext): Promise<ExportResult> {
   const { today } = currentMoment(ctx);
-  const target = await ctx.files.chooseSavePath(`ParaLeet backup ${today}.sqlite3`);
+  let target: string | null;
+  try {
+    target = await ctx.files.chooseSavePath(`ParaLeet backup ${today}.sqlite3`);
+  } catch {
+    throw new TransferError('The place for the copy could not be chosen. Try again.');
+  }
   if (target === null) return { saved: false };
   try {
     exportDatabase(ctx.db, target);
@@ -58,7 +63,12 @@ export async function exportData(ctx: AppContext): Promise<ExportResult> {
 /** Asks for a file and says what is in it. Nothing changes until `applyImport`. */
 export async function chooseImport(ctx: AppContext): Promise<ImportChoice> {
   ctx.session.pendingImport = null;
-  const source = await ctx.files.chooseOpenPath();
+  let source: string | null;
+  try {
+    source = await ctx.files.chooseOpenPath();
+  } catch {
+    throw new TransferError('The file could not be chosen. Try again.');
+  }
   if (source === null) return { chosen: false };
   const fileName = basename(source);
   if (samePath(source, ctx.db.path)) {
@@ -85,7 +95,9 @@ export function applyImport(ctx: AppContext): Done {
   const pending = ctx.session.pendingImport;
   if (pending === null) throw new TransferError('Choose a file to import first.');
   try {
-    stageImport(pending.path, dataDirOf(ctx.db));
+    // Copied next to the database and opened there once, so a file that cannot be used is
+    // refused now, with nothing changed, and not at the next launch.
+    stageCheckedImport(pending.path, dataDirOf(ctx.db), ctx.clock.now().toISOString());
   } catch (error) {
     ctx.session.pendingImport = null;
     if (error instanceof TransferError) throw error;

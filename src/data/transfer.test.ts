@@ -1,6 +1,6 @@
 // Export and import of the whole database as one file: a complete copy comes out, only a real
 // ParaLeet database goes in, and the swap at launch never loses the data it replaces.
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -18,12 +18,15 @@ import {
   hasStagedImport,
   IMPORT_BACKUP_FILE_NAME,
   inspectDatabaseFile,
+  revertAppliedImport,
+  samePath,
   STAGED_IMPORT_FILE_NAME,
+  STAGED_IMPORT_MAX_AGE_MS,
   stageImport,
   summarizeDatabase,
   TransferError,
 } from './transfer';
-import { openDatabase } from './index';
+import { openDatabase, openDataFolder, stageCheckedImport } from './index';
 
 const NOW = '2026-11-25T20:00:00.000Z';
 let dir: string;
@@ -349,5 +352,203 @@ describe('import', () => {
     expect(existsSync(join(dataDir, `${DATABASE_FILE_NAME}-journal`))).toBe(false);
     expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(6);
     expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(2);
+  });
+});
+
+/**
+ * A file that passes every check `inspectDatabaseFile` makes and still cannot be opened: a
+ * database of the newest version that claims to be an older one, so bringing it "up to date"
+ * tries to create tables it already has.
+ */
+function makeLiar(): string {
+  const { db, path } = makeDatabase('liar', 4);
+  db.exec(`PRAGMA user_version = ${LATEST_SCHEMA_VERSION - 1}`);
+  db.close();
+  expect(inspectDatabaseFile(path)).toMatchObject({ ok: true });
+  return path;
+}
+
+describe('the same file under two names', () => {
+  it('knows a file by what it is on disk, not by how its path is spelled', () => {
+    const { db, path } = makeDatabase('mine', 1);
+    db.close();
+    const link = join(dir, 'link-to-mine.sqlite3');
+    symlinkSync(path, link);
+    expect(samePath(path, link)).toBe(true);
+    expect(samePath(path, join(dir, 'other.sqlite3'))).toBe(false);
+    const copy = join(dir, 'copy.sqlite3');
+    copyFileSync(path, copy);
+    expect(samePath(path, copy)).toBe(false);
+  });
+
+  it('refuses to export over the database through a link to it', () => {
+    const { db, path } = makeDatabase('mine', 2);
+    const link = join(dir, 'looks-like-a-backup.sqlite3');
+    symlinkSync(path, link);
+    expect(() => exportDatabase(db, link)).toThrow('That is the file ParaLeet is using. Choose another place for the copy.');
+    expect(countAttempts(path)).toBe(2);
+  });
+});
+
+describe('staging a file that only looks right', () => {
+  it('refuses it before anything is staged for the launch, in plain words', () => {
+    const dataDir = makeDataDir(3);
+    const liar = makeLiar();
+    expect(() => stageCheckedImport(liar, dataDir, NOW, [])).toThrow(
+      'That file could not be brought up to date, so it cannot be imported. Your data was not changed.',
+    );
+    expect(() => stageCheckedImport(liar, dataDir, NOW, [])).toThrow(TransferError);
+    expect(hasStagedImport(dataDir)).toBe(false);
+    expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(3);
+    // The file the user chose is untouched.
+    expect(inspectDatabaseFile(liar)).toMatchObject({ ok: true, summary: { schemaVersion: LATEST_SCHEMA_VERSION - 1 } });
+  });
+
+  it('brings an older database up to date in the staged copy, not in the file the user chose', () => {
+    const dataDir = makeDataDir(1);
+    const old = join(dir, 'old.sqlite3');
+    const raw = new Db(old);
+    raw.transaction(() => {
+      raw.exec(MIGRATIONS[0]!.sql);
+      raw.exec('PRAGMA user_version = 1');
+    });
+    raw.close();
+    expect(stageCheckedImport(old, dataDir, NOW, [])).toMatchObject({ schemaVersion: 1 });
+    expect(inspectDatabaseFile(join(dataDir, STAGED_IMPORT_FILE_NAME))).toMatchObject({
+      ok: true,
+      summary: { schemaVersion: LATEST_SCHEMA_VERSION },
+    });
+    expect(inspectDatabaseFile(old)).toMatchObject({ ok: true, summary: { schemaVersion: 1 } });
+  });
+});
+
+describe('opening the data folder at launch', () => {
+  const real = (): number => Date.now();
+
+  it('opens the database and says nothing about an import when none is staged', () => {
+    const dataDir = makeDataDir(2);
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toBeNull();
+    expect(opened.problems).toEqual([]);
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(2);
+  });
+
+  it('applies a staged import and opens the imported data', () => {
+    const dataDir = makeDataDir(2);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({ status: 'applied' });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(6);
+    expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(2);
+  });
+
+  it('puts the old data back when the imported database will not open, and says so', () => {
+    const dataDir = makeDataDir(3);
+    // Staged by hand, around the check that staging makes: the launch must still cope.
+    copyFileSync(makeLiar(), join(dataDir, STAGED_IMPORT_FILE_NAME));
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({
+      status: 'rejected',
+      reason: 'The imported file could not be opened, so your earlier data was put back.',
+    });
+    expect(opened.problems.join(' ')).toContain('could not be opened');
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+    expect(hasStagedImport(dataDir)).toBe(false);
+    expect(hasImportBackup(dataDir)).toBe(false);
+    opened.db.close();
+    // The next launch is an ordinary one.
+    const again = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(again.db);
+    expect(again.lastImport).toBeNull();
+    expect(again.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+  });
+
+  it('starts fresh when the import will not open and there was no database before it', () => {
+    const dataDir = mkdtempSync(join(dir, 'empty-'));
+    copyFileSync(makeLiar(), join(dataDir, STAGED_IMPORT_FILE_NAME));
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toMatchObject({ status: 'rejected' });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(0);
+  });
+
+  it('drops a staged import that waited too long for its restart, and leaves the data alone', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    const staged = join(dataDir, STAGED_IMPORT_FILE_NAME);
+    const longAgo = new Date(Date.now() - STAGED_IMPORT_MAX_AGE_MS - 60_000);
+    utimesSync(staged, longAgo, longAgo);
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport?.status).toBe('rejected');
+    expect(opened.lastImport).toMatchObject({ reason: expect.stringContaining('waiting for a restart for too long') });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+    expect(existsSync(staged)).toBe(false);
+    expect(hasImportBackup(dataDir)).toBe(false);
+  });
+
+  it('applies a staged import just inside the time limit, whatever date the chosen file had', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    // The chosen file is years old; what counts is when it was staged.
+    const years = new Date('2020-01-01T00:00:00.000Z');
+    utimesSync(path, years, years);
+    stageCheckedImport(path, dataDir, NOW, []);
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real() + STAGED_IMPORT_MAX_AGE_MS - 60_000, catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({ status: 'applied' });
+  });
+
+  it('when the swap fails half way: the old data opens, the staged file is dropped, and it is not tried again', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    let calls = 0;
+    const failingSecond = (from: string, to: string): void => {
+      calls += 1;
+      if (calls === 2) throw new Error('rename failed');
+      renameSync(from, to);
+    };
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [], rename: failingSecond });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({ status: 'rejected', reason: 'The file could not be put in place. Your data was not changed.' });
+    expect(opened.problems.join(' ')).toContain('rename failed');
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+    expect(hasStagedImport(dataDir)).toBe(false);
+  });
+
+  it('still fails loudly when the database itself will not open and no import was applied', () => {
+    const dataDir = mkdtempSync(join(dir, 'broken-'));
+    writeFileSync(join(dataDir, DATABASE_FILE_NAME), 'this is not a database');
+    expect(() => openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] })).toThrow();
+    // The file is left exactly as it was: nothing repairs or replaces the user's data by itself.
+    expect(readFileSync(join(dataDir, DATABASE_FILE_NAME), 'utf8')).toBe('this is not a database');
+  });
+});
+
+describe('undoing an import that will not open', () => {
+  it('removes the imported file and puts the backup back under the database name', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageImport(path, dataDir);
+    applyStagedImport(dataDir);
+    expect(revertAppliedImport(dataDir)).toBe(true);
+    expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(3);
+    expect(hasImportBackup(dataDir)).toBe(false);
+    // With no backup there is nothing to put back.
+    rmSync(join(dataDir, DATABASE_FILE_NAME));
+    writeFileSync(join(dataDir, DATABASE_FILE_NAME), 'x');
+    expect(revertAppliedImport(dataDir)).toBe(false);
+    expect(existsSync(join(dataDir, DATABASE_FILE_NAME))).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import type { Celebration } from '../../core/pet';
 import type { Settings } from '../../core/settings';
 import type { ParaDay } from '../../core/types';
 import type { Db } from '../../data/db';
+import type { ImportOutcome } from '../../data';
 import type { DatabaseSummary } from '../../data/transfer';
 import type { LlmClient } from '../../llm/planGenerator';
 import { ensurePet, type PetRecord } from '../../data/repos/pet';
@@ -38,8 +39,7 @@ export interface Notice {
   onClick(): void;
 }
 
-/** What the last launch did with a staged import. */
-export type ImportOutcome = { status: 'applied' } | { status: 'rejected'; reason: string };
+export type { ImportOutcome } from '../../data';
 
 /** What the app remembers only while it is running. */
 export interface SessionState {

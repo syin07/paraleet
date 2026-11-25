@@ -32,15 +32,17 @@ The Stats screen shows solves per week, topic coverage, a calendar heatmap of fe
 
 11. **The database an import replaces is kept** as `paraleet.sqlite3.before-import`, next to the database. One backup is kept; the next import overwrites it. It can itself be imported, which undoes an import.
 
-12. **If the swap fails half way, the old database is put back** and the staged file is discarded, so a failing disk cannot leave the app without its data or retrying at every launch. A staged file that went bad is discarded and the launch says so.
+12. **The user's data is never left without a file that opens under its name** (`openDataFolder` in `src/data/index.ts`). The staged copy is ours, so on yes it is opened once the way the app opens its database (`stageCheckedImport`): a file that looks like a ParaLeet database but cannot be brought up to date is refused then, with nothing changed. At launch, a swap that fails half way puts the old database back and drops the staged file; an imported database that still will not open is removed and the one it replaced is put back; and a staged file older than ten minutes is dropped, because the restart it waited for never came and applying it later would replace whatever was logged since. Each of these is told to the user in Settings.
 
 13. **An older database is brought up to date by the normal migrations** when the app opens it after the swap. A database from a newer ParaLeet is refused.
 
-14. **The UI never hands main a file path.** Main asks the system's dialogs (`ctx.files`), and remembers the file picked for an import in `ctx.session` until the user says yes or no. The UI is shown paths (where the database is, where a copy was saved) but never sends one back.
+14. **Two paths are the same file when the disk says so,** not when they are spelled the same: the Mac's disk ignores case and a folder can be reached through a link, so export compares what the files are on disk before it refuses to write over the database.
 
-15. **After a launch that applied or refused an import, the app opens on Settings,** where the Data group says what happened (`DataInfo.lastImport`, kept for that run only).
+15. **The UI never hands main a file path.** Main asks the system's dialogs (`ctx.files`), and remembers the file picked for an import in `ctx.session` until the user says yes or no. The UI is shown paths (where the database is, where a copy was saved) but never sends one back.
 
-16. **Restarting** is `app.relaunch()` then `app.quit()`, a moment after the answer is sent, so the window that asked hears back and the database is closed on the way out. End-to-end runs answer the dialogs from test hooks and only quit; the test starts the app again on the same folder.
+16. **After a launch that applied or refused an import, the app opens on Settings,** where the Data group says what happened (`DataInfo.lastImport`, kept for that run only).
+
+17. **Restarting** is `app.relaunch()` then `app.quit()`, a moment after the answer is sent, so the window that asked hears back and the database is closed on the way out. End-to-end runs answer the dialogs from test hooks and only quit; the test starts the app again on the same folder.
 
 ## Alternatives rejected
 

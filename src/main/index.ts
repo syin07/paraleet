@@ -15,7 +15,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
-import { applyStagedImport, DATABASE_FILE_NAME, discardStagedImport, openDatabase, type Db } from '../data';
+import { DATABASE_FILE_NAME, openDataFolder, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
 import { getSettings, updateSettings } from '../data/repos/settings';
 import { createAnthropicClient, listModels } from '../llm/anthropicClient';
@@ -171,30 +171,14 @@ function start(): void {
   mkdirSync(userData, { recursive: true });
 
   // An import chosen in Settings is put in place here, before the database is opened: the open
-  // database is never replaced while the app runs. The database it replaces is kept beside it.
-  let lastImport: ImportOutcome | null = null;
+  // database is never replaced while the app runs, and what it replaces is kept beside it.
+  let lastImport: ImportOutcome | null;
   try {
-    const staged = applyStagedImport(userData);
-    if (staged.status === 'applied') lastImport = { status: 'applied' };
-    if (staged.status === 'rejected') {
-      lastImport = { status: 'rejected', reason: staged.reason };
-      console.warn(`ParaLeet did not apply the import: ${staged.reason}`);
-    }
-  } catch (error) {
-    // The swap failed and the database that was there is back in place. Do not try again at
-    // every launch: the user can choose the file again.
-    console.error('ParaLeet could not put the import in place:', error);
-    try {
-      discardStagedImport(userData);
-    } catch {
-      // Nothing more to do; the next launch checks the staged file again.
-    }
-    lastImport = { status: 'rejected', reason: 'The file could not be put in place. Your data was not changed.' };
-  }
-
-  try {
-    const opened = openDatabase(join(userData, DATABASE_FILE_NAME), clock.now().toISOString());
+    const opened = openDataFolder(userData, clock.now().toISOString(), { realNowMs: Date.now() });
     db = opened.db;
+    lastImport = opened.lastImport;
+    for (const problem of opened.problems) console.error(`ParaLeet: ${problem}`);
+    if (lastImport?.status === 'rejected') console.warn(`ParaLeet did not apply the import: ${lastImport.reason}`);
     // The catalog is reference data: the app opens without a file that could not be loaded.
     for (const problem of opened.catalogProblems) console.warn(`ParaLeet: ${problem}`);
   } catch (error) {

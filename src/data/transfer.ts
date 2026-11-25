@@ -4,7 +4,7 @@
 // open database: the chosen file is checked, copied next to the database as a staged file, and
 // swapped in at the next launch, before anything has the database open. The database it replaces
 // is kept beside it as a backup. See docs/decisions/0017-stats-and-data.md.
-import { copyFileSync, existsSync, renameSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, renameSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ParaDay } from '../core/types';
@@ -20,7 +20,22 @@ export const IMPORT_BACKUP_FILE_NAME = 'paraleet.sqlite3.before-import';
 /** Tables every ParaLeet database has had since its first version. */
 const REQUIRED_TABLES = ['problems', 'attempts', 'review_cards', 'pet', 'settings'] as const;
 
-export const samePath = (a: string, b: string): boolean => resolve(a) === resolve(b);
+/**
+ * True when two paths name the same file. Spelling is not enough on a Mac: the disk ignores case
+ * and a folder may be reached through a link, so two files that both exist are compared by what
+ * they are on disk.
+ */
+export function samePath(a: string, b: string): boolean {
+  if (resolve(a) === resolve(b)) return true;
+  try {
+    const first = statSync(a);
+    const second = statSync(b);
+    return first.dev === second.dev && first.ino === second.ino;
+  } catch {
+    // One of them does not exist, so they are not the same file.
+    return false;
+  }
+}
 
 /** A failure whose message is written for the user and can be shown as it is. */
 export class TransferError extends Error {
@@ -147,7 +162,38 @@ export function stageImport(sourcePath: string, dataDir: string): DatabaseSummar
   rmSync(temporary, { force: true });
   copyFileSync(sourcePath, temporary);
   renameSync(temporary, staged);
+  // A copy can keep the original's date. The staged file's date says when it was staged: a launch
+  // long after that does not apply it (see `stagedImportAgeMs`).
+  const stagedAt = new Date();
+  utimesSync(staged, stagedAt, stagedAt);
   return check.summary;
+}
+
+/** A staged import older than this is not applied: the restart it was waiting for never came. */
+export const STAGED_IMPORT_MAX_AGE_MS = 10 * 60 * 1000;
+
+/** How long ago the staged import was staged, or null when there is none. */
+export function stagedImportAgeMs(dataDir: string, nowMs: number): number | null {
+  try {
+    return Math.max(nowMs - statSync(join(dataDir, STAGED_IMPORT_FILE_NAME)).mtimeMs, 0);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Undoes an import that was just swapped in and then would not open: the imported file is
+ * removed and the database it replaced is put back under its name. Returns true when a backup
+ * was there to put back. Call only before the database is open.
+ */
+export function revertAppliedImport(dataDir: string): boolean {
+  const current = join(dataDir, DATABASE_FILE_NAME);
+  const backup = join(dataDir, IMPORT_BACKUP_FILE_NAME);
+  rmSync(current, { force: true });
+  rmSync(`${current}-journal`, { force: true });
+  if (!existsSync(backup)) return false;
+  renameSync(backup, current);
+  return true;
 }
 
 export function hasStagedImport(dataDir: string): boolean {

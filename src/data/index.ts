@@ -2,10 +2,24 @@ import catalogCodeforces from '../../seed/catalog-codeforces.json';
 import catalogCses from '../../seed/catalog-cses.json';
 import catalogLeetcode from '../../seed/catalog-leetcode.json';
 import starterSeed from '../../seed/starter.json';
+import { join } from 'node:path';
+import { utimesSync } from 'node:fs';
 import type { IsoInstant } from '../core/types';
 import { Db } from './db';
 import { migrate, type MigrationResult } from './migrate';
 import { loadCatalogSeed, loadStarterSeed } from './seed';
+import {
+  applyStagedImport,
+  DATABASE_FILE_NAME,
+  discardStagedImport,
+  revertAppliedImport,
+  STAGED_IMPORT_FILE_NAME,
+  STAGED_IMPORT_MAX_AGE_MS,
+  stagedImportAgeMs,
+  stageImport,
+  TransferError,
+  type DatabaseSummary,
+} from './transfer';
 
 export { Db } from './db';
 export { migrate, NewerDatabaseError } from './migrate';
@@ -21,7 +35,10 @@ export {
   IMPORT_BACKUP_FILE_NAME,
   inspectDatabaseFile,
   STAGED_IMPORT_FILE_NAME,
+  revertAppliedImport,
   samePath,
+  STAGED_IMPORT_MAX_AGE_MS,
+  stagedImportAgeMs,
   stageImport,
   summarizeDatabase,
   TransferError,
@@ -70,5 +87,110 @@ export function openDatabase(path: string, now: IsoInstant, catalogs: readonly u
   } catch (error) {
     db.close();
     throw error;
+  }
+}
+
+/** What a launch did with a staged import. */
+export type ImportOutcome = { status: 'applied' } | { status: 'rejected'; reason: string };
+
+/**
+ * Stages a file for import and proves the copy can be used: the staged copy, which is ours, is
+ * opened the way the app opens its database, so it is brought up to date and given the built-in
+ * lists here and now. A file that looks like a ParaLeet database but cannot be opened is refused
+ * at this point, with nothing changed, and never reaches the swap at launch.
+ */
+export function stageCheckedImport(
+  sourcePath: string,
+  dataDir: string,
+  now: IsoInstant,
+  catalogs: readonly unknown[] = CATALOGS,
+): DatabaseSummary {
+  const summary = stageImport(sourcePath, dataDir);
+  try {
+    openDatabase(join(dataDir, STAGED_IMPORT_FILE_NAME), now, catalogs).db.close();
+  } catch {
+    discardStagedImport(dataDir);
+    throw new TransferError('That file could not be brought up to date, so it cannot be imported. Your data was not changed.');
+  }
+  // Opening it wrote to it. Its date is when it was staged.
+  const stagedAt = new Date();
+  utimesSync(join(dataDir, STAGED_IMPORT_FILE_NAME), stagedAt, stagedAt);
+  return summary;
+}
+
+export interface DataFolderResult extends OpenResult {
+  /** What this launch did with a staged import, or null when there was none. */
+  lastImport: ImportOutcome | null;
+  /** Things that went wrong on the way, for the log. Never shown to the user as they are. */
+  problems: string[];
+}
+
+const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Opens the database in the app's data folder at launch. A staged import is put in place first,
+ * before anything has the database open, and the user's data is never left without a file that
+ * opens under its name:
+ *
+ * - a staged file that is too old, or fails its check, is dropped and the database is untouched;
+ * - a swap that fails half way puts the old database back (`applyStagedImport`);
+ * - an imported database that will not open is removed and the one it replaced is put back.
+ *
+ * `realNowMs` is the real time, also when the app runs on a test clock: it is compared with the
+ * staged file's date on disk.
+ */
+export function openDataFolder(
+  dataDir: string,
+  now: IsoInstant,
+  options: { realNowMs: number; catalogs?: readonly unknown[]; rename?: (from: string, to: string) => void },
+): DataFolderResult {
+  const path = join(dataDir, DATABASE_FILE_NAME);
+  const problems: string[] = [];
+  let lastImport: ImportOutcome | null = null;
+  let applied = false;
+
+  const age = stagedImportAgeMs(dataDir, options.realNowMs);
+  if (age !== null && age > STAGED_IMPORT_MAX_AGE_MS) {
+    // The restart it was waiting for never came. Applying it now would replace whatever was
+    // logged since, without anyone having asked today.
+    discardStagedImport(dataDir);
+    lastImport = {
+      status: 'rejected',
+      reason: 'An import was left waiting for a restart for too long, so it was dropped. Your data was not changed. Choose the file again to import it.',
+    };
+  } else if (age !== null) {
+    try {
+      const staged = applyStagedImport(dataDir, options.rename);
+      if (staged.status === 'applied') {
+        applied = true;
+        lastImport = { status: 'applied' };
+      } else if (staged.status === 'rejected') {
+        lastImport = { status: 'rejected', reason: staged.reason };
+      }
+    } catch (error) {
+      // The old database is back in place. Do not try again at every launch.
+      problems.push(`The staged import could not be put in place: ${describe(error)}`);
+      try {
+        discardStagedImport(dataDir);
+      } catch (discardError) {
+        problems.push(`The staged import could not be removed: ${describe(discardError)}`);
+      }
+      lastImport = { status: 'rejected', reason: 'The file could not be put in place. Your data was not changed.' };
+    }
+  }
+
+  const open = (): OpenResult => (options.catalogs ? openDatabase(path, now, options.catalogs) : openDatabase(path, now));
+  try {
+    return { ...open(), lastImport, problems };
+  } catch (error) {
+    if (!applied) throw error;
+    // It passed every check and still will not open. The data it replaced comes back.
+    problems.push(`The imported database could not be opened: ${describe(error)}`);
+    revertAppliedImport(dataDir);
+    return {
+      ...open(),
+      lastImport: { status: 'rejected', reason: 'The imported file could not be opened, so your earlier data was put back.' },
+      problems,
+    };
   }
 }

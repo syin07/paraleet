@@ -262,6 +262,36 @@ describe('import', () => {
     expect((await app.handlers.getDataInfo(undefined)).summary.attempts).toBe(1);
   });
 
+  it('refuses on yes a file that looks like a ParaLeet database but cannot be brought up to date', async () => {
+    const backup = await makeBackup(2);
+    // The newest schema, claiming to be an older version: the check passes, opening it cannot work.
+    const liar = new Db(backup);
+    liar.exec(`PRAGMA user_version = ${LATEST_SCHEMA_VERSION - 1}`);
+    liar.close();
+    const app = startApp('mine');
+    await reportStarters(app, 1);
+    app.dialogs.open = backup;
+    expect(await app.handlers.chooseImport(undefined)).toMatchObject({ chosen: true, ok: true });
+    await expect(Promise.resolve().then(() => app.handlers.applyImport(undefined))).rejects.toThrow(
+      'That file could not be brought up to date, so it cannot be imported. Your data was not changed.',
+    );
+    expect(hasStagedImport(app.dataDir)).toBe(false);
+    expect(app.restarts()).toBe(0);
+    expect((await app.handlers.getDataInfo(undefined)).summary.attempts).toBe(1);
+  });
+
+  it('says so in plain words when a file dialog itself fails', async () => {
+    const app = startApp('mine');
+    app.ctx.files.chooseOpenPath = async () => {
+      throw new Error('NSOpenPanel exploded: errno 77');
+    };
+    app.ctx.files.chooseSavePath = async () => {
+      throw new Error('NSSavePanel exploded: errno 78');
+    };
+    await expect(app.handlers.chooseImport(undefined)).rejects.toThrow('The file could not be chosen. Try again.');
+    await expect(app.handlers.exportData(undefined)).rejects.toThrow('The place for the copy could not be chosen. Try again.');
+  });
+
   it('tells Settings when the launch refused a staged import', async () => {
     const app = startApp('mine');
     app.ctx.session = newSession({ status: 'rejected', reason: 'That file is damaged and cannot be imported.' });

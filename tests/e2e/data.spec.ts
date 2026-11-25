@@ -1,5 +1,6 @@
-import { existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { expect, test, type Page } from '@playwright/test';
 import { launchApp, makeUserDataDir, type RunningApp } from './launch';
 
@@ -152,5 +153,63 @@ test('a staged import that went bad is refused at launch, and the data is untouc
   } finally {
     await running?.close().catch(() => undefined);
     data.remove();
+  }
+});
+
+test('an import that passes the check but will not open is undone at launch: the earlier data is back', async () => {
+  const data = makeUserDataDir();
+  const files = makeUserDataDir();
+  let running: RunningApp | null = null;
+  try {
+    running = await launchApp({ userDataDir: data.dir, now: NOW });
+    const today = await call<{ assignment: { problem: { id: number } } }>(running.page, 'getToday');
+    await call(running.page, 'submitReport', {
+      problemId: today.assignment.problem.id,
+      rating: 'good',
+      minutes: null,
+      keyInsight: null,
+      notes: null,
+      insightRevealed: false,
+    });
+    const backup = join(files.dir, 'backup.sqlite3');
+    await running.setDialogPaths({ save: backup });
+    expect(await call(running.page, 'exportData')).toMatchObject({ saved: true });
+
+    // The copy is made to lie about its version: it looks like a ParaLeet database, but bringing
+    // it "up to date" cannot work. The app refuses it when asked to import it...
+    const liar = new DatabaseSync(backup);
+    const version = (liar.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    liar.exec(`PRAGMA user_version = ${version - 1}`);
+    liar.close();
+    await running.setDialogPaths({ open: backup });
+    expect(await call(running.page, 'chooseImport')).toMatchObject({ chosen: true, ok: true });
+    const refused = await running.page.evaluate(() =>
+      (globalThis as unknown as { paraleet: Bridge }).paraleet.applyImport!().then(
+        () => 'applied',
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      ),
+    );
+    expect(refused).toBe('That file could not be brought up to date, so it cannot be imported. Your data was not changed.');
+    expect(await running.mainWindowOpen()).toBe(true);
+    expect(existsSync(join(data.dir, 'paraleet.sqlite3.import'))).toBe(false);
+    await running.close();
+    running = null;
+
+    // ...and if such a file is ever staged anyway, the launch puts the earlier data back.
+    copyFileSync(backup, join(data.dir, 'paraleet.sqlite3.import'));
+    running = await launchApp({ userDataDir: data.dir, now: NOW });
+    await expect(running.page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    const info = await call<DataInfo>(running.page, 'getDataInfo');
+    expect(info.lastImport).toEqual({
+      status: 'rejected',
+      reason: 'The imported file could not be opened, so your earlier data was put back.',
+    });
+    expect(info).toMatchObject({ summary: { attempts: 1 }, hasImportBackup: false });
+    expect(await call(running.page, 'getToday')).toMatchObject({ fed: true, streak: { current: 1 } });
+    expect(existsSync(join(data.dir, 'paraleet.sqlite3.import'))).toBe(false);
+  } finally {
+    await running?.close().catch(() => undefined);
+    data.remove();
+    files.remove();
   }
 });
