@@ -4,7 +4,7 @@
 // open database: the chosen file is checked, copied next to the database as a staged file, and
 // swapped in at the next launch, before anything has the database open. The database it replaces
 // is kept beside it as a backup. See docs/decisions/0017-stats-and-data.md.
-import { copyFileSync, existsSync, renameSync, rmSync, statSync, utimesSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ParaDay } from '../core/types';
@@ -16,6 +16,30 @@ export const DATABASE_FILE_NAME = 'paraleet.sqlite3';
 export const STAGED_IMPORT_FILE_NAME = 'paraleet.sqlite3.import';
 /** The database the last import replaced. One is kept; the next import overwrites it. */
 export const IMPORT_BACKUP_FILE_NAME = 'paraleet.sqlite3.before-import';
+/** An imported database that would not open at launch. Kept, not deleted; the next one overwrites it. */
+export const FAILED_IMPORT_FILE_NAME = 'paraleet.sqlite3.import-failed';
+
+/** What SQLite can leave beside a database it had open when the app died. */
+const SIDE_FILE_SUFFIXES = ['-journal', '-wal', '-shm'] as const;
+
+/**
+ * Removes the files SQLite left beside `path`. Only for a file that is about to be thrown away or
+ * written anew: a journal left beside a name would otherwise be applied to the next file put
+ * under that name, and damage it.
+ */
+function removeSideFiles(path: string): void {
+  for (const suffix of SIDE_FILE_SUFFIXES) rmSync(`${path}${suffix}`, { force: true });
+}
+
+/** Asks the disk to really hold the file, so "saved" is still true after a power cut. */
+function flushToDisk(path: string): void {
+  const handle = openSync(path, 'r');
+  try {
+    fsyncSync(handle);
+  } finally {
+    closeSync(handle);
+  }
+}
 
 /** Tables every ParaLeet database has had since its first version. */
 const REQUIRED_TABLES = ['problems', 'attempts', 'review_cards', 'pet', 'settings'] as const;
@@ -58,6 +82,7 @@ export function exportDatabase(db: Db, targetPath: string): void {
   rmSync(temporary, { force: true });
   try {
     db.run('VACUUM INTO ?', [temporary]);
+    flushToDisk(temporary);
     renameSync(temporary, targetPath);
   } catch (error) {
     rmSync(temporary, { force: true });
@@ -160,6 +185,8 @@ export function stageImport(sourcePath: string, dataDir: string): DatabaseSummar
   const staged = join(dataDir, STAGED_IMPORT_FILE_NAME);
   const temporary = `${staged}.partial`;
   rmSync(temporary, { force: true });
+  // A journal left by an earlier staged file that the app died on must not meet this one.
+  removeSideFiles(staged);
   copyFileSync(sourcePath, temporary);
   renameSync(temporary, staged);
   // A copy can keep the original's date. The staged file's date says when it was staged: a launch
@@ -182,16 +209,38 @@ export function stagedImportAgeMs(dataDir: string, nowMs: number): number | null
 }
 
 /**
- * Undoes an import that was just swapped in and then would not open: the imported file is
- * removed and the database it replaced is put back under its name. Returns true when a backup
- * was there to put back. Call only before the database is open.
+ * Undoes an import that was just swapped in and then would not open: the imported file is moved
+ * aside and the database it replaced is put back under its name. Returns true when a backup was
+ * there to put back. Call only before the database is open.
+ *
+ * The imported file is kept as `FAILED_IMPORT_FILE_NAME`, not deleted. When the user imports the
+ * backup of an earlier import to undo it, that backup is the only copy of what they want back;
+ * this way no path through an import deletes the last copy of anything.
  */
 export function revertAppliedImport(dataDir: string): boolean {
   const current = join(dataDir, DATABASE_FILE_NAME);
   const backup = join(dataDir, IMPORT_BACKUP_FILE_NAME);
-  rmSync(current, { force: true });
-  rmSync(`${current}-journal`, { force: true });
+  const failed = join(dataDir, FAILED_IMPORT_FILE_NAME);
+  rmSync(failed, { force: true });
+  if (existsSync(current)) renameSync(current, failed);
+  removeSideFiles(current);
   if (!existsSync(backup)) return false;
+  renameSync(backup, current);
+  return true;
+}
+
+/**
+ * Puts the backup back when the database is gone but the backup of an import is there. That is
+ * what a swap looks like when the app died, or the disk failed, between its two renames: the
+ * user's data sits under the backup name and nothing sits under the database name. Without this
+ * the app would start on a new, empty database. Returns true when it put the backup back. Call
+ * at launch, before anything else looks at the folder.
+ */
+export function restoreMissingDatabase(dataDir: string): boolean {
+  const current = join(dataDir, DATABASE_FILE_NAME);
+  const backup = join(dataDir, IMPORT_BACKUP_FILE_NAME);
+  if (existsSync(current) || !existsSync(backup)) return false;
+  removeSideFiles(current);
   renameSync(backup, current);
   return true;
 }
@@ -206,8 +255,10 @@ export function hasImportBackup(dataDir: string): boolean {
 }
 
 export function discardStagedImport(dataDir: string): void {
-  rmSync(join(dataDir, STAGED_IMPORT_FILE_NAME), { force: true });
-  rmSync(join(dataDir, `${STAGED_IMPORT_FILE_NAME}.partial`), { force: true });
+  const staged = join(dataDir, STAGED_IMPORT_FILE_NAME);
+  rmSync(staged, { force: true });
+  rmSync(`${staged}.partial`, { force: true });
+  removeSideFiles(staged);
 }
 
 export type StagedImportResult =
@@ -255,12 +306,14 @@ export function applyStagedImport(
     backupPath = backup;
   }
   try {
-    rmSync(`${current}-journal`, { force: true });
+    removeSideFiles(current);
     rename(staged, current);
   } catch (error) {
-    if (backupPath !== null && !existsSync(current)) renameSync(backupPath, current);
+    if (backupPath !== null && !existsSync(current)) rename(backupPath, current);
     throw error;
   }
+  // The staged file passed its check, so nothing beside its old name is still needed.
+  removeSideFiles(staged);
   return { status: 'applied', backupPath };
 }
 

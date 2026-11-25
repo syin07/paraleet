@@ -82,7 +82,7 @@ See decision 0016.
 1. **Export.** `exportData` (`services/data.ts`) asks the save dialog (`ctx.files`) and writes a complete copy with `exportDatabase` (`src/data/transfer.ts`, `VACUUM INTO`).
 2. **Choose.** `chooseImport` asks the open dialog, checks the file with `inspectDatabaseFile`, remembers its path in `ctx.session` and answers with what is in it and what it would replace.
 3. **Apply.** `applyImport` checks the file again, copies it next to the database as `paraleet.sqlite3.import` and opens that copy once to prove it can be used (`stageCheckedImport`), then calls `ctx.restart()`.
-4. **Launch.** `src/main/index.ts` opens the database through `openDataFolder`: the staged file becomes the database and the old one becomes `paraleet.sqlite3.before-import`. If the imported database will not open, the old one is put back. The outcome is put in the session for the Data group in Settings.
+4. **Launch.** `src/main/index.ts` opens the database through `openDataFolder`: the staged file becomes the database and the old one becomes `paraleet.sqlite3.before-import`. If the imported database will not open, it is moved aside (`paraleet.sqlite3.import-failed`) and the old one is put back. A swap that an earlier launch left half done (no database, a backup beside it) is undone before anything else. The outcome is put in the session for the Data group in Settings.
 
 The UI never passes a file path to main. See decision 0017.
 

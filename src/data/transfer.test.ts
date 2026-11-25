@@ -25,6 +25,8 @@ import {
   stageImport,
   summarizeDatabase,
   TransferError,
+  FAILED_IMPORT_FILE_NAME,
+  restoreMissingDatabase,
 } from './transfer';
 import { openDatabase, openDataFolder, stageCheckedImport } from './index';
 
@@ -526,6 +528,73 @@ describe('opening the data folder at launch', () => {
     expect(hasStagedImport(dataDir)).toBe(false);
   });
 
+  it('undoes a swap that stopped between its two steps, even when the staged file has since grown old', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    // The app died right after the database was moved to its backup name.
+    renameSync(join(dataDir, DATABASE_FILE_NAME), join(dataDir, IMPORT_BACKUP_FILE_NAME));
+    const staged = join(dataDir, STAGED_IMPORT_FILE_NAME);
+    const longAgo = new Date(Date.now() - STAGED_IMPORT_MAX_AGE_MS - 60_000);
+    utimesSync(staged, longAgo, longAgo);
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    // Not a new, empty database: the user's own data, back under its name.
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+    expect(hasImportBackup(dataDir)).toBe(false);
+    expect(existsSync(staged)).toBe(false);
+    expect(opened.lastImport?.status).toBe('rejected');
+    expect(opened.problems.join(' ')).toContain('stopped half way');
+  });
+
+  it('finishes an import whose swap stopped between its two steps when the restart comes in time', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    renameSync(join(dataDir, DATABASE_FILE_NAME), join(dataDir, IMPORT_BACKUP_FILE_NAME));
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({ status: 'applied' });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(6);
+    // What the import replaced is still kept.
+    expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(3);
+  });
+
+  it('never starts empty while the backup of an import holds the data: the backup is put back', () => {
+    const dataDir = makeDataDir(4);
+    renameSync(join(dataDir, DATABASE_FILE_NAME), join(dataDir, IMPORT_BACKUP_FILE_NAME));
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toBeNull();
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(4);
+    expect(hasImportBackup(dataDir)).toBe(false);
+  });
+
+  it('when the swap fails half way and putting the database back fails too, the launch still opens the old data', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    // The first rename works; the import into place fails, and so does the first try at putting
+    // the database back.
+    let calls = 0;
+    const failingTwice = (from: string, to: string): void => {
+      calls += 1;
+      if (calls === 2 || calls === 3) throw new Error('rename failed');
+      renameSync(from, to);
+    };
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [], rename: failingTwice });
+    open.push(opened.db);
+    expect(calls).toBe(3);
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+    expect(opened.lastImport).toEqual({ status: 'rejected', reason: 'The file could not be put in place. Your data was not changed.' });
+    expect(opened.problems.join(' ')).toContain('put back from the backup');
+    expect(hasImportBackup(dataDir)).toBe(false);
+    expect(hasStagedImport(dataDir)).toBe(false);
+  });
+
   it('still fails loudly when the database itself will not open and no import was applied', () => {
     const dataDir = mkdtempSync(join(dir, 'broken-'));
     writeFileSync(join(dataDir, DATABASE_FILE_NAME), 'this is not a database');
@@ -536,7 +605,7 @@ describe('opening the data folder at launch', () => {
 });
 
 describe('undoing an import that will not open', () => {
-  it('removes the imported file and puts the backup back under the database name', () => {
+  it('moves the imported file aside and puts the backup back under the database name', () => {
     const dataDir = makeDataDir(3);
     const { db, path } = makeDatabase('incoming', 6);
     db.close();
@@ -545,10 +614,67 @@ describe('undoing an import that will not open', () => {
     expect(revertAppliedImport(dataDir)).toBe(true);
     expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(3);
     expect(hasImportBackup(dataDir)).toBe(false);
-    // With no backup there is nothing to put back.
+    // The imported file is kept, not deleted: it may be the only copy of what the user wanted back.
+    expect(countAttempts(join(dataDir, FAILED_IMPORT_FILE_NAME))).toBe(6);
+    // With no backup there is nothing to put back, and the newer failed file replaces the older.
     rmSync(join(dataDir, DATABASE_FILE_NAME));
     writeFileSync(join(dataDir, DATABASE_FILE_NAME), 'x');
     expect(revertAppliedImport(dataDir)).toBe(false);
     expect(existsSync(join(dataDir, DATABASE_FILE_NAME))).toBe(false);
+    expect(readFileSync(join(dataDir, FAILED_IMPORT_FILE_NAME), 'utf8')).toBe('x');
+  });
+
+  it('keeps the data of an import that is undone by importing its backup, even when that will not open', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageImport(path, dataDir);
+    applyStagedImport(dataDir);
+    // Now 6 attempts are in use and the 3 are the backup. The user imports the backup to go back.
+    stageImport(join(dataDir, IMPORT_BACKUP_FILE_NAME), dataDir);
+    applyStagedImport(dataDir);
+    expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(3);
+    expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(6);
+    // Say it then would not open: both sets of data are still on disk.
+    expect(revertAppliedImport(dataDir)).toBe(true);
+    expect(countAttempts(join(dataDir, DATABASE_FILE_NAME))).toBe(6);
+    expect(countAttempts(join(dataDir, FAILED_IMPORT_FILE_NAME))).toBe(3);
+  });
+});
+
+describe('a journal left beside a staged file by a crash', () => {
+  const journal = (dataDir: string): string => join(dataDir, `${STAGED_IMPORT_FILE_NAME}-journal`);
+
+  it('is removed with the staged file, so it cannot be applied to the next one', () => {
+    const dataDir = makeDataDir(1);
+    const { db, path } = makeDatabase('incoming', 2);
+    db.close();
+    stageImport(path, dataDir);
+    writeFileSync(journal(dataDir), 'left by a crash');
+    discardStagedImport(dataDir);
+    expect(existsSync(journal(dataDir))).toBe(false);
+  });
+
+  it('is removed before a new file is staged', () => {
+    const dataDir = makeDataDir(1);
+    const { db, path } = makeDatabase('incoming', 2);
+    db.close();
+    writeFileSync(journal(dataDir), 'left by a crash');
+    stageCheckedImport(path, dataDir, NOW, []);
+    expect(existsSync(journal(dataDir))).toBe(false);
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: Date.now(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({ status: 'applied' });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(2);
+  });
+});
+
+describe('putting back a database that is missing', () => {
+  it('does nothing when the database is there, or when there is no backup', () => {
+    const dataDir = makeDataDir(2);
+    expect(restoreMissingDatabase(dataDir)).toBe(false);
+    const empty = mkdtempSync(join(dir, 'none-'));
+    expect(restoreMissingDatabase(empty)).toBe(false);
+    expect(existsSync(join(empty, DATABASE_FILE_NAME))).toBe(false);
   });
 });

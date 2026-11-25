@@ -12,6 +12,7 @@ import {
   applyStagedImport,
   DATABASE_FILE_NAME,
   discardStagedImport,
+  restoreMissingDatabase,
   revertAppliedImport,
   STAGED_IMPORT_FILE_NAME,
   STAGED_IMPORT_MAX_AGE_MS,
@@ -30,11 +31,13 @@ export {
   dataDirOf,
   discardStagedImport,
   exportDatabase,
+  FAILED_IMPORT_FILE_NAME,
   hasImportBackup,
   hasStagedImport,
   IMPORT_BACKUP_FILE_NAME,
   inspectDatabaseFile,
   STAGED_IMPORT_FILE_NAME,
+  restoreMissingDatabase,
   revertAppliedImport,
   samePath,
   STAGED_IMPORT_MAX_AGE_MS,
@@ -132,9 +135,12 @@ const describe = (error: unknown): string => (error instanceof Error ? error.mes
  * before anything has the database open, and the user's data is never left without a file that
  * opens under its name:
  *
+ * - a swap that an earlier launch left half done (the database gone, its backup there) is undone
+ *   first, so the app never starts on a new, empty database while the user's data sits beside it;
  * - a staged file that is too old, or fails its check, is dropped and the database is untouched;
- * - a swap that fails half way puts the old database back (`applyStagedImport`);
- * - an imported database that will not open is removed and the one it replaced is put back.
+ * - a swap that fails half way puts the old database back (`applyStagedImport`), and if even that
+ *   cannot be done the launch fails loudly instead of opening an empty database;
+ * - an imported database that will not open is moved aside and the one it replaced is put back.
  *
  * `realNowMs` is the real time, also when the app runs on a test clock: it is compared with the
  * staged file's date on disk.
@@ -148,6 +154,10 @@ export function openDataFolder(
   const problems: string[] = [];
   let lastImport: ImportOutcome | null = null;
   let applied = false;
+
+  if (restoreMissingDatabase(dataDir)) {
+    problems.push('The database was missing and the backup of an import was there: an import had stopped half way. The backup was put back.');
+  }
 
   const age = stagedImportAgeMs(dataDir, options.realNowMs);
   if (age !== null && age > STAGED_IMPORT_MAX_AGE_MS) {
@@ -170,6 +180,9 @@ export function openDataFolder(
     } catch (error) {
       // The old database is back in place. Do not try again at every launch.
       problems.push(`The staged import could not be put in place: ${describe(error)}`);
+      // If it is not back in place (putting it back failed too), this puts it back or throws:
+      // the launch then fails, which is better than opening a new, empty database over it.
+      if (restoreMissingDatabase(dataDir)) problems.push('The database was put back from the backup of the import.');
       try {
         discardStagedImport(dataDir);
       } catch (discardError) {
