@@ -59,7 +59,14 @@ npm run build      # production bundle in out/
 npm run start      # run that bundle
 ```
 
-Packaging a `.dmg` arrives with milestone M4.
+## Install it (yours, or a friend's Mac)
+
+```sh
+npm run dist        # builds dist/ParaLeet-<version>.dmg (Apple silicon and Intel in one file)
+npm run dist:check  # starts the packaged app on a throwaway data folder and checks it
+```
+
+Send the `.dmg` and `docs/INSTALL.md`: the note covers the one-time macOS warning for an app that is not signed with a paid certificate. An installed copy keeps its data in `~/Library/Application Support/ParaLeet/` and a log, `paraleet.log`, in the same folder.
 
 ## Your data
 

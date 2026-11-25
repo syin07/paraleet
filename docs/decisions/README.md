@@ -21,3 +21,4 @@ One short file per non-obvious choice: context, decision, alternatives rejected.
 | [0015](0015-reminders-and-login.md) | Daily reminders and launch at login |
 | [0016](0016-learning-plans.md) | Learning plans, the model and the API key |
 | [0017](0017-stats-and-data.md) | Stats, and export and import |
+| [0018](0018-installer.md) | The installer, the log file and the packaged-app check |

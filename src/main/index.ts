@@ -21,6 +21,7 @@ import { getSettings, updateSettings } from '../data/repos/settings';
 import { createAnthropicClient, listModels } from '../llm/anthropicClient';
 import { LlmError } from '../llm/planGenerator';
 import { registerBridge } from './bridge';
+import { createLog, LOG_FILE_NAME } from './log';
 import { API_KEY_FILE_NAME, createSecretStore } from './secrets';
 import { FakeClock, systemClock, type Clock } from './clock';
 import {
@@ -170,6 +171,16 @@ function start(): void {
   const userData = app.getPath('userData');
   mkdirSync(userData, { recursive: true });
 
+  // What a development run prints to the console, an installed app keeps in a file the user can
+  // send: `paraleet.log`, next to the database. The log uses real time, also under a test clock.
+  const log = createLog(join(userData, LOG_FILE_NAME), () => new Date(), {
+    echo: (level, line) => (level === 'error' ? console.error(line) : level === 'warn' ? console.warn(line) : console.log(line)),
+  });
+  log.info(`ParaLeet ${app.getVersion()} started (${app.isPackaged ? 'installed' : 'development'}, ${process.arch}).`);
+  // A failure nothing caught: keep it, and keep running. Para should not vanish over one error.
+  process.on('uncaughtException', (error) => log.error('An error nothing caught:', error));
+  process.on('unhandledRejection', (reason) => log.error('A failed promise nothing caught:', reason));
+
   // An import chosen in Settings is put in place here, before the database is opened: the open
   // database is never replaced while the app runs, and what it replaces is kept beside it.
   let lastImport: ImportOutcome | null;
@@ -177,12 +188,14 @@ function start(): void {
     const opened = openDataFolder(userData, clock.now().toISOString(), { realNowMs: Date.now() });
     db = opened.db;
     lastImport = opened.lastImport;
-    for (const problem of opened.problems) console.error(`ParaLeet: ${problem}`);
-    if (lastImport?.status === 'rejected') console.warn(`ParaLeet did not apply the import: ${lastImport.reason}`);
+    for (const problem of opened.problems) log.error(problem);
+    if (lastImport?.status === 'applied') log.info('An import was applied at this launch.');
+    if (lastImport?.status === 'rejected') log.warn(`An import was not applied: ${lastImport.reason}`);
     // The catalog is reference data: the app opens without a file that could not be loaded.
-    for (const problem of opened.catalogProblems) console.warn(`ParaLeet: ${problem}`);
+    for (const problem of opened.catalogProblems) log.warn(problem);
   } catch (error) {
     // Never repair or replace the file automatically: the user's data comes first.
+    log.error('The database could not be opened:', error);
     dialog.showErrorBox(
       'ParaLeet could not open its database',
       `${error instanceof Error ? error.message : String(error)}\n\nYour data file was not changed:\n${join(userData, DATABASE_FILE_NAME)}`,
@@ -335,7 +348,7 @@ function start(): void {
         tray.sync();
         loginItem.sync();
       } catch (error) {
-        console.error('ParaLeet could not update the pet window, the menu bar icon or the login item:', error);
+        log.error('Could not update the pet window, the menu bar icon or the login item:', error);
       }
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CHANGED_EVENT);
@@ -402,14 +415,14 @@ function start(): void {
   try {
     const repaired = reconcile(ctx);
     if (repaired.petFactsRepaired || repaired.cardsRebuilt > 0 || repaired.accessoriesRestored.length > 0) {
-      console.warn(
-        `ParaLeet reconciled its data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt, ${repaired.accessoriesRestored.length} accessory unlock(s) restored.`,
+      log.warn(
+        `Reconciled the data with the attempts: pet facts ${repaired.petFactsRepaired ? 'corrected' : 'ok'}, ${repaired.cardsRebuilt} review card(s) rebuilt, ${repaired.accessoriesRestored.length} accessory unlock(s) restored.`,
       );
     }
   } catch (error) {
     // The self-check runs in one transaction, so a failure changes nothing. The app is still
     // usable with the data as stored; never leave the user with no window over this.
-    console.error('ParaLeet could not reconcile its data at launch:', error);
+    log.error('Could not reconcile the data at launch:', error);
   }
 
   // The bridge answers only the main frame of the app's own windows, showing the app's own page.
@@ -425,7 +438,7 @@ function start(): void {
       );
     },
     // The window shows the message; the log keeps the rest. The input is never logged.
-    (method, error) => console.error(`ParaLeet: ${method} failed:`, error),
+    (method, error) => log.error(`${method} failed:`, error),
   );
 
   const dayWatcher = createDayWatcher(ctx);
@@ -438,7 +451,7 @@ function start(): void {
     try {
       run();
     } catch (error) {
-      console.error(`ParaLeet could not ${what}:`, error);
+      log.error(`Could not ${what}:`, error);
     }
   };
   const tick = (): void => {
