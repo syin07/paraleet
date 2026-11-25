@@ -26,18 +26,17 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-114 (slice 1) | Lead: M2 shared types (`Mood`, `AccessoryId`) and the accessories part of the bridge | `lead/san-114-m2-contract` (worktree `.claude/worktrees/lead-san-111`) | In review |
+| SAN-114 (slice 2) | Lead: the floating pet window, its bridge methods, hover bubble, right-click menu, Dock hiding | `lead/san-114-pet-window` at `68720b3` (worktree `.claude/worktrees/lead-san-111`) | In review, round 1 |
+| SAN-112 + SAN-113 | Worker: procedural sprite, seed traits, `Sprite` component, gallery at `#/gallery` | `worker/san-112-sprite` (worktree `.claude/worktrees/agent-a76a928ef3328cd62`) | Code accepted by the lead; sent back for one art pass (upright posture, small hooked beak, wing and tail apart, moods that differ in silhouette, menu bar head crop). Not yet reviewed |
+| SAN-128 | Worker: mood rules, speech lines, accessory unlocks, reminder timing (pure core) | `worker/san-128-pet-rules` at `3857522` (worktree `.claude/worktrees/agent-acaa4f7617470f92f`) | In review, round 2 (round 1 blocked on the fed-sleep window and on Again unlocking streak accessories; both fixed) |
+| SAN-129 | Worker: Settings screen | `worker/san-129-settings` at `a11370f` (worktree `.claude/worktrees/agent-a0964102f926a80cc`) | In review, round 2 (round 1 blocked on field widths and missing lower-half screenshots; fixed) |
 
 ## Next
 
-1. Merge the SAN-114 contract slice when its review passes. Workers must not start before it: they all build on its types.
-2. Then launch three workers at once:
-   - SAN-112 and SAN-113 together on one branch (`worker/san-112-sprite`): the procedural sprite renderer, seed variations, the `Sprite` canvas component and the gallery at `#/gallery`. The egg stage is Para peeking out of a cracked shell; `nibbling` is the Again reward; a separate hatching animation is for first launch.
-   - SAN-128 (`worker/san-128-pet-rules`): mood rules, speech lines, accessory unlocks, reminder timing. Pure core.
-   - SAN-129 (`worker/san-129-settings`): the Settings screen.
-3. Lead, in parallel, SAN-114 slice 2: bridge methods for windows, onboarding and pet events; the floating pet window (transparent, frameless, always on top, never focused, click-through outside the bird, draggable, position remembered, on every desktop); hide the Dock icon when only the pet is showing. A spike on this Mac confirmed Electron 45 supports all of it, and that the menu bar icon can be built from raw sprite pixels with the streak as its title.
-4. Then SAN-115 (menu bar icon and compact card), SAN-116 (checking and eating animations, growth, accessory unlocks wired into reporting), SAN-117 (two daily notifications), SAN-118 (launch at login and the first-launch hatching flow). SAN-115 to SAN-118 are still coarse in Linear; detail each when it starts.
-5. Then M3 (catalog and learning plans; load the `claude-api` skill before writing the `llm` module) and M4 (stats, export and import, the `.dmg`).
+1. Gate and merge the four branches above as their reviews pass. At the SAN-129 merge, bring `docs/design-references.md` section 8 in line with what was built (day boundary 00:00 to 08:00, "Show Para on the desktop", text time inputs, stacked accessories row). At the SAN-128 merge, write decision 0011 (pet rules: egg stage and hatching, the four accessories, "first Hard" means the first Hard problem solved, an Again attempt unlocks nothing, a fed Para sleeps 23:00 to 06:00, how lines avoid repeating).
+2. Lead, once SAN-128, SAN-112 and SAN-114 are on main: wire the real mood, line and accessories into `petSummary` (`src/main/services/today.ts` has a placeholder mood), unlock accessories inside `submitReport`'s transaction with `unlockedAfterAttempt`, show the real `Sprite` in the pet window and the sidebar with the pet's own seed, and tell windows when the mood changes (short timers for the checking and eating steps, the 30-second tick for the rest). This needs migration 002 for what must be remembered: the day the "missed you" greeting was seen and the day each reminder was sent.
+3. Then SAN-115 (menu bar icon from the sprite's head with the streak as its title; the compact card from the pet and the icon, reusing `ReportForm`), SAN-116 (checking and eating animations, growth), SAN-117 (two daily notifications from `dueReminder`, clicking one opens the compact card), SAN-118 (launch at login, only when packaged; the first-launch hatching flow, without forcing people who already use the app through it). Define the bridge for these in one lead slice first, then give the compact card page and the first-launch screens to workers while the lead does the main-process side.
+4. Then M3 (catalog and learning plans; load the `claude-api` skill before writing the `llm` module) and M4 (stats, export and import, the `.dmg`).
 
 ## Done
 
@@ -58,6 +57,7 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 - Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4.
 - M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). SAN-112, 113, 128 and 129 are detailed; SAN-114 to SAN-118 are coarse. M3: SAN-119 to SAN-123 (coarse). M4: SAN-124 to SAN-126 (coarse; SAN-126 is the owner's one-week trial).
 - Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (group `Module`).
+- SAN-114 slice 1 (shared M2 types and the accessories part of the bridge) merged as `44b278d`.
 
 ## How the loop is run in this repo
 
@@ -80,10 +80,15 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 - `isRendererUrl` (the bridge's sender check) has only been run against the unpackaged build. Confirm it inside the packaged app in M4, including an install path with unusual characters.
 - The renderer bundle is not minified (about 600 kB). Harmless for a local app; revisit at packaging.
 
+- A real desktop screenshot cannot be taken from this session: `screencapture` and the computer-use tools have no screen-recording permission, and the lead does not raise permission prompts on the owner's Mac. The pet window is checked through the real Electron windows instead (window flags, bounds, Dock state, and `capturePage` pixels for see-through corners).
+- Reviewers and workers must not run two Playwright runs at once in one worktree; they interfere.
+- The sidebar logo and empty states will use a fixed sample seed after SAN-112 merges; wire the pet's own seed in the lead's integration slice.
+- Settings worker notes for later: `Field`'s `Input` has no `aria-invalid` and forces `w-full`; `Page` in `Layout.tsx` is capped at 960px with no width option.
+
 ## Blockers
 
 None.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0009`. Decided for M2 and still to be written down with SAN-112: the egg stage shows Para in a cracked shell (the PRD has both an egg stage until 3 growth solves and a hatching on first launch), and the four accessories are scarf, bow tie, crown and graduation cap.
+See `docs/decisions/0001` to `0009`; `0010` (the pet window) arrives with the SAN-114 merge. Decided for M2 and to be written down as `0011` with the SAN-128 merge: the egg stage shows Para in a cracked shell (the PRD has both an egg stage until 3 growth solves and a hatching on first launch); the four accessories are scarf, bow tie, crown and graduation cap; "first Hard" means the first Hard problem solved, not the first attempt rated Hard; an attempt rated Again unlocks nothing and the next other attempt picks the milestone up; a fed Para sleeps from 23:00 to 06:00 local time whatever the day boundary.
