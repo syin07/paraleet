@@ -1,0 +1,56 @@
+import type { TopicId } from '../core/topics';
+import { mapTagsWith } from './tags';
+import type { PlatformAdapter } from './types';
+
+export const CSES_HOSTS: readonly string[] = ['cses.fi', 'www.cses.fi'];
+
+const ID = /^\d+$/;
+// The task page and its sibling pages (stats, submit, ...) all name the same task.
+const PATH = /^\/problemset\/(?:task|stats|submit|hack|model|view)\/(\d+)\/?$/;
+
+// CSES's own section names (lower case), read from https://cses.fi/problemset/. "General",
+// "Advanced Techniques", "Interactive Problems" and the two "Additional Problems" sections have no
+// single topic, so they map to nothing.
+export const CSES_TAGS: Record<string, TopicId> = {
+  'introductory problems': 'implementation',
+  'sorting and searching': 'sorting',
+  'dynamic programming': 'dynamic-programming',
+  'graph algorithms': 'graphs',
+  'range queries': 'range-queries',
+  'tree algorithms': 'trees',
+  mathematics: 'math',
+  'string algorithms': 'strings',
+  geometry: 'geometry',
+  'sliding window problems': 'sliding-window',
+  'bitwise operations': 'bit-manipulation',
+  'construction problems': 'implementation',
+  'advanced graph problems': 'graphs',
+  'counting problems': 'math',
+};
+
+export const csesAdapter: PlatformAdapter = {
+  platform: 'cses',
+  label: 'CSES',
+
+  parseUrl(url) {
+    if (!CSES_HOSTS.includes(url.hostname)) return null;
+    return PATH.exec(url.pathname)?.[1] ?? null;
+  },
+
+  buildUrl(platformId) {
+    return `https://cses.fi/problemset/task/${platformId}`;
+  },
+
+  isValidId(platformId) {
+    return ID.test(platformId);
+  },
+
+  // CSES publishes no difficulty.
+  normalizeDifficulty() {
+    return null;
+  },
+
+  mapTags(sourceTags) {
+    return mapTagsWith(CSES_TAGS, sourceTags);
+  },
+};
