@@ -340,12 +340,12 @@ Build in vertical slices. Each milestone ends with something the owner can use, 
 
 **M1. The loop works** (plain UI, placeholder bird)
 
-- [ ] App launches on macOS from one documented command; data persists across restarts
-- [ ] Starter list loaded; today's problem is assigned and opens in the browser
-- [ ] Report form records an attempt and marks the day as fed
-- [ ] Streak counts correctly across the 04:00 boundary, missed days and time-zone changes
-- [ ] Each solved problem gets a review card; due reviews take the daily slot
-- [ ] Problems screen lists everything logged; a problem can be added by URL
+- [x] App launches on macOS from one documented command; data persists across restarts
+- [x] Starter list loaded; today's problem is assigned and opens in the browser
+- [x] Report form records an attempt and marks the day as fed
+- [x] Streak counts correctly across the 04:00 boundary, missed days and time-zone changes
+- [x] Each solved problem gets a review card; due reviews take the daily slot
+- [x] Problems screen lists everything logged; a problem can be added by URL
 
 **M2. The pet is alive**
 

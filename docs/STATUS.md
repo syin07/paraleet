@@ -4,7 +4,13 @@ Last updated: 2026-11-25 (session 1, lead)
 
 ## What works today
 
-Run `npm install`, then `npm run dev`. The app opens, shows today's problem from a 32-problem starter list, opens it in the browser, and records "I solved it" with a rating. The solve, the streak and the fed day survive a restart, and the day rolls over at 04:00.
+**Milestone M1 is complete and merged.** Run `npm install`, then `npm run dev`.
+
+- Para picks one problem a day: a due review first, otherwise the next starter problem. "Open problem" opens the browser; "I solved it" records a rating in two clicks.
+- Every reported problem gets a review card (FSRS). A problem rated Again is tomorrow's problem. Up to five other due reviews are listed, never a count. Today's problem can be swapped.
+- Any problem can be logged from Today by search or by pasting its link (LeetCode, CSES, Codeforces or another site). The Problems screen lists everything logged, with filters, attempt history, notes, retire and reset.
+- The streak holds across the 04:00 boundary, restarts, sleep and time-zone changes. All data is one SQLite file.
+- The bird is still a placeholder, and Plan, Stats and Settings are placeholders. That is M2 to M4.
 
 ## Notes for the owner
 
@@ -14,20 +20,24 @@ Run `npm install`, then `npm run dev`. The app opens, shows today's problem from
 
 ## Current milestone
 
-M1. The loop works.
+M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 
 ## In flight
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-127 | Add a problem from Today; report form keyboard and focus fixes; scroll hint in dialogs | `worker/san-127-today-add-and-form-fixes` | Worker running |
-| SAN-111 | Lead: wire the loop end to end | `lead/san-111-daily-loop` (worktree `.claude/worktrees/lead-san-111`) | In progress. Done: review cards created on report, real next-review preview, launch-time reconcile, swap guard and swap-candidate rule, seeds checked with the link recognizer, service tests for every platform, end-to-end review test, Playwright config fixes, decisions 0008 and 0009 |
+| SAN-114 (slice 1) | Lead: M2 shared types (`Mood`, `AccessoryId`) and the accessories part of the bridge | `lead/san-114-m2-contract` (worktree `.claude/worktrees/lead-san-111`) | In review |
 
 ## Next
 
-1. SAN-127: when the worker returns, run its gate (rebase, three suites, screenshots at both sizes, fresh reviewer), merge, attach the screenshot sheet.
-2. SAN-111, after SAN-127 is merged: rebase; add `tests/e2e/problems.spec.ts` (open a logged problem, edit notes, retire and reset, add by URL for LeetCode, Codeforces and another site, add from Today's quick-log, restart and check it all persisted); exercise every M1 checklist line in the running app; run its gate; merge. That closes M1.
-3. Then write detailed M2 issues and continue. Planned M2 split: sprite renderer and gallery plus seed variations (core, one worker); pet mood, speech lines, accessory unlocks and reminder decisions (core, new issue); Settings screen (ui, new issue); pet window, menu bar icon and compact card window, notifications, launch at login (lead, main); compact card and first-launch flow screens (ui workers); report animations (ui).
+1. Merge the SAN-114 contract slice when its review passes. Workers must not start before it: they all build on its types.
+2. Then launch three workers at once:
+   - SAN-112 and SAN-113 together on one branch (`worker/san-112-sprite`): the procedural sprite renderer, seed variations, the `Sprite` canvas component and the gallery at `#/gallery`. The egg stage is Para peeking out of a cracked shell; `nibbling` is the Again reward; a separate hatching animation is for first launch.
+   - SAN-128 (`worker/san-128-pet-rules`): mood rules, speech lines, accessory unlocks, reminder timing. Pure core.
+   - SAN-129 (`worker/san-129-settings`): the Settings screen.
+3. Lead, in parallel, SAN-114 slice 2: bridge methods for windows, onboarding and pet events; the floating pet window (transparent, frameless, always on top, never focused, click-through outside the bird, draggable, position remembered, on every desktop); hide the Dock icon when only the pet is showing. A spike on this Mac confirmed Electron 45 supports all of it, and that the menu bar icon can be built from raw sprite pixels with the streak as its title.
+4. Then SAN-115 (menu bar icon and compact card), SAN-116 (checking and eating animations, growth, accessory unlocks wired into reporting), SAN-117 (two daily notifications), SAN-118 (launch at login and the first-launch hatching flow). SAN-115 to SAN-118 are still coarse in Linear; detail each when it starts.
+5. Then M3 (catalog and learning plans; load the `claude-api` skill before writing the `llm` module) and M4 (stats, export and import, the `.dmg`).
 
 ## Done
 
@@ -40,11 +50,13 @@ M1. The loop works.
 | SAN-109 | Today screen and shared report form | `990088f` |
 | SAN-110 | Problems screen: table, filters, detail drawer with notes, retire and reset, add by URL | `bce284f` |
 | SAN-108 | Platform adapters and link recognition for LeetCode, CSES, Codeforces and Other (lead took it over after three failed reviews) | `398b61e` |
+| SAN-127 | Add a problem from Today; "I solved it today" in the add dialog; report form keyboard and focus fixes; scroll hint in tall dialogs | `ef1a667` |
+| SAN-111 | The loop wired end to end: review cards on report, launch-time reconcile, end-to-end tests. Closes M1 | `2b2b8b5` |
 
 ## Linear
 
 - Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4.
-- M1: SAN-104 to SAN-111 and SAN-127 (detailed). M2: SAN-112 to SAN-118 (coarse). M3: SAN-119 to SAN-123 (coarse). M4: SAN-124 to SAN-126 (coarse; SAN-126 is the owner's one-week trial).
+- M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). SAN-112, 113, 128 and 129 are detailed; SAN-114 to SAN-118 are coarse. M3: SAN-119 to SAN-123 (coarse). M4: SAN-124 to SAN-126 (coarse; SAN-126 is the owner's one-week trial).
 - Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (group `Module`).
 
 ## How the loop is run in this repo
@@ -60,7 +72,10 @@ M1. The loop works.
 
 ## Watch list (not blocking)
 
-- The end-to-end smoke test failed once when three workers were building at the same time, and passed on rerun. Treat a lone e2e failure under load as a rerun, and fix the timeouts in SAN-111.
+- A failed launch self-check (`reconcile`) is only written to the console. A packaged app's user cannot see that. Add a log file in M4.
+- `scripts/contact-sheet.ts` builds the screenshot sheet for a UI issue; run it from the main checkout now that it is merged.
+
+- The end-to-end smoke test failed once under heavy load before its timeouts were raised in SAN-111. Treat a lone e2e failure under load as a rerun.
 
 - `isRendererUrl` (the bridge's sender check) has only been run against the unpackaged build. Confirm it inside the packaged app in M4, including an install path with unusual characters.
 - The renderer bundle is not minified (about 600 kB). Harmless for a local app; revisit at packaging.
@@ -71,4 +86,4 @@ None.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0007` on `main`; `0008` (loop wiring) and `0009` (problem links) arrive with the SAN-111 branch.
+See `docs/decisions/0001` to `0009`. Decided for M2 and still to be written down with SAN-112: the egg stage shows Para in a cracked shell (the PRD has both an egg stage until 3 growth solves and a hatching on first launch), and the four accessories are scarf, bow tie, crown and graduation cap.
