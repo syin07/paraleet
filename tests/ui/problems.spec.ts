@@ -159,6 +159,22 @@ test.describe('table', () => {
     expect(pageOverflow).toBeLessThanOrEqual(0);
   });
 
+  test('topic chips are shown whole or not at all', async ({ page }) => {
+    await openScreen(page, 'problems', 'many');
+    await expect(rows(page)).toHaveCount(35);
+    const clipped = await page.getByTestId('topic-chip').evaluateAll((chips) =>
+      chips
+        // Chips wrapped out of the one-line row are folded into "+n"; only shown ones count.
+        .filter((chip) => (chip as HTMLElement).offsetTop === 0)
+        .map((chip) => ({ text: chip.textContent, over: chip.scrollWidth - chip.clientWidth }))
+        .filter((chip) => chip.over > 0),
+    );
+    expect(clipped).toEqual([]);
+    // Folded chips are counted and named in the tooltip.
+    const folded = rows(page).filter({ hasText: '+1' }).first().getByRole('cell').nth(2);
+    expect(await folded.getAttribute('title')).toContain(',');
+  });
+
   test('many problems', async ({ page }) => {
     await openScreen(page, 'problems', 'many');
     await expect(rows(page)).toHaveCount(35);

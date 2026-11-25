@@ -1,6 +1,6 @@
 // The table of logged problems: sortable header, 40px rows, keyboard up/down and Enter.
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import type { KeyboardEvent, ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { LoggedProblemRow } from '../../../bridge/contract';
 import { topicLabel } from '../../../core/topics';
 import type { ParaDay, Rating } from '../../../core/types';
@@ -78,24 +78,51 @@ function NextReview({ row, today }: { row: LoggedProblemRow; today: ParaDay }) {
   return <span className="text-fg-secondary">{relativeDay(row.card.dueDay, today)}</span>;
 }
 
+/**
+ * Whole chips only. Every chip sits in a one-line row that wraps; the ones that do not fit wrap
+ * out of sight (the row is clipped to one line) and are counted into "+n". A first chip wider
+ * than the column is cut with an ellipsis instead. The count comes from a resize observer, which
+ * reports before the browser paints, so nothing flickers.
+ */
 function TopicsCell({ topics }: { topics: LoggedProblemRow['problem']['topics'] }) {
-  const shown = topics.slice(0, 2);
-  const rest = topics.length - shown.length;
+  const row = useRef<HTMLDivElement>(null);
+  const [hidden, setHidden] = useState(0);
+
+  useEffect(() => {
+    const element = row.current;
+    if (!element) return;
+    const count = (): void => {
+      if (element.clientWidth === 0) return; // the column is hidden in a narrow window
+      setHidden([...element.children].filter((chip) => (chip as HTMLElement).offsetTop > 0).length);
+    };
+    const observer = new ResizeObserver(count);
+    observer.observe(element);
+    count();
+    return () => observer.disconnect();
+  }, [topics]);
+
+  if (topics.length === 0) return <div role="cell" className="max-[959px]:hidden" />;
   return (
-    <div className="flex min-w-0 items-center gap-1 max-[959px]:hidden">
-      {shown.map((topic, index) => (
-        // The first chip gives way last, so at least one topic stays readable.
-        <span
-          key={topic}
-          className={cx(
-            'inline-flex h-5 min-w-0 items-center rounded-xs bg-sunken px-1.5 text-sm text-fg-secondary',
-            index === 0 && 'shrink-[0.1]',
-          )}
-        >
-          <span className="truncate">{topicLabel(topic)}</span>
-        </span>
-      ))}
-      {rest > 0 && <span className="shrink-0 text-sm text-fg-muted">+{rest}</span>}
+    <div
+      role="cell"
+      className="flex min-w-0 items-center gap-1 max-[959px]:hidden"
+      title={topics.map(topicLabel).join(', ')}
+    >
+      <div ref={row} className="relative flex h-5 min-w-0 flex-1 flex-wrap gap-x-1 gap-y-2 overflow-hidden">
+        {topics.map((topic) => (
+          <span
+            key={topic}
+            data-testid="topic-chip"
+            className="inline-flex h-5 max-w-full shrink-0 items-center rounded-xs bg-sunken px-1.5 text-sm text-fg-secondary"
+          >
+            <span className="truncate">{topicLabel(topic)}</span>
+          </span>
+        ))}
+      </div>
+      {/* Reserved whenever there is more than one topic, so showing it never moves the chips. */}
+      {topics.length > 1 && (
+        <span className={cx('w-6 shrink-0 text-sm text-fg-muted', hidden === 0 && 'invisible')}>+{hidden}</span>
+      )}
     </div>
   );
 }
