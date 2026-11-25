@@ -39,6 +39,11 @@ export function DueReviews({
   return (
     <section aria-label="Due for review">
       <h2 className="section-label mb-2">Due for review</h2>
+      {swapError && (
+        <div role="alert" className="mb-2 text-sm text-hard-text">
+          Could not change today's problem: {swapError}
+        </div>
+      )}
       <Card padding="none" className="overflow-hidden">
         {reviews.length === 0 ? (
           <div className="flex h-11 items-center px-4 text-base text-fg-muted">Nothing due. Para approves.</div>
@@ -72,11 +77,6 @@ export function DueReviews({
           </ul>
         )}
       </Card>
-      {swapError && (
-        <div role="alert" className="mt-2 text-sm text-hard-text">
-          Could not change today's problem: {swapError}
-        </div>
-      )}
     </section>
   );
 }

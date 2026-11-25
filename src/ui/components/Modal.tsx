@@ -107,7 +107,7 @@ export function Modal({ title, subtitle, onClose, width = 480, footer, children 
             <div
               aria-hidden
               data-testid="modal-scroll-fade"
-              className="pointer-events-none absolute right-0 bottom-0 left-0 h-6"
+              className="pointer-events-none absolute right-0 bottom-0 left-0 h-8"
               style={{ background: 'linear-gradient(to top, var(--color-surface), transparent)' }}
             />
           )}

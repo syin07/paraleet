@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { ParaLeetApi } from '../../src/bridge/contract';
-import { captureBothSizes, mockOpenedUrls, openScreen } from './screenshots';
+import { captureBothSizes, mockOpenedUrls, openScreen, WINDOW_DEFAULT, WINDOW_MIN } from './screenshots';
 
 type Host = { paraleet: ParaLeetApi; document: { documentElement: { scrollWidth: number } } };
 
@@ -368,9 +368,8 @@ test.describe('quick log', () => {
     await page
       .getByRole('combobox', { name: 'Paste a problem URL or search' })
       .fill('https://leetcode.com/problems/a-brand-new-problem/');
-    await expect(page.getByRole('status')).toHaveText(
-      'ParaLeet does not know this problem yet. Add it from the Problems screen.',
-    );
+    await expect(page.getByRole('status')).toHaveText('ParaLeet does not know this problem yet.');
+    await expect(page.getByRole('button', { name: 'Add it' })).toBeVisible();
     await expect(page.getByRole('option')).toHaveCount(0);
   });
 
@@ -410,4 +409,255 @@ test('the right rail moves under the main column below 960px', async ({ page }) 
   expect(narrow.streak!.y).toBeGreaterThan(narrow.title!.y);
   const scrollWidth = await page.evaluate(() => (globalThis as unknown as Host).document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(860);
+});
+
+/** Both sizes, each scrolled so the thing being shown is on screen (it is below the fold at the minimum size). */
+async function captureScrolledTo(page: Page, name: string, target: Locator): Promise<void> {
+  for (const [label, size] of [
+    ['min', WINDOW_MIN],
+    ['default', WINDOW_DEFAULT],
+  ] as const) {
+    await page.setViewportSize(size);
+    await target.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `artifacts/screenshots/${name}-${label}.png`, animations: 'disabled' });
+  }
+}
+
+const quickInput = (page: Page) => page.getByRole('combobox', { name: 'Paste a problem URL or search' });
+const NEW_LINK = 'https://leetcode.com/problems/a-brand-new-problem/';
+const addDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a problem' });
+const reportDialog = (page: Page) => page.getByRole('dialog', { name: 'How did it go?' });
+
+test.describe('add a problem from quick log', () => {
+  test('an unknown link opens the add dialog with the link and "I solved it today" on, then the report form', async ({ page }) => {
+    await openScreen(page, 'today');
+    await quickInput(page).fill(NEW_LINK);
+    await expect(page.getByRole('button', { name: 'Add it' })).toBeVisible();
+    await captureScrolledTo(page, 'today-quicklog-unknown', quickInput(page));
+    await page.keyboard.press('Enter');
+    await expect(addDialog(page)).toBeVisible();
+    await expect(addDialog(page).getByPlaceholder('https://leetcode.com/problems/…')).toHaveValue(NEW_LINK);
+    await expect(quickInput(page)).toHaveValue('');
+    await expect(addDialog(page).getByRole('checkbox', { name: 'I solved it today' })).toBeChecked();
+    await expect(addDialog(page).getByTestId('recognition')).toContainText('New problem');
+    await addDialog(page).getByLabel('Title').fill('A Brand New Problem');
+    await addDialog(page).getByRole('radio', { name: 'Medium' }).click();
+    await expect(addDialog(page).getByRole('button', { name: 'Add and report' })).toBeEnabled();
+    await captureBothSizes(page, 'add-problem-solved-today');
+    await addDialog(page).getByRole('button', { name: 'Add and report' }).click();
+    await expect(addDialog(page)).toHaveCount(0);
+    await expect(reportDialog(page)).toContainText('A Brand New Problem');
+    await reportDialog(page).getByRole('radio', { name: /^Good/ }).click();
+    await reportDialog(page).getByRole('button', { name: 'Feed Para' }).click();
+    await expect(page.getByTestId('pet-status')).toHaveText('Para is fed for today');
+  });
+
+  test('the Add it button works with the mouse too, and unticking skips the report form', async ({ page }) => {
+    await openScreen(page, 'today');
+    await quickInput(page).fill(NEW_LINK);
+    await page.getByRole('button', { name: 'Add it' }).click();
+    await addDialog(page).getByLabel('Title').fill('Brand New');
+    await addDialog(page).getByRole('checkbox', { name: 'I solved it today' }).uncheck();
+    await addDialog(page).getByRole('button', { name: 'Add problem' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByTestId('pet-status')).toHaveText('Para is waiting for one problem');
+  });
+});
+
+// The test files are type-checked without the DOM library, so page code reaches `document` through this type.
+type PageGlobals = {
+  document: { activeElement: { closest(selector: string): unknown } | null; body: unknown };
+  KeyboardEvent: new (type: string, init: object) => unknown;
+};
+
+test.describe('report form keyboard and focus', () => {
+  const activeInside = (page: Page): Promise<boolean> =>
+    page.evaluate(() =>
+      Boolean((globalThis as unknown as PageGlobals).document.activeElement?.closest('[role="dialog"]')),
+    );
+
+  test('focus stays in the dialog after Reveal key insight and after Add notes', async ({ page }) => {
+    await openScreen(page, 'today');
+    await quickLogPick(page, 'two sum', /^1\. Two Sum/);
+    const form = dialog(page);
+    await form.getByRole('button', { name: 'Reveal key insight' }).click();
+    await expect(form.getByLabel(/Key insight/)).toBeFocused();
+    await form.getByRole('button', { name: '+ Add notes' }).click();
+    await expect(form.getByLabel('Notes')).toBeFocused();
+    for (let index = 0; index < 12; index += 1) {
+      await page.keyboard.press('Tab');
+      expect(await activeInside(page)).toBe(true);
+    }
+    for (let index = 0; index < 12; index += 1) {
+      await page.keyboard.press('Shift+Tab');
+      expect(await activeInside(page)).toBe(true);
+    }
+    expect(await page.evaluate(() => {
+        const { document } = globalThis as unknown as PageGlobals;
+        return document.activeElement === document.body;
+      })).toBe(false);
+  });
+
+  test('digits and Enter do nothing while focus is outside the form', async ({ page }) => {
+    await openScreen(page, 'today', 'fresh');
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    const form = dialog(page);
+    await form.getByRole('radio', { name: /^Good/ }).click();
+    await form.getByRole('button', { name: 'Close' }).focus();
+    await page.keyboard.press('1');
+    await expect(form.getByRole('radio', { name: /^Good/ })).toHaveAttribute('aria-checked', 'true');
+    await form.evaluate((node) => node.focus());
+    await page.keyboard.press('4');
+    await page.keyboard.press('Enter');
+    await expect(form.getByRole('radio', { name: /^Good/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(form).toBeVisible();
+    expect(await lastRating(page, 1)).toBeUndefined();
+  });
+
+  test('the shortcuts ignore keys pressed while text is being composed', async ({ page }) => {
+    await openScreen(page, 'today', 'fresh');
+    await page.getByRole('button', { name: 'I solved it' }).click();
+    const form = dialog(page);
+    const good = form.getByRole('radio', { name: /^Good/ });
+    await good.click();
+    await good.evaluate((node) => {
+      for (const key of ['1', 'Enter']) {
+        node.dispatchEvent(new (globalThis as unknown as PageGlobals).KeyboardEvent('keydown', { key, isComposing: true, bubbles: true, cancelable: true }));
+      }
+    });
+    await expect(good).toHaveAttribute('aria-checked', 'true');
+    await expect(form).toBeVisible();
+    expect(await lastRating(page, 1)).toBeUndefined();
+  });
+
+  test('closing the report while it is being sent cannot close a later dialog', async ({ page }) => {
+    await openScreen(page, 'today');
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const original = api.submitReport;
+      api.submitReport = async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return original(input);
+      };
+    });
+    await quickLogPick(page, 'two sum', /^1\. Two Sum/);
+    await dialog(page).getByRole('radio', { name: /^Good/ }).click();
+    await dialog(page).getByRole('button', { name: 'Feed Para' }).click();
+    await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog(page)).toHaveCount(0);
+    await quickLogPick(page, 'weird', /Weird Algorithm/);
+    await expect(dialog(page)).toContainText('Weird Algorithm');
+    await page.waitForTimeout(1000);
+    await expect(dialog(page)).toContainText('Weird Algorithm');
+  });
+});
+
+test.describe('quick log results', () => {
+  test('Enter never picks a result from an earlier search', async ({ page }) => {
+    await openScreen(page, 'today');
+    await quickInput(page).fill('two');
+    await expect(page.getByRole('option').first()).toBeVisible();
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const original = api.searchProblems;
+      api.searchProblems = async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return original(input);
+      };
+    });
+    await quickInput(page).fill('weird');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(quickInput(page)).not.toHaveAttribute('aria-activedescendant', /.+/);
+    // Once the results for the current text arrive they can be picked.
+    await expect(page.getByRole('option', { name: /Weird Algorithm/ })).toBeVisible();
+    await expect(page.getByRole('option', { name: /Two Sum/ })).toHaveCount(0);
+    await page.keyboard.press('Enter');
+    await expect(dialog(page)).toContainText('Weird Algorithm');
+  });
+
+  test('the highlighted result is announced with aria-activedescendant', async ({ page }) => {
+    await openScreen(page, 'today');
+    await quickInput(page).fill('two');
+    const options = page.getByRole('option');
+    await expect(options.nth(1)).toBeVisible();
+    const ids = await options.evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.every((id) => id !== '')).toBe(true);
+    await expect(quickInput(page)).toHaveAttribute('aria-activedescendant', ids[0] ?? '');
+    await page.keyboard.press('ArrowDown');
+    await expect(quickInput(page)).toHaveAttribute('aria-activedescendant', ids[1] ?? '');
+    await page.keyboard.press('ArrowUp');
+    await expect(quickInput(page)).toHaveAttribute('aria-activedescendant', ids[0] ?? '');
+  });
+});
+
+test.describe('swap failures', () => {
+  const swaps = (page: Page): Promise<number> =>
+    page.evaluate(() => (globalThis as unknown as { __swaps: number }).__swaps);
+
+  test("a failing Make today's shows an alert and a swap in flight disables the button", async ({ page }) => {
+    await openScreen(page, 'today');
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const globals = globalThis as unknown as { __swaps: number };
+      globals.__swaps = 0;
+      api.swapToday = async () => {
+        globals.__swaps += 1;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        throw new Error('The database is busy');
+      };
+    });
+    const makeToday = page.getByTestId('due-row').first().getByRole('button', { name: "Make today's" });
+    await makeToday.click();
+    await expect(makeToday).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText('The database is busy');
+    await expect(makeToday).toBeEnabled();
+    expect(await swaps(page)).toBe(1);
+    await captureScrolledTo(page, 'today-swap-error', page.getByRole('alert'));
+  });
+
+  test('a double click in the swap dialog sends one swap', async ({ page }) => {
+    await openScreen(page, 'today');
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const original = api.swapToday;
+      const globals = globalThis as unknown as { __swaps: number };
+      globals.__swaps = 0;
+      api.swapToday = async (input) => {
+        globals.__swaps += 1;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return original(input);
+      };
+    });
+    await page.getByRole('button', { name: 'Swap', exact: true }).click();
+    await dialog(page).getByRole('region', { name: 'Due for review' }).getByRole('button').first().dblclick();
+    await expect(dialog(page)).toHaveCount(0);
+    expect(await swaps(page)).toBe(1);
+  });
+
+  test('a failing swap in the dialog shows the error and can be tried again', async ({ page }) => {
+    await openScreen(page, 'today');
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const original = api.swapToday;
+      let failed = false;
+      api.swapToday = async (input) => {
+        if (!failed) {
+          failed = true;
+          throw new Error('No luck');
+        }
+        return original(input);
+      };
+    });
+    await page.getByRole('button', { name: 'Swap', exact: true }).click();
+    const first = dialog(page).getByRole('region', { name: 'Due for review' }).getByRole('button').first();
+    await first.click();
+    await expect(dialog(page).getByRole('alert')).toHaveText('No luck');
+    await first.click();
+    await expect(dialog(page)).toHaveCount(0);
+  });
 });
