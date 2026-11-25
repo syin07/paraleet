@@ -33,6 +33,8 @@ test('the Plan screen in the real app: from no key to an active plan that feeds 
     await plans.getByRole('button', { name: 'Save' }).click();
     await expect(plans.getByRole('button', { name: 'Remove' })).toBeVisible();
     expect(await page.content()).not.toContain(KEY);
+    // Sealed in its own file, and never in the database.
+    expect(readFileSync(join(data.dir, 'paraleet.sqlite3')).includes(KEY)).toBe(false);
 
     // With a key: nothing active, and a plan can be created.
     await nav.getByRole('button', { name: 'Plan' }).click();

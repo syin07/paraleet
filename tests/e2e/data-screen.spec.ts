@@ -41,6 +41,7 @@ test('Settings, Data in the real app: export here, import there, and the restart
     await group(page).getByRole('button', { name: 'Export…' }).click();
     await expect(group(page).getByRole('button', { name: 'Export…' })).toBeEnabled();
     await expect(group(page).getByText(/Saved as/)).toHaveCount(0);
+    await expect(group(page).getByRole('alert')).toHaveCount(0);
     await running.setDialogPaths({ save: backup });
     await group(page).getByRole('button', { name: 'Export…' }).click();
     await expect(group(page).getByText('Saved as ParaLeet backup.sqlite3.')).toBeVisible();

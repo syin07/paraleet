@@ -237,7 +237,7 @@ Mobbin query: `online course syllabus with module progress`, platform web; `onbo
 - An active plan has no "Edit": a plan is edited while it is a draft, and an active plan is followed. Its header has "Create a plan" (a new draft can be made while a plan is active) and "Archive", which asks first.
 - Reordering is two small buttons per row, up and down within the stage or group, not a drag handle: they work with the keyboard and need no drag code. The row's buttons are always shown, not only on hover.
 - "Swap" opens its choices as a list under the row (five at most), not in a popover, so a long title is never cut off.
-- "Remove" does not ask: the plan is still a draft and the problem can be brought back with a swap. After it, focus moves to the next row.
+- "Remove" does not ask: the plan is still a draft and the problem can be brought back with a swap. After it, focus moves to the next row, or to the one before when the last row was removed.
 - Activating a draft while another plan is active asks first, because it archives the active one.
 - Drafts and past plans are listed under the active plan (or under "No active plan"); a finished plan is kept and marked finished.
 - While a command runs (activate, archive, delete), its dialog cannot be closed, so a failure always lands where the user can see it.
