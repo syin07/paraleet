@@ -36,6 +36,19 @@ describe('recognizeUrl on real platforms', () => {
     }
   });
 
+  it('a trailing dot on the host does not turn a real link into Other', () => {
+    expect(ok('https://leetcode.com./problems/two-sum/')).toMatchObject({ platform: 'leetcode', platformId: 'two-sum' });
+    expect(ok('https://leetcode.com.:443/problems/two-sum/')).toMatchObject({ platform: 'leetcode', platformId: 'two-sum' });
+    expect(ok('https://codeforces.com./problemset/problem/4/A')).toMatchObject({ platform: 'codeforces', platformId: '4A' });
+    expect(ok('https://cses.fi./problemset/task/1068')).toMatchObject({ platform: 'cses', platformId: '1068' });
+    expect(ok('https://example.com./p').platformId).toBe('https://example.com/p');
+  });
+
+  it('leading zeros give the same ID as the usual link', () => {
+    expect(ok('https://codeforces.com/contest/01352/problem/C').platformId).toBe('1352C');
+    expect(ok('https://cses.fi/problemset/task/01068').platformId).toBe('1068');
+  });
+
   it('trims surrounding whitespace', () => {
     expect(ok('  https://cses.fi/problemset/task/1068\n').platformId).toBe('1068');
   });
@@ -57,6 +70,9 @@ describe('recognizeUrl rejects non-problem pages on real platforms', () => {
     ['https://codeforces.com/profile/tourist', 'Codeforces'],
     ['https://cses.fi/problemset/', 'CSES'],
     ['https://cses.fi/', 'CSES'],
+    ['https://leetcode.com./problemset/', 'LeetCode'],
+    ['https://codeforces.com./contest/1352', 'Codeforces'],
+    ['https://cses.fi./problemset/', 'CSES'],
   ])('%s', (text, label) => {
     const why = reason(text);
     expect(why).toContain(label);
@@ -75,6 +91,23 @@ describe('recognizeUrl rejects bad input with a reason', () => {
       expect(reason(text)).toContain('http');
     },
   );
+});
+
+describe('recognizeUrl on scheme-less text that is not an address', () => {
+  it.each([['.'], ['...'], ['e.g.'], ['1.5'], ['3.14'], ['a..b.com'], ['.com'], ['example.123'], ['v1.2.3']])('%j is rejected', (text) => {
+    expect(reason(text)).toContain('does not look like a link');
+  });
+
+  it('an explicit scheme keeps local and IP addresses working', () => {
+    expect(ok('http://localhost:3000/x').platformId).toBe('http://localhost:3000/x');
+    expect(ok('http://127.0.0.1/x').platformId).toBe('http://127.0.0.1/x');
+  });
+
+  it('real scheme-less addresses still work', () => {
+    expect(ok('example.com').platformId).toBe('https://example.com');
+    expect(ok('user@example.com/p').platform).toBe('other');
+    expect(ok('example.com./p').platformId).toBe('https://example.com/p');
+  });
 });
 
 describe('recognizeUrl falls back to Other', () => {

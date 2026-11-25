@@ -1,10 +1,12 @@
 import type { TopicId } from '../core/topics';
+import { hostnameOf, plainNumber } from './host';
 import { mapTagsWith } from './tags';
 import type { PlatformAdapter } from './types';
 
 export const CSES_HOSTS: readonly string[] = ['cses.fi', 'www.cses.fi'];
 
-const ID = /^\d+$/;
+// No leading zeros and not zero, so one task has one ID.
+const ID = /^[1-9]\d*$/;
 // The task page and its sibling pages (stats, submit, ...) all name the same task.
 const PATH = /^\/problemset\/(?:task|stats|submit|hack|model|view)\/(\d+)\/?$/;
 
@@ -33,10 +35,12 @@ export const csesAdapter: PlatformAdapter = {
   label: 'CSES',
 
   parseUrl(url) {
-    if (!CSES_HOSTS.includes(url.hostname)) return null;
-    return PATH.exec(url.pathname)?.[1] ?? null;
+    if (!CSES_HOSTS.includes(hostnameOf(url))) return null;
+    const digits = PATH.exec(url.pathname)?.[1];
+    return digits === undefined ? null : plainNumber(digits);
   },
 
+  /** Call `isValidId` first: a malformed ID gives a meaningless link, not an error. */
   buildUrl(platformId) {
     return `https://cses.fi/problemset/task/${platformId}`;
   },

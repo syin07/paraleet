@@ -1,5 +1,6 @@
 import type { TopicId } from '../core/topics';
 import type { DifficultyNorm } from '../core/types';
+import { hostnameOf, plainNumber } from './host';
 import { mapTagsWith } from './tags';
 import type { PlatformAdapter } from './types';
 
@@ -16,7 +17,8 @@ export const CODEFORCES_HOSTS: readonly string[] = [
   'www.codeforc.es',
 ];
 
-const ID = /^(\d+)([A-Z]\d?)$/;
+// The contest number has no leading zeros and is not zero, so one problem has one ID.
+const ID = /^([1-9]\d*)([A-Z]\d?)$/;
 const INDEX = '([A-Za-z]\\d?)';
 const PATHS = [
   new RegExp(`^/problemset/problem/(\\d+)/${INDEX}/?$`),
@@ -72,14 +74,17 @@ export const codeforcesAdapter: PlatformAdapter = {
   label: 'Codeforces',
 
   parseUrl(url) {
-    if (!CODEFORCES_HOSTS.includes(url.hostname)) return null;
+    if (!CODEFORCES_HOSTS.includes(hostnameOf(url))) return null;
     for (const path of PATHS) {
       const match = path.exec(url.pathname);
-      if (match) return `${match[1]}${match[2]!.toUpperCase()}`;
+      if (!match) continue;
+      const contest = plainNumber(match[1]!);
+      return contest === null ? null : `${contest}${match[2]!.toUpperCase()}`;
     }
     return null;
   },
 
+  /** Call `isValidId` first: a malformed ID gives a meaningless link, not an error. */
   buildUrl(platformId) {
     const match = ID.exec(platformId);
     const contest = match?.[1] ?? '';

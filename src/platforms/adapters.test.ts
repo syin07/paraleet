@@ -35,6 +35,8 @@ describe('LeetCode URLs', () => {
     ['https://leetcode.com/contest/weekly-contest-300/problems/two-sum/', 'two-sum'],
     ['https://leetcode.com/contest/biweekly-contest-80/problems/minimum-cost-to-reach-city', 'minimum-cost-to-reach-city'],
     ['https://leetcode.com/problems/Two-Sum/', 'two-sum'],
+    ['https://leetcode.com./problems/two-sum/', 'two-sum'],
+    ['https://leetcode.com.:443/problems/two-sum/', 'two-sum'],
     // Not problem pages, or not LeetCode.
     ['https://leetcode.com/problemset/', null],
     ['https://leetcode.com/problems/', null],
@@ -64,6 +66,10 @@ describe('CSES URLs', () => {
     ['https://cses.fi/problemset/model/1068', '1068'],
     ['https://cses.fi/problemset/view/1068/', '1068'],
     ['https://cses.fi/problemset/task/1640', '1640'],
+    ['https://cses.fi./problemset/task/1068', '1068'],
+    ['https://cses.fi/problemset/task/01068', '1068'],
+    ['https://cses.fi/problemset/task/0', null],
+    ['https://cses.fi/problemset/task/000', null],
     ['https://cses.fi/problemset/', null],
     ['https://cses.fi/problemset/list/', null],
     ['https://cses.fi/problemset/task/', null],
@@ -99,6 +105,10 @@ describe('Codeforces URLs', () => {
     ['https://mirror.codeforces.com/problemset/problem/4/A', '4A'],
     ['https://codeforces.ml/problemset/problem/4/A', '4A'],
     ['https://codeforc.es/problemset/problem/4/A', '4A'],
+    ['https://codeforces.com./problemset/problem/4/A', '4A'],
+    ['https://codeforces.com/contest/01352/problem/C', '1352C'],
+    ['https://codeforces.com/problemset/problem/0004/A', '4A'],
+    ['https://codeforces.com/contest/0/problem/A', null],
     // Not problem pages, or not Codeforces.
     ['https://codeforces.com/contest/1352', null],
     ['https://codeforces.com/contest/1352/standings', null],
@@ -129,6 +139,13 @@ describe('Other URL cleaning', () => {
     ['https://example.com/p?lang=en&id=7', 'https://example.com/p?lang=en&id=7'],
     ['http://example.com:8080/p/1/?ref=a', 'http://example.com:8080/p/1'],
     ['https://user:secret@example.com/p/1', 'https://example.com/p/1'],
+    ['https://example.com./p/1', 'https://example.com/p/1'],
+    ['https://example.com.:8080/p/1', 'https://example.com:8080/p/1'],
+    ['https://example.com/#/problem/12', 'https://example.com#/problem/12'],
+    ['https://example.com/app/#!/p/3', 'https://example.com/app#!/p/3'],
+    ['https://example.com/p?id=1#/route?x=2', 'https://example.com/p?id=1#/route?x=2'],
+    ['https://example.com/p#section-2', 'https://example.com/p'],
+    ['https://example.com/p#', 'https://example.com/p'],
     ['https://atcoder.jp/contests/abc001/tasks/abc001_1', 'https://atcoder.jp/contests/abc001/tasks/abc001_1'],
   ];
   it.each(cases)('%s', (url, expected) => {
@@ -144,6 +161,18 @@ describe('Other URL cleaning', () => {
       const id = parse(otherAdapter, `https://${host}/p/1/?utm_source=a`);
       expect(new URL(otherAdapter.buildUrl(id!)).host).toBe(host.toLowerCase());
     }
+  });
+
+  it('cleaning is idempotent for every example above', () => {
+    for (const [url] of cases) {
+      const once = parse(otherAdapter, url)!;
+      expect(parse(otherAdapter, once)).toBe(once);
+      expect(otherAdapter.isValidId(once)).toBe(true);
+    }
+  });
+
+  it('a long run of trailing slashes is handled', () => {
+    expect(parse(otherAdapter, `https://example.com/p${'/'.repeat(100000)}`)).toBe('https://example.com/p');
   });
 
   it('does not accept non-http schemes', () => {
@@ -182,10 +211,14 @@ describe('build and parse round trip', () => {
     expect(leetcodeAdapter.isValidId('')).toBe(false);
     expect(csesAdapter.isValidId('10a')).toBe(false);
     expect(csesAdapter.isValidId('')).toBe(false);
+    expect(csesAdapter.isValidId('0')).toBe(false);
+    expect(csesAdapter.isValidId('01068')).toBe(false);
     expect(codeforcesAdapter.isValidId('1352c')).toBe(false);
     expect(codeforcesAdapter.isValidId('1352')).toBe(false);
     expect(codeforcesAdapter.isValidId('C')).toBe(false);
     expect(codeforcesAdapter.isValidId('1352CC')).toBe(false);
+    expect(codeforcesAdapter.isValidId('0A')).toBe(false);
+    expect(codeforcesAdapter.isValidId('01352C')).toBe(false);
     expect(otherAdapter.isValidId('example.com')).toBe(false);
     expect(otherAdapter.isValidId('https://www.example.com/p/')).toBe(false);
     expect(otherAdapter.isValidId('https://example.com/p?utm_source=a')).toBe(false);
@@ -193,7 +226,40 @@ describe('build and parse round trip', () => {
   });
 });
 
+describe('one ID per problem', () => {
+  it('different links to one problem give the same ID', () => {
+    const cf = [
+      'https://codeforces.com/problemset/problem/1352/C',
+      'https://www.codeforces.com/contest/1352/problem/C/',
+      'https://mirror.codeforces.com/contest/1352/problem/c',
+      'https://m1.codeforces.com/problemset/problem/01352/C?x=1',
+      'https://codeforces.com./contest/001352/problem/C',
+      'https://codeforces.com/group/abc/contest/1352/problem/C',
+    ];
+    expect(new Set(cf.map((u) => parse(codeforcesAdapter, u)))).toEqual(new Set(['1352C']));
+    const cses = [
+      'https://cses.fi/problemset/task/1068',
+      'https://www.cses.fi/problemset/task/1068/',
+      'https://cses.fi/problemset/stats/01068',
+      'https://cses.fi./problemset/submit/0001068/',
+      'https://CSES.FI/problemset/view/1068#x',
+    ];
+    expect(new Set(cses.map((u) => parse(csesAdapter, u)))).toEqual(new Set(['1068']));
+  });
+});
+
 describe('difficulty', () => {
+  const probes = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', ' Constructor ', '', 'abc', '-5', 'Easy ', 'EASY'];
+  it.each(ADAPTERS.map((a) => [a.platform, a] as const))('%s: any text gives null or an integer 1 to 5', (_name, adapter) => {
+    for (const probe of [...probes, null]) {
+      const result = adapter.normalizeDifficulty(probe);
+      expect(result === null || (Number.isInteger(result) && result >= 1 && result <= 5), String(probe)).toBe(true);
+    }
+    for (const probe of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      expect(adapter.normalizeDifficulty(probe)).toBeNull();
+    }
+  });
+
   it('maps LeetCode Easy, Medium and Hard, ignoring case and spaces', () => {
     expect(leetcodeAdapter.normalizeDifficulty('Easy')).toBe(1);
     expect(leetcodeAdapter.normalizeDifficulty(' medium ')).toBe(3);

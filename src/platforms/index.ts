@@ -2,6 +2,7 @@
 import type { Platform } from '../core/types';
 import { CODEFORCES_HOSTS, codeforcesAdapter } from './codeforces';
 import { CSES_HOSTS, csesAdapter } from './cses';
+import { hostnameOf } from './host';
 import { LEETCODE_HOSTS, leetcodeAdapter } from './leetcode';
 import { otherAdapter } from './other';
 import type { PlatformAdapter, RecognizedUrl } from './types';
@@ -37,13 +38,28 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 
 const NOT_A_LINK: RecognizedUrl = { ok: false, reason: 'That does not look like a link. Paste the full problem URL.' };
 
+/**
+ * For scheme-less input only: "e.g.", "..." and "3.14" contain a dot but are not addresses (and
+ * `URL` would turn numbers into IP addresses). Needs non-empty labels and an alphabetic last label.
+ */
+function looksLikeAddress(text: string): boolean {
+  let authority = (text.split(/[/?#]/)[0] ?? '').replace(/^.*@/, '').replace(/:\d*$/, '');
+  if (authority.endsWith('.')) authority = authority.slice(0, -1);
+  const labels = authority.split('.');
+  if (labels.some((label) => label === '')) return false;
+  return /^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/i.test(labels[labels.length - 1]!);
+}
+
 /** Works out which platform and problem a pasted link points at. */
 export function recognizeUrl(text: string): RecognizedUrl {
   let trimmed = text.trim();
   if (trimmed === '' || /\s/.test(trimmed)) return NOT_A_LINK;
   // "example.com/x" has no scheme; "example.com:8080/x" must not be mistaken for one.
   const hasScheme = /^[a-z][a-z0-9+.-]*:(?!\d)/i.test(trimmed);
-  if (!hasScheme && trimmed.includes('.')) trimmed = `https://${trimmed}`;
+  if (!hasScheme && trimmed.includes('.')) {
+    if (!looksLikeAddress(trimmed)) return NOT_A_LINK;
+    trimmed = `https://${trimmed}`;
+  }
   let url: URL;
   try {
     url = new URL(trimmed);
@@ -59,7 +75,7 @@ export function recognizeUrl(text: string): RecognizedUrl {
       return { ok: true, platform: adapter.platform, platformId, canonicalUrl: adapter.buildUrl(platformId) };
     }
   }
-  const site = REAL_PLATFORMS.find(({ hosts }) => hosts.includes(url.hostname));
+  const site = REAL_PLATFORMS.find(({ hosts }) => hosts.includes(hostnameOf(url)));
   if (site) {
     return {
       ok: false,

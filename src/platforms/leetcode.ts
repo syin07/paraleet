@@ -1,5 +1,6 @@
 import type { TopicId } from '../core/topics';
 import type { DifficultyNorm } from '../core/types';
+import { hostnameOf, lookupDifficulty } from './host';
 import { mapTagsWith } from './tags';
 import type { PlatformAdapter } from './types';
 
@@ -57,13 +58,14 @@ export const leetcodeAdapter: PlatformAdapter = {
   label: 'LeetCode',
 
   parseUrl(url) {
-    if (!LEETCODE_HOSTS.includes(url.hostname)) return null;
+    if (!LEETCODE_HOSTS.includes(hostnameOf(url))) return null;
     // /problems/<slug>[/anything] or /contest/<contest>/problems/<slug>[/].
     const match = /^\/(?:contest\/[^/]+\/)?problems\/([^/]+)/.exec(url.pathname);
     const slug = match?.[1]?.toLowerCase();
     return slug && SLUG.test(slug) ? slug : null;
   },
 
+  /** Call `isValidId` first: a malformed ID gives a meaningless link, not an error. */
   buildUrl(platformId) {
     return `https://leetcode.com/problems/${platformId}/`;
   },
@@ -73,7 +75,7 @@ export const leetcodeAdapter: PlatformAdapter = {
   },
 
   normalizeDifficulty(raw) {
-    return raw ? (DIFFICULTY[raw.trim().toLowerCase()] ?? null) : null;
+    return lookupDifficulty(DIFFICULTY, raw);
   },
 
   mapTags(sourceTags) {
