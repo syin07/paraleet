@@ -14,21 +14,23 @@ if (!out || !title || !dir) {
   process.exit(1);
 }
 
+const sourceDir: string = dir;
+
 const names = [
   ...new Set(
-    readdirSync(dir)
+    readdirSync(sourceDir)
       .filter((file) => file.startsWith(prefix) && /-(default|min)\.png$/.test(file))
       .map((file) => file.replace(/-(default|min)\.png$/, '')),
   ),
 ].sort();
 if (names.length === 0) {
-  console.error(`No screenshots matching ${prefix}*-default.png in ${dir}`);
+  console.error(`No screenshots matching ${prefix}*-default.png in ${sourceDir}`);
   process.exit(1);
 }
 
 function image(name: string, size: 'default' | 'min'): string {
   try {
-    const data = readFileSync(resolve(dir, `${name}-${size}.png`)).toString('base64');
+    const data = readFileSync(resolve(sourceDir, `${name}-${size}.png`)).toString('base64');
     return `<img src="data:image/png;base64,${data}" />`;
   } catch {
     return '<div class="missing">not captured</div>';

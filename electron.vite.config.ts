@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
-import { productionCsp } from './vite.shared';
+import { productionCsp } from './vite.shared.ts';
 
 // Third-party code is bundled into main and preload (externalizeDeps: false), so the packaged app
 // needs no node_modules folder. Electron and Node built-ins stay external.

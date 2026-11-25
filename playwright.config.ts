@@ -1,7 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import { uiPort } from './vite.shared';
+import { uiPort } from './vite.shared.ts';
 
 const UI_PORT = uiPort();
+
+// The browser-only UI server is needed by the `ui` project only. Skipping it for
+// `--project=e2e` keeps end-to-end runs fast and free of port clashes between worktrees.
+const onlyE2E = process.argv.includes('--project=e2e');
 
 // Two projects:
 //   ui  - the renderer in a browser against the mock bridge (fast; used for screen work and screenshots)
@@ -26,12 +30,16 @@ export default defineConfig({
     {
       name: 'e2e',
       testDir: 'tests/e2e',
+      // The real app can be slow to start while several agents build at once.
+      expect: { timeout: 20_000 },
     },
   ],
-  webServer: {
-    command: 'npm run dev:ui',
-    url: `http://localhost:${UI_PORT}`,
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: onlyE2E
+    ? undefined
+    : {
+        command: 'npm run dev:ui',
+        url: `http://localhost:${UI_PORT}`,
+        reuseExistingServer: true,
+        timeout: 60_000,
+      },
 });
