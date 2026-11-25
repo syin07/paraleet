@@ -387,7 +387,7 @@ test.describe('changes from elsewhere', () => {
 test.describe('the screen', () => {
   test('shows every group in order, in a column of 640px at most', async ({ page }) => {
     await openScreen(page, 'settings');
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Reminders', 'Review schedule', 'Para', 'Learning plans', 'Account handles']);
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Reminders', 'Review schedule', 'Para', 'Learning plans', 'Account handles', 'Data']);
     const column = await page.getByTestId('screen-settings').locator('> div').boundingBox();
     expect(column?.width).toBeLessThanOrEqual(640);
     await captureBothSizes(page, 'settings-default');
