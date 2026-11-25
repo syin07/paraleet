@@ -202,6 +202,19 @@ test('"I solved it" turns the card into the report form, 360 wide, with a way ba
   await expect.poll(async () => (await sizeCalls(page)).at(-1)?.width).toBe(320);
 });
 
+test('in the card the four ratings sit two by two, in reading order', async ({ page }) => {
+  await openCard(page);
+  await page.getByRole('button', { name: 'I solved it' }).click();
+  const box = async (name: RegExp) => (await page.getByRole('radio', { name }).boundingBox())!;
+  const [again, hard, good, easy] = [await box(/^Again/), await box(/^Hard/), await box(/^Good/), await box(/^Easy/)];
+  expect(hard.y).toBe(again.y);
+  expect(hard.x).toBeGreaterThan(again.x + again.width - 1);
+  expect(good.x).toBe(again.x);
+  expect(good.y).toBeGreaterThan(again.y + again.height - 1);
+  expect(easy.x).toBe(hard.x);
+  expect(easy.y).toBe(good.y);
+});
+
 test('number keys and Enter feed Para without clicking into the form', async ({ page }) => {
   await openCard(page);
   await page.getByRole('button', { name: 'I solved it' }).click();

@@ -79,7 +79,8 @@ export function CardWindow() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
-      if (event.key === 'Escape') void api().hideCard();
+      // Esc that ends an input method's composition belongs to the text field, not to the card.
+      if (event.key === 'Escape' && !event.isComposing) void api().hideCard();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
