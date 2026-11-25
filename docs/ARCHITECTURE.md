@@ -31,7 +31,7 @@ Keep this file accurate at the end of every session (PRD section 2).
 | Module | Holds | Notes |
 | --- | --- | --- |
 | `src/core` | `types.ts`, `topics.ts`, `day.ts`, `streak.ts`, `petFacts.ts`, `scheduler.ts`, `assignment.ts`, `verify.ts`, `settings.ts` | Pure. Time and time zone are arguments. Lint blocks Electron, Node built-ins, the network, `new Date()`, `Date.now()` and `Math.random()`. |
-| `src/platforms` | `types.ts` (`PlatformAdapter`), one file per platform, `index.ts` (`recognizeUrl`, `adapterFor`) | LeetCode only so far; CSES, Codeforces and Other arrive in SAN-108. No network in v1. |
+| `src/platforms` | `types.ts` (`PlatformAdapter`), one file per platform, `index.ts` (`recognizeUrl`, `adapterFor`) | LeetCode, CSES, Codeforces and Other. No network in v1. |
 | `src/data` | `db.ts` (wrapper over `node:sqlite`), `migrations/`, `migrate.ts`, `seedFormat.ts`, `seed.ts`, `repos/*`, `index.ts` (`openDatabase`) | Hand-written SQL, no ORM. JSON arrays are stored as text. |
 | `src/llm` | Empty until M3 | Plan generation, main process only. |
 | `src/bridge` | `channels.ts` (method names, no imports), `contract.ts` (zod input schemas, output types, `ParaLeetApi`, `BridgeHandlers`) | The single contract shared by main, preload and UI. |
@@ -44,10 +44,11 @@ Keep this file accurate at the end of every session (PRD section 2).
 1. **A day starts.** `createDayWatcher` (in `services/index.ts`) recomputes the ParaLeet day from the clock every 30 seconds and when the Mac wakes or unlocks. When the day or the time zone changes it sends `paraleet:changed`, and every window refetches.
 2. **Today is requested.** `getToday` reads one consistent moment (`currentMoment`: clock, settings, pet, today), reads the assignment policy's input from the database, and calls `chooseDailyProblem` (core) the first time a day is seen. The choice is saved in `daily_assignments` and stays for the whole day.
 3. **The user opens the problem.** `openProblem` looks the link up in the database and opens it in the default browser. The UI never supplies a URL to open.
-4. **The user reports.** `submitReport` caps the rating if the key insight was revealed, calls `verifyAttempt` (the verification seam; v1 trusts the self-report), then in one transaction: saves the key insight, appends the attempt, updates the pet facts with `applyAttempt`, and marks today's assignment completed if it was that problem. Then it sends `paraleet:changed`.
-5. **Derived values are never stored.** Fed status, displayed streak, growth stage and (later) mood are computed from stored facts and the current time.
+4. **The user reports.** `submitReport` caps the rating if the key insight was revealed, calls `verifyAttempt` (the verification seam; v1 trusts the self-report), then in one transaction: saves the key insight, appends the attempt, creates or reschedules the problem's review card (`scheduleFirstAttempt` or `scheduleReview`), updates the pet facts with `applyAttempt`, and marks today's assignment completed if it was that problem. Then it sends `paraleet:changed`.
+5. **The next day.** Cards whose due day has arrived are read by `readAssignmentInput`; `chooseDailyProblem` gives the slot to the most overdue one, and `otherDueReviews` lists up to five more. The user may swap to one of `swapCandidates`.
+6. **Derived values are never stored.** Fed status, displayed streak, growth stage and (later) mood are computed from stored facts and the current time.
 
-Review cards are created and rescheduled in step 4 once the scheduler lands (SAN-106, wired in SAN-111).
+At launch, before any window opens, `reconcile()` (`services/reconcile.ts`) recomputes the streak and totals from the attempts and rebuilds any missing review cards, so the stored derived data can never drift from the attempts for long. See decision 0008.
 
 ## Time
 
@@ -99,4 +100,4 @@ Plan tables arrive with M3 as migration 2.
 | --- | --- | --- |
 | Unit | `src/**/*.test.ts`, `scripts/**/*.test.ts` (vitest) | core rules with injected time; migrations from every earlier version; seed validity; services against in-memory SQLite; the lint boundary rules themselves (`scripts/lint-boundaries.test.ts`) |
 | UI | `tests/ui/*.spec.ts` (Playwright, Chromium) | Screens against the mock bridge; screenshots at default and minimum window sizes |
-| End to end | `tests/e2e/*.spec.ts` (Playwright, Electron) | The built app with a temp data folder and a fake clock |
+| End to end | `tests/e2e/*.spec.ts` (Playwright, Electron) | The built app with a temp data folder and a fake clock: report, restart, day rollover, a due review taking the slot, swap, quick-log |

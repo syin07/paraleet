@@ -11,3 +11,4 @@ One short file per non-obvious choice: context, decision, alternatives rejected.
 | [0005](0005-starter-list.md) | The starter list |
 | [0006](0006-agents-and-process.md) | Agents, tools and process choices |
 | [0007](0007-review-scheduling.md) | Review scheduling with FSRS |
+| [0008](0008-daily-loop-wiring.md) | How the daily loop is wired in the main process |
