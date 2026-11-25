@@ -51,7 +51,7 @@ export function TodayScreen() {
   return (
     <Page title="Today" actions={<span className="text-sm text-fg-muted">{formatDay(today.today)}</span>}>
       <QueryNotice loading={false} error={query.error} />
-      <div className="grid grid-cols-1 gap-6 min-[960px]:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid grid-cols-1 gap-6 min-[1040px]:grid-cols-[minmax(0,1fr)_280px]">
         <div className="flex min-w-0 flex-col gap-4">
           <PetStage fed={today.fed} pet={today.pet} />
           {assignment ? (

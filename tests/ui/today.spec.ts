@@ -744,7 +744,14 @@ test.describe('the living pet on Today', () => {
         await host.paraleet.updateSettings({});
       }, line);
       await expect(page.getByTestId('pet-line')).toHaveText(line);
-      for (const size of [WINDOW_MIN, WINDOW_DEFAULT, { width: 1500, height: 900 }]) {
+      // 1040 is where the right rail appears and the pet card is at its narrowest.
+      for (const size of [
+        WINDOW_MIN,
+        { width: 1039, height: 700 },
+        { width: 1040, height: 700 },
+        WINDOW_DEFAULT,
+        { width: 1500, height: 900 },
+      ]) {
         await page.setViewportSize(size);
         const bubble = await page.getByTestId('pet-line').boundingBox();
         const card = await page.getByTestId('pet-stage').boundingBox();
@@ -754,6 +761,8 @@ test.describe('the living pet on Today', () => {
         expect(bubble!.y).toBeGreaterThanOrEqual(card!.y);
         expect(bubble!.x + bubble!.width).toBeLessThanOrEqual(card!.x + card!.width);
         expect(bubble!.y + bubble!.height).toBeLessThanOrEqual(card!.y + card!.height);
+        // Wide enough to read: at least a dozen characters to a row, unless the line is shorter.
+        if (line.length > 20) expect(bubble!.width).toBeGreaterThanOrEqual(130);
       }
       if (line.startsWith('Longest')) await captureBothSizes(page, 'today-pet-line-long');
     }

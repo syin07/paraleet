@@ -11,7 +11,7 @@ export function reportNews(result: ReportResult): string | null {
   }
   if (result.unlocked.length > 0) {
     const names = result.unlocked.map((id) => ACCESSORIES[id].label).join(' and ');
-    news.push(`New for Para: ${names}. Put it on in Settings.`);
+    news.push(`New for Para: ${names}. Put ${result.unlocked.length > 1 ? 'them' : 'it'} on in Settings.`);
   }
   return news.length > 0 ? news.join(' ') : null;
 }
