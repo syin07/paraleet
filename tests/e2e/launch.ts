@@ -55,6 +55,8 @@ export interface RunningApp {
   clickTray(): Promise<void>;
   trayMenuLabels(): Promise<string[]>;
   clickTrayMenu(label: string): Promise<void>;
+  /** Several menu items in one turn of the main process: nothing else in the app runs between them. */
+  clickTrayMenus(labels: readonly string[]): Promise<void>;
   card(): Promise<CardFacts>;
   /** The card loses focus, as when the user clicks elsewhere. `early`: it is opened and loses focus before it has been shown. */
   blurCard(early?: boolean): Promise<void>;
@@ -182,6 +184,10 @@ export async function launchApp(options: {
     clickTray: () => hooks((h) => h.clickTray()),
     trayMenuLabels: () => hooks((h) => h.trayMenuLabels()),
     clickTrayMenu: (label) => hooks((h, value) => h.clickTrayMenu(value), label),
+    clickTrayMenus: (labels) =>
+      hooks((h, value) => {
+        for (const label of JSON.parse(value) as string[]) h.clickTrayMenu(label);
+      }, JSON.stringify(labels)),
     card: () => hooks((h) => h.card()),
     blurCard: (early = false) => hooks((h, value) => h.blurCard(value), early ? 'early' : ''),
     cardPage: () => findWindow(app, 'card'),

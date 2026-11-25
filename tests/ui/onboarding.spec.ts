@@ -254,6 +254,24 @@ test('Cmd+2 does nothing during the flow', async ({ page }) => {
   await expect(page.getByTestId('screen-settings')).toHaveCount(0);
 });
 
+// The menu bar icon and Para's menu can ask for a screen while the flow is showing: the address
+// changes under it. The app still opens on Today when the flow ends, with nothing left over.
+for (const asked of ['/settings', '/today/swap', '/stats']) {
+  test(`the flow ends on Today even when ${asked} was asked for during it`, async ({ page }) => {
+    await openFlow(page);
+    await toReminders(page);
+    await page.evaluate((path) => {
+      window.location.hash = path;
+    }, asked);
+    await expect(flow(page)).toBeVisible();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByTestId('screen-today')).toBeVisible();
+    await expect(flow(page)).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(new URL(page.url()).hash).toBe('#/today');
+  });
+}
+
 test('every step fits the minimum window without scrolling', async ({ page }) => {
   await page.setViewportSize(WINDOW_MIN);
   await openFlow(page);

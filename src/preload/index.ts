@@ -16,7 +16,7 @@ api.onChanged = (listener: () => void) => {
 };
 
 // Main may ask for a screen before the UI has started listening: the page is loaded, but the app
-// in it is still starting. The last such request is kept and handed to the first listener.
+// in it is still starting. The last such request is kept and handed to the next listener to register.
 const navigateListeners = new Set<(path: string) => void>();
 let waitingPath: string | null = null;
 ipcRenderer.on(NAVIGATE_EVENT, (_event: unknown, path: unknown): void => {
