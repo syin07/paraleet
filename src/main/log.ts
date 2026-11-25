@@ -15,15 +15,20 @@ export interface AppLog {
   error(message: string, error?: unknown): void;
 }
 
-/** An error as text: its name, message and stack, without anything else that hangs off it. */
+/**
+ * An error as text: its name, message and stack, without anything else that hangs off it. A
+ * thrown value that is not an error is never written whole, because an object can carry anything
+ * (a request, its headers): only its message, if it has one, and what kind of thing it was.
+ */
 export function describeError(error: unknown): string {
   if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
   if (typeof error === 'string') return error;
-  try {
-    return JSON.stringify(error) ?? String(error);
-  } catch {
-    return String(error);
+  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') return String(error);
+  if (typeof error === 'object' && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' ? `A thrown object that is not an error: ${message}` : 'A thrown object that is not an error.';
   }
+  return `A thrown ${typeof error}.`;
 }
 
 /**

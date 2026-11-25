@@ -15,7 +15,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
-import { DATABASE_FILE_NAME, openDataFolder, type Db } from '../data';
+import { openDataFolder, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
 import { getSettings, updateSettings } from '../data/repos/settings';
 import { createAnthropicClient, listModels } from '../llm/anthropicClient';
@@ -178,7 +178,18 @@ function start(): void {
   });
   log.info(`ParaLeet ${app.getVersion()} started (${app.isPackaged ? 'installed' : 'development'}, ${process.arch}).`);
   // A failure nothing caught: keep it, and keep running. Para should not vanish over one error.
-  process.on('uncaughtException', (error) => log.error('An error nothing caught:', error));
+  // While the app is still starting it is different: carrying on could leave it running with
+  // no window, no Para and no menu bar icon, so it says so and quits.
+  let started = false;
+  process.on('uncaughtException', (error) => {
+    log.error('An error nothing caught:', error);
+    if (started) return;
+    dialog.showErrorBox(
+      'ParaLeet could not start',
+      `${error instanceof Error ? error.message : String(error)}\n\nYour data is in this folder, with a log of what went wrong (${LOG_FILE_NAME}):\n${userData}`,
+    );
+    app.exit(1);
+  });
   process.on('unhandledRejection', (reason) => log.error('A failed promise nothing caught:', reason));
 
   // An import chosen in Settings is put in place here, before the database is opened: the open
@@ -199,7 +210,7 @@ function start(): void {
     dialog.showErrorBox(
       'ParaLeet could not open its database',
       // The folder, not the file: when an import stopped half way the data is under its backup name.
-      `${error instanceof Error ? error.message : String(error)}\n\nYour data was not changed. It is in this folder:\n${userData}`,
+      `${error instanceof Error ? error.message : String(error)}\n\nNothing was removed from your data. It is in this folder:\n${userData}`,
     );
     app.exit(1);
     return;
@@ -561,6 +572,7 @@ function start(): void {
   if (lastImport) showMainWindow('/settings');
   else if (quiet) updateDock();
   else showMainWindow();
+  started = true;
 }
 
 if (!app.requestSingleInstanceLock()) {

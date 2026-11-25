@@ -140,7 +140,7 @@ The Anthropic API key is not in the database. It is sealed with Electron's `safe
 - `electron-vite` builds three bundles into `out/`: `main/index.js` (ESM), `preload/index.cjs`, `renderer/`.
 - Third-party code is bundled into main, so a packaged app needs no `node_modules`. There are no native modules.
 - `npm run dist` packages `out/` into `dist/ParaLeet-<version>.dmg` with electron-builder (`electron-builder.yml`): one universal app for Apple silicon and Intel, signed ad hoc, with an icon drawn from Para's sprite (`scripts/pack/build-icon.ts`). `npm run dist:check` starts the packaged app from an awkward path on a throwaway data folder and checks what only an installed copy can show. See decision 0018 and `docs/INSTALL.md`.
-- The main process writes `paraleet.log` next to the database (`src/main/log.ts`): one line per launch, and every failure that would otherwise only reach a console.
+- The main process writes `paraleet.log` next to the database (`src/main/log.ts`): one line per launch, and every failure of the main process that would otherwise only reach a console (errors inside a window's page are not written to it).
 
 ## Tests
 

@@ -76,10 +76,15 @@ describe('describeError', () => {
   it('gives an error as its stack, and anything else as plain text', () => {
     expect(describeError(new Error('boom'))).toMatch(/^Error: boom\n\s+at /);
     expect(describeError('plain')).toBe('plain');
-    expect(describeError({ code: 7 })).toBe('{"code":7}');
-    const loop: Record<string, unknown> = {};
-    loop.self = loop;
-    expect(describeError(loop)).toBe('[object Object]');
+    expect(describeError(7)).toBe('7');
+    expect(describeError(undefined)).toBe('A thrown undefined.');
+    expect(describeError(null)).toBe('A thrown object.');
+  });
+
+  it('never writes a thrown object whole: only its message, if it has one', () => {
+    const rejected = { message: 'Request failed', headers: { authorization: 'Bearer sk-ant-secret-key-123456' }, notes: 'typed by the user' };
+    expect(describeError(rejected)).toBe('A thrown object that is not an error: Request failed');
+    expect(describeError({ code: 7, key: 'sk-ant-secret-key-123456' })).toBe('A thrown object that is not an error.');
   });
 
   it('does not carry properties that hang off an error, such as a request with its headers', () => {
