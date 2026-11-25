@@ -51,6 +51,9 @@ if (process.env.PARALEET_USER_DATA_DIR) {
   app.setPath('userData', join(app.getPath('appData'), 'ParaLeet-dev'));
 }
 
+/** Until this moment, the app being activated does not open the main window (see the notifier). */
+let quietActivationUntil = 0;
+
 let mainWindow: BrowserWindow | null = null;
 let petWindow: PetWindowController | null = null;
 let db: Db | null = null;
@@ -221,6 +224,9 @@ function start(): void {
       liveNotifications.add(notification);
       notification.on('click', () => {
         liveNotifications.delete(notification);
+        // Clicking a notification also "activates" the app, which normally opens the main window.
+        // Here the click means "show me the card": hold the main window back for a moment.
+        quietActivationUntil = Date.now() + 1500;
         notice.onClick();
       });
       notification.on('close', () => liveNotifications.delete(notification));
@@ -404,7 +410,10 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => showMainWindow());
-  app.on('activate', () => showMainWindow());
+  app.on('activate', () => {
+    if (Date.now() < quietActivationUntil) return;
+    showMainWindow();
+  });
   app.on('window-all-closed', () => {
     // Stay running on macOS; the pet and the menu bar icon keep the app alive.
     if (process.platform !== 'darwin') app.quit();

@@ -49,4 +49,23 @@ describe('createLoginItemSync', () => {
     expect(applied).toEqual([]);
     expect(item.wanted()).toBe(true);
   });
+
+  it('tries again on the next tick when the system refuses', () => {
+    let fail = true;
+    const applied: boolean[] = [];
+    const item = createLoginItemSync({
+      packaged: true,
+      read: () => true,
+      apply: (open) => {
+        if (fail) throw new Error('the system said no');
+        applied.push(open);
+      },
+    });
+    expect(() => item.sync()).toThrow('the system said no');
+    expect(item.wanted()).toBeNull();
+    fail = false;
+    item.sync();
+    expect(applied).toEqual([true]);
+    expect(item.wanted()).toBe(true);
+  });
 });

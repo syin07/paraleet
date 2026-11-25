@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getPet } from '../../data/repos/pet';
+import { listStarterProblems } from '../../data/repos/problems';
 import { sendDueReminder } from './index';
 import { createTestApp, type TestApp } from './testing';
 
@@ -45,7 +46,8 @@ describe('sendDueReminder', () => {
   });
 
   it('sends the evening reminder too, and never more than two in a day', async () => {
-    app = await hatched(la('2026-12-01', '16:05'));
+    app = await hatched(la('2026-12-01', '12:00'));
+    app.clock.set(la('2026-12-01', '16:05'));
     expect(sendDueReminder(app.ctx)).toBe('first');
     app.clock.set(la('2026-12-01', '21:00'));
     expect(sendDueReminder(app.ctx)).toBe('evening');
@@ -96,7 +98,8 @@ describe('sendDueReminder', () => {
     const dir = mkdtempSync(join(tmpdir(), 'paraleet-reminders-'));
     const path = join(dir, 'test.sqlite3');
     try {
-      app = await hatched(la('2026-12-01', '16:30'), path);
+      app = await hatched(la('2026-12-01', '12:00'), path);
+      app.clock.set(la('2026-12-01', '16:30'));
       expect(sendDueReminder(app.ctx)).toBe('first');
       app.close();
       app = createTestApp({ now: la('2026-12-01', '16:45'), path });
@@ -111,11 +114,12 @@ describe('sendDueReminder', () => {
   });
 
   it('says any problem feeds Para when nothing is assigned', async () => {
-    app = await hatched(la('2026-12-01', '10:00'));
-    // Finish the whole starter list on earlier days so nothing is left to assign.
-    const problems = await app.handlers.searchProblems({ query: '', limit: 50 });
-    app.clock.set(la('2026-11-28', '10:00'));
-    for (const problem of problems) {
+    app = await hatched(la('2026-11-28', '10:00'));
+    // Finish the whole starter list in one day. The next day no review is due yet, no plan is
+    // active and the starter list is done, so there is nothing to assign.
+    const starters = listStarterProblems(app.db);
+    expect(starters.length).toBeGreaterThan(20);
+    for (const problem of starters) {
       await app.handlers.submitReport({
         problemId: problem.id,
         rating: 'easy',
@@ -126,15 +130,64 @@ describe('sendDueReminder', () => {
       });
     }
     app.clock.set(la('2026-11-29', '16:30'));
+    expect((await app.handlers.getToday(undefined)).assignment).toBeNull();
+    expect(sendDueReminder(app.ctx)).toBe('first');
+    expect(texts().at(-1)).toBe('Para is peckish | Any problem you log feeds Para.');
+    app.clock.set(la('2026-11-29', '21:30'));
+    expect(sendDueReminder(app.ctx)).toBe('evening');
+    expect(texts().at(-1)).toBe('Para is getting hungry | Any problem you log feeds Para. Even a small one.');
+  });
+
+  it("names a review when one is today's problem", async () => {
+    app = await hatched(la('2026-12-01', '10:00'));
     const today = await app.handlers.getToday(undefined);
-    if (today.assignment === null) {
-      expect(sendDueReminder(app.ctx)).toBe('first');
-      expect(texts().at(-1)).toBe('Para is peckish | Any problem you log feeds Para.');
-    } else {
-      // A review came due instead: the reminder names it.
-      expect(sendDueReminder(app.ctx)).toBe('first');
-      expect(texts().at(-1)).toContain(today.assignment.problem.title);
-    }
+    const title = today.assignment?.problem.title ?? '';
+    await app.handlers.submitReport({
+      problemId: today.assignment?.problem.id ?? 0,
+      rating: 'again',
+      minutes: null,
+      keyInsight: null,
+      notes: null,
+      insightRevealed: false,
+    });
+    // Rated Again, it comes back the next day as the day's problem.
+    app.clock.set(la('2026-12-02', '16:05'));
+    expect((await app.handlers.getToday(undefined)).assignment).toMatchObject({ reason: 'review', problem: { title } });
+    expect(sendDueReminder(app.ctx)).toBe('first');
+    expect(texts().at(-1)).toBe(`Para is peckish | Today: ${title} on LeetCode`);
+  });
+
+  it("still sends a reminder when today's problem cannot be read", async () => {
+    app = await hatched(la('2026-12-01', '12:00'));
+    app.clock.set(la('2026-12-01', '16:10'));
+    // Break the read of Today: the reminder falls back to the any-problem text.
+    app.db.exec('ALTER TABLE daily_assignments RENAME TO daily_assignments_gone');
+    expect(sendDueReminder(app.ctx)).toBe('first');
+    expect(texts()).toEqual(['Para is peckish | Any problem you log feeds Para.']);
+    app.db.exec('ALTER TABLE daily_assignments_gone RENAME TO daily_assignments');
+  });
+
+  it('does not nag on the day Para hatches for reminder times that had already passed', async () => {
+    // Hatched at 22:00: both times are behind us. No reminder tonight; the first one comes tomorrow.
+    app = await hatched(la('2026-12-01', '22:00'));
+    expect(sendDueReminder(app.ctx)).toBeNull();
+    app.clock.set(la('2026-12-02', '02:00'));
+    expect(sendDueReminder(app.ctx)).toBeNull();
+    app.clock.set(la('2026-12-02', '16:00'));
+    expect(sendDueReminder(app.ctx)).toBe('first');
+    app.close();
+
+    // Hatched at 17:00: the first time has passed, the evening one has not.
+    app = await hatched(la('2026-12-01', '17:00'));
+    expect(sendDueReminder(app.ctx)).toBeNull();
+    app.clock.set(la('2026-12-01', '21:00'));
+    expect(sendDueReminder(app.ctx)).toBe('evening');
+    app.close();
+
+    // Hatched in the morning: both come as usual.
+    app = await hatched(la('2026-12-01', '09:00'));
+    app.clock.set(la('2026-12-01', '16:00'));
+    expect(sendDueReminder(app.ctx)).toBe('first');
   });
 
   it('follows the reminder times in Settings', async () => {
@@ -151,14 +204,16 @@ describe('sendDueReminder', () => {
   });
 
   it('opens the compact card when the notification is clicked', async () => {
-    app = await hatched(la('2026-12-01', '16:10'));
+    app = await hatched(la('2026-12-01', '12:00'));
+    app.clock.set(la('2026-12-01', '16:10'));
     sendDueReminder(app.ctx);
     app.notices[0]?.onClick();
     expect(app.windowCalls).toContain('openCard');
   });
 
   it('records the reminder before showing it, so a failure to show never repeats it', async () => {
-    app = await hatched(la('2026-12-01', '16:10'));
+    app = await hatched(la('2026-12-01', '12:00'));
+    app.clock.set(la('2026-12-01', '16:10'));
     app.ctx.notify = () => {
       throw new Error('the system refused');
     };

@@ -42,8 +42,9 @@ export function createLoginItemSync(options: {
     sync() {
       const next = options.read();
       if (next === wanted) return;
-      wanted = next;
+      // Recorded only once the system took it, so a failure is tried again on the next tick.
       if (options.packaged) options.apply(next);
+      wanted = next;
     },
     wanted: () => wanted,
   };

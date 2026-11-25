@@ -6,6 +6,7 @@ import { getProblem } from '../../data/repos/problems';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { AppContext } from './context';
 import { acknowledgeGreeting, completeOnboarding } from './pet';
+import { skipRemindersAlreadyPassed } from './reminders';
 import {
   addProblem,
   getProblemDetail,
@@ -81,7 +82,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     showCard: ({ anchor }) => done(() => ctx.windows.showCard(anchor)),
     hideCard: () => done(() => ctx.windows.hideCard()),
     setCardSize: ({ width, height }) => done(() => ctx.windows.setCardSize(width, height)),
-    completeOnboarding: (input) => completeOnboarding(ctx, input, getToday),
+    completeOnboarding: (input) => completeOnboarding(ctx, input, getToday, skipRemindersAlreadyPassed),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

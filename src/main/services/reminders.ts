@@ -31,14 +31,39 @@ export function sendDueReminder(ctx: AppContext): ReminderKind | null {
 
   // Reading Today assigns the day's problem if the app has not been looked at yet, so the
   // reminder can name it.
-  const assignment = buildTodayView(ctx, moment).assignment;
-  const problem =
-    assignment && !assignment.completed
-      ? { title: assignment.problem.title, platformLabel: PLATFORM_LABELS[assignment.problem.platform] }
-      : null;
+  let problem: { title: string; platformLabel: string } | null = null;
+  try {
+    const assignment = buildTodayView(ctx, moment).assignment;
+    if (assignment && !assignment.completed) {
+      problem = { title: assignment.problem.title, platformLabel: PLATFORM_LABELS[assignment.problem.platform] };
+    }
+  } catch {
+    // The day's problem could not be read. Para is still hungry: remind without naming it.
+  }
 
   // Recorded before it is shown: a reminder lost to an error is better than one sent twice.
   saveReminderDays(ctx.db, markSent(pet.reminderDays, kind, today));
   ctx.notify({ ...reminderText(kind, problem), onClick: () => ctx.windows.openCard() });
   return kind;
+}
+
+/**
+ * Para has just hatched. Reminder times that had already passed today count as sent, so finishing
+ * the first-launch screens late in the day is not answered with "Para is getting hungry" half a
+ * minute later. Call inside the transaction that marks Para hatched.
+ */
+export function skipRemindersAlreadyPassed(ctx: AppContext): void {
+  const moment = currentMoment(ctx);
+  const { pet, settings, today } = moment;
+  const passed = dueReminder({
+    now: moment.now,
+    timeZone: moment.timeZone,
+    dayBoundaryHour: settings.dayBoundaryHour,
+    firstReminderTime: settings.firstReminderTime,
+    eveningReminderTime: settings.eveningReminderTime,
+    fedToday: false,
+    today,
+    sent: { first: null, evening: null },
+  });
+  if (passed !== null) saveReminderDays(ctx.db, markSent(pet.reminderDays, passed, today));
 }

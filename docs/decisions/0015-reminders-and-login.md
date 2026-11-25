@@ -28,6 +28,12 @@ Two system notifications a day at most, each naming the problem, both skipped on
 
 10. **A first launch always shows the main window,** where Para hatches, however the app was started.
 
+11. **No nagging on the day Para hatches.** Reminder times that had already passed when the first-launch flow was finished count as sent for that day.
+
+12. **A reminder is sent even if today's problem cannot be read:** it falls back to the text that names no problem.
+
+13. **A notification click shows the card, not the main window.** Clicking a notification also activates the app, which normally opens the main window (and would close the card by taking its focus). For a moment after such a click, activation does not open the main window.
+
 ## Alternatives rejected
 
 - **A timer per reminder:** unreliable across sleep, and the PRD forbids trusting long timers.
@@ -36,4 +42,7 @@ Two system notifications a day at most, each naming the problem, both skipped on
 
 ## Limits
 
+- The uptime rule does not recognise a login without a restart (log out, log in): the main window opens then. macOS's "Reopen windows when logging back in" can also open the app a second way.
+- If the user removes ParaLeet from System Settings, Login Items, while the in-app setting stays on, the app registers itself again at the next launch. The in-app switch is the one to use.
+- A real click on a real notification, and the permission prompt, can only be tried by hand.
 - The login item and the uptime rule can only be tried in the packaged app (M4). An unsigned app may need the user's approval in System Settings, Login Items.
