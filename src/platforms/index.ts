@@ -50,8 +50,28 @@ function looksLikeAddress(text: string): boolean {
   return /^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/i.test(labels[labels.length - 1]!);
 }
 
-/** Works out which platform and problem a pasted link points at. */
+/**
+ * Works out which platform and problem a pasted link points at.
+ *
+ * Every accepted result is checked to be a fixed point before it is returned: its ID is valid for
+ * its adapter, its canonical link is an http(s) link, and recognizing that canonical link gives the
+ * very same result. So one problem has one identity by construction, whatever oddities the URL
+ * parser allows. An input that cannot meet this is not a usable link and is rejected.
+ */
 export function recognizeUrl(text: string): RecognizedUrl {
+  const first = recognizeOnce(text);
+  if (!first.ok) return first;
+  const again = recognizeOnce(first.canonicalUrl);
+  const stable =
+    again.ok &&
+    again.platform === first.platform &&
+    again.platformId === first.platformId &&
+    again.canonicalUrl === first.canonicalUrl;
+  const valid = ADAPTERS[first.platform].isValidId(first.platformId);
+  return stable && valid && /^https?:\/\//.test(first.canonicalUrl) ? first : NOT_A_LINK;
+}
+
+function recognizeOnce(text: string): RecognizedUrl {
   let trimmed = text.trim();
   if (trimmed === '' || /\s/.test(trimmed)) return NOT_A_LINK;
   // "example.com/x" has no scheme; "example.com:8080/x" must not be mistaken for one.

@@ -43,6 +43,8 @@ const EXAMPLES: string[] = [
   'https://www.hackerrank.com/challenges/solve-me-first/problem',
   'http://localhost:3000/x',
   'http://127.0.0.1/x',
+  'http://192.168.1.10/problem/5',
+  'http://10.0.0.1:8080/p?id=3',
 ];
 
 interface Parts {
@@ -71,9 +73,9 @@ const REAL_HOSTS = [
 
 // Applied in this order, so every combination is deterministic. "scheme removed" is last.
 const MUTATIONS: [string, (p: Parts) => Parts | null][] = [
-  ['dot1', (p) => ({ ...p, host: `${p.host}.` })],
-  ['dot2', (p) => ({ ...p, host: `${p.host}..` })],
-  ['dot3', (p) => ({ ...p, host: `${p.host}...` })],
+  ['dot1', (p) => ({ ...p, host: withDots(p.host, '.') })],
+  ['dot2', (p) => ({ ...p, host: withDots(p.host, '..') })],
+  ['dot3', (p) => ({ ...p, host: withDots(p.host, '...') })],
   ['upper', (p) => ({ ...p, host: p.host.toUpperCase() })],
   [
     'www',
@@ -100,6 +102,12 @@ const MUTATIONS: [string, (p: Parts) => Parts | null][] = [
   ['zeros3', (p) => padNumber(p, '000')],
 ];
 
+/** Trailing dots belong to the hostname, so they go before a port. */
+function withDots(host: string, dots: string): string {
+  const match = /^(.*?)(:\d+)?$/.exec(host)!;
+  return `${match[1]!}${dots}${match[2] ?? ''}`;
+}
+
 function padNumber(p: Parts, zeros: string): Parts | null {
   if (!REAL_HOSTS.some((h) => p.host.toLowerCase().includes(h)) || /leetcode/i.test(p.host)) return null;
   const path = p.path.replace(/\/(\d+)(?=\/|$)/, (_m, digits: string) => `/${zeros}${digits}`);
@@ -123,7 +131,10 @@ function mutate(example: string, indexes: number[], dropScheme: boolean): string
     if (parts === null) return null;
   }
   const text = join(parts);
-  return dropScheme ? text.replace(/^https?:\/\//, '') : text;
+  if (!dropScheme) return text;
+  // Without a scheme, "user:pass@host" reads as the scheme "user:", which says nothing about hosts.
+  if (parts.host.includes('@')) return null;
+  return text.replace(/^https?:\/\//, '');
 }
 
 function checkInvariants(input: string) {
@@ -142,6 +153,8 @@ function checkInvariants(input: string) {
 
 describe('recognizeUrl invariants under mutation', () => {
   let cases = 0;
+  let accepted = 0;
+  let realPlatformChecks = 0;
 
   it('every accepted or rejected mutation holds the three invariants and never turns a real platform into Other', () => {
     for (const example of EXAMPLES) {
@@ -156,7 +169,9 @@ describe('recognizeUrl invariants under mutation', () => {
           if (input === null) continue;
           cases++;
           const result = checkInvariants(input);
+          if (result.ok) accepted++;
           if (result.ok && original.platform !== 'other') {
+            realPlatformChecks++;
             expect(
               { platform: result.platform, platformId: result.platformId },
               `${name}${dropScheme ? '+noscheme' : ''}: ${input}`,
@@ -165,8 +180,11 @@ describe('recognizeUrl invariants under mutation', () => {
         }
       }
     }
-    // Guard against the generator silently producing almost nothing.
-    expect(cases).toBeGreaterThan(5000);
+    // Guard against the test passing for the wrong reason: the generator producing almost nothing,
+    // or nearly every mutation being rejected so the invariants are never looked at.
+    expect(cases).toBeGreaterThan(4500);
+    expect(accepted / cases).toBeGreaterThan(0.9);
+    expect(realPlatformChecks).toBeGreaterThan(2500);
   });
 
   it('the probed hosts with several trailing dots', () => {
@@ -183,6 +201,80 @@ describe('recognizeUrl invariants under mutation', () => {
       const result = recognizeUrl(text);
       expect(result.ok, text).toBe(false);
       if (!result.ok) expect(result.reason).toContain('does not look like a link');
+    }
+  });
+});
+
+describe('hosts the URL parser treats oddly', () => {
+  // A numeric last label makes the parser read the host as an IP address, unless trailing dots
+  // hide that. Stripping the dots must never leave an ID that parses differently the next time.
+  const ODD_HOSTS = [
+    'example.123',
+    '1.2.3.4.5',
+    '999.1.1.1',
+    'foo.0x1',
+    'example.1',
+    'a.b.c.0',
+    '0',
+    '0x7f.1',
+    '1.2.3',
+    '1.2.3.4',
+    '017.0.0.1',
+    '4294967295',
+    'localhost',
+    'xn--e1afmkfd.xn--p1ai',
+    '[::1]',
+  ];
+
+  it.each(ODD_HOSTS)('%s with 0 to 3 trailing dots, a port and a path is rejected or has one stable identity', (host) => {
+    for (const dots of ['', '.', '..', '...']) {
+      for (const port of ['', ':8080']) {
+        for (const scheme of ['http://', 'https://', '']) {
+          const input = `${scheme}${host}${dots}${port}/x`;
+          const result = checkInvariants(input);
+          if (result.ok) expect(result.platform, input).toBe('other');
+        }
+      }
+    }
+  });
+
+  it('never returns an ID its own adapter rejects (the cases found in review)', () => {
+    for (const input of [
+      'http://example.123../x',
+      'http://1.2.3.4.5../x',
+      'http://999.1.1.1../x',
+      'http://foo.0x1../x',
+      'https://example.1..',
+      'http://a.b.c.0..:8080/x',
+      'http://0../x',
+      'http://0x7f.1../x',
+      'http://1.2.3../x',
+    ]) {
+      const result = recognizeUrl(input);
+      if (!result.ok) continue;
+      expect(adapterFor(result.platform)!.isValidId(result.platformId), input).toBe(true);
+      expect(recognizeUrl(result.canonicalUrl), input).toEqual(result);
+    }
+  });
+
+  it('keeps accepting ordinary numeric hosts', () => {
+    expect(recognizeUrl('http://127.0.0.1/x')).toMatchObject({ ok: true, platformId: 'http://127.0.0.1/x' });
+    expect(recognizeUrl('http://192.168.1.10:8080/p/5/')).toMatchObject({
+      ok: true,
+      platformId: 'http://192.168.1.10:8080/p/5',
+    });
+    expect(recognizeUrl('http://127.0.0.1./x')).toMatchObject({ ok: true, platformId: 'http://127.0.0.1/x' });
+  });
+});
+
+describe('cleanUrl is a fixed point at the adapter level too', () => {
+  it('returns null instead of an ID that would clean to something else', async () => {
+    const { cleanUrl, otherAdapter } = await import('./other');
+    for (const input of ['http://example.123../x', 'http://0../x', 'http://0x7f.1../x', 'http://1.2.3../x']) {
+      const cleaned = cleanUrl(new URL(input));
+      if (cleaned === null) continue;
+      expect(cleanUrl(new URL(cleaned)), input).toBe(cleaned);
+      expect(otherAdapter.isValidId(cleaned), input).toBe(true);
     }
   });
 });
