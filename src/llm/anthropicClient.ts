@@ -72,9 +72,28 @@ export function toLlmError(error: unknown): LlmError {
   return new LlmError('other', 'The request to Anthropic failed. Try again.');
 }
 
+/** How long one request may take. A plan is one answer of a few thousand tokens. */
+const REQUEST_TIMEOUT_MS = 4 * 60 * 1000;
+
+export interface AnthropicClientOptions {
+  /** Tests answer requests themselves instead of reaching the network. */
+  fetch?: typeof globalThis.fetch;
+  /** How often the SDK repeats a request that failed for a passing reason. */
+  maxRetries?: number;
+}
+
+function newSdkClient(apiKey: string, options: AnthropicClientOptions): Anthropic {
+  return new Anthropic({
+    apiKey,
+    timeout: REQUEST_TIMEOUT_MS,
+    maxRetries: options.maxRetries ?? 1,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+}
+
 /** A client for one API key. The key lives only in this object, for the life of one request. */
-export function createAnthropicClient(apiKey: string): LlmClient {
-  const client = new Anthropic({ apiKey });
+export function createAnthropicClient(apiKey: string, options: AnthropicClientOptions = {}): LlmClient {
+  const client = newSdkClient(apiKey, options);
   const messages = (turns: readonly LlmTurn[]): { role: 'user' | 'assistant'; content: string }[] =>
     turns.map((turn) => ({ role: turn.role, content: turn.text }));
 
@@ -82,7 +101,9 @@ export function createAnthropicClient(apiKey: string): LlmClient {
     async complete({ model, system, turns }) {
       try {
         try {
-          const response = await client.beta.messages.parse({
+          // `create`, not the SDK's `parse`: `parse` throws on an answer that is cut off or is not
+          // JSON, and those are answers this app handles itself (see `toAnswer`).
+          const response = await client.beta.messages.create({
             model,
             max_tokens: MAX_TOKENS,
             betas: [FALLBACK_BETA],
@@ -97,7 +118,7 @@ export function createAnthropicClient(apiKey: string): LlmClient {
           // does not take it, ask again the plain way rather than fail a request that would work.
           if (!(error instanceof Anthropic.BadRequestError)) throw error;
         }
-        const response = await client.messages.parse({
+        const response = await client.messages.create({
           model,
           max_tokens: MAX_TOKENS,
           system,
@@ -113,9 +134,9 @@ export function createAnthropicClient(apiKey: string): LlmClient {
 }
 
 /** Checks a key by asking for the model list, which costs nothing. Returns the model IDs. */
-export async function listModels(apiKey: string): Promise<string[]> {
+export async function listModels(apiKey: string, options: AnthropicClientOptions = {}): Promise<string[]> {
   try {
-    const client = new Anthropic({ apiKey });
+    const client = newSdkClient(apiKey, options);
     const ids: string[] = [];
     for await (const model of client.models.list()) ids.push(model.id);
     return ids;

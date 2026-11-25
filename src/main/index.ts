@@ -357,15 +357,20 @@ function start(): void {
   }
 
   // The bridge answers only the main frame of the app's own windows, showing the app's own page.
-  registerBridge(createHandlers(ctx), (event) => {
-    const frame = event.senderFrame;
-    return (
-      BrowserWindow.fromWebContents(event.sender) !== null &&
-      frame !== null &&
-      frame === event.sender.mainFrame &&
-      isRendererUrl(frame.url)
-    );
-  });
+  registerBridge(
+    createHandlers(ctx),
+    (event) => {
+      const frame = event.senderFrame;
+      return (
+        BrowserWindow.fromWebContents(event.sender) !== null &&
+        frame !== null &&
+        frame === event.sender.mainFrame &&
+        isRendererUrl(frame.url)
+      );
+    },
+    // The window shows the message; the log keeps the rest. The input is never logged.
+    (method, error) => console.error(`ParaLeet: ${method} failed:`, error),
+  );
 
   const dayWatcher = createDayWatcher(ctx);
   const moodWatcher = createMoodWatcher(ctx);

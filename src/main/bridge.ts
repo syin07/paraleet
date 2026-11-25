@@ -1,19 +1,20 @@
-// Registers one IPC handler per bridge method. Every input is validated here before it reaches
-// a service, and calls from anything other than the app's own windows are refused.
+// Registers one IPC handler per bridge method. Calls from anything other than the app's own
+// windows are refused; everything else goes through `dispatch`, which validates the input and
+// turns a failure into a reply the UI can show.
 import { ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { BRIDGE_METHODS, IPC_PREFIX } from '../bridge/channels';
-import { inputSchemas, type BridgeHandlers } from '../bridge/contract';
+import { BRIDGE_METHODS, IPC_PREFIX, type BridgeMethodName as BridgeMethod } from '../bridge/channels';
+import type { BridgeHandlers } from '../bridge/contract';
+import { dispatch } from './services/dispatch';
 
-export function registerBridge(handlers: BridgeHandlers, isTrustedSender: (event: IpcMainInvokeEvent) => boolean): void {
+export function registerBridge(
+  handlers: BridgeHandlers,
+  isTrustedSender: (event: IpcMainInvokeEvent) => boolean,
+  onFailure: (method: BridgeMethod, error: unknown) => void = () => undefined,
+): void {
   for (const method of BRIDGE_METHODS) {
-    ipcMain.handle(IPC_PREFIX + method, async (event, raw: unknown) => {
+    ipcMain.handle(IPC_PREFIX + method, (event, raw: unknown) => {
       if (!isTrustedSender(event)) throw new Error('Refused: unknown sender');
-      const parsed = inputSchemas[method].safeParse(raw);
-      if (!parsed.success) {
-        throw new Error(`Invalid input for ${method}: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`);
-      }
-      const handler = handlers[method] as (input: unknown) => unknown;
-      return await handler(parsed.data);
+      return dispatch(handlers, method, raw, onFailure);
     });
   }
 }
