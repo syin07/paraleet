@@ -167,6 +167,8 @@ export interface LoggedProblemRow {
   problem: ProblemSummary;
   attemptCount: number;
   lastAttemptAt: IsoInstant;
+  /** The ParaLeet day of the last attempt, for "3d ago". */
+  lastAttemptDay: ParaDay;
   lastRating: Rating;
   card: CardSummary | null;
 }
