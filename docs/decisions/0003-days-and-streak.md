@@ -21,9 +21,11 @@ The streak must be right across the 04:00 boundary, missed days, sleep and time-
 - Every attempt creates or updates the problem's review card, including one rated Again. A problem the user could not solve is exactly the one that should come back soon.
 - Days the app was not open get no assignment row. Assignments are never backfilled.
 
-## Known limit: a clock that was wrong in the future
+## A clock that was wrong
 
-If an attempt is logged while the system clock is far ahead, `last_fed_day` lands in the future. After the clock is corrected the pet would look fed, and new attempts would not move the streak, until real time caught up. SAN-105 adds the guard: a last fed day more than 2 days ahead of today is treated as a clock error, so the pet is not fed and the next attempt starts a streak of 1 on the real day.
+- **Wrong in the future.** If an attempt is logged while the system clock is far ahead, `last_fed_day` lands in the future. A last fed day more than 2 days ahead of today is treated as a clock error: the pet is not fed, the displayed streak is 0, and the next attempt starts a streak of 1 on the real day (SAN-105). The longest streak is never lowered.
+- **Wrong in the past.** The same rule means an attempt dated more than 2 days before the last fed day also restarts the streak at 1. The data cannot tell the two cases apart, and a Mac that syncs its clock almost never reads a past date, so the simple rule is kept.
+- The 2-day window is one constant, `MAX_ZONE_SHIFT_DAYS` in `src/core/day.ts`, shared by every function that uses it.
 
 ## Alternatives rejected
 

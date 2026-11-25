@@ -10,3 +10,4 @@ One short file per non-obvious choice: context, decision, alternatives rejected.
 | [0004](0004-bridge-and-services.md) | The typed bridge and the Electron-free service layer |
 | [0005](0005-starter-list.md) | The starter list |
 | [0006](0006-agents-and-process.md) | Agents, tools and process choices |
+| [0007](0007-review-scheduling.md) | Review scheduling with FSRS |
