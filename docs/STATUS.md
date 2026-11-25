@@ -1,6 +1,6 @@
 # ParaLeet status
 
-Last updated: 2026-11-25 (end of session 2, lead; the owner cleared the session here, see In flight and Cold start)
+Last updated: 2026-11-25 (session 3, lead; in progress. If you are reading this cold, the In flight table is the truth: agents do not survive a cleared session)
 
 ## What works today
 
@@ -30,31 +30,40 @@ M3. Catalog and learning plans, with M4 work running beside it. (M2 closed with 
 
 ## In flight
 
-**Session 2 ended here (2026-11-25), at the owner's request, with no worker or reviewer running and no test run in progress.** M2 is merged. Three branches hold unmerged work; every worktree is clean (all work committed). Only `main` is on the remote (`origin`, github.com/syin07/paraleet): these branches are local.
+**Session 3 (2026-11-25).** Merged so far this session: the stats rules (`db6b465`). Only `main` is on the remote; every branch below is local.
 
-| Issue | What | Branch | State |
+| Issue | What | Branch (worktree) | State |
 | --- | --- | --- | --- |
-| SAN-120 to SAN-123 (M3 core) | Lead: plan rules in core, migration 003, plans repository, the `llm` module, plan services, the API key in a sealed file, bridge methods, plain error messages across the bridge, mock plans, decision 0016, architecture and README | `lead/m3-plan-core` at `591c789` (worktree `.claude/worktrees/lead-m3`), rebased on main `c563b20` | Type check, lint and 1026 unit tests pass after the rebase. **Not run yet on this branch: the UI suite and the end-to-end suite**, including the new `tests/e2e/plans.spec.ts`, which has never been run. Not reviewed yet. To do, in order: rebase on main; `npm run test:ui`; `npm run test:e2e` (expect to debug `plans.spec.ts`); fresh reviewer with SAN-120 to SAN-123's criteria; merge |
-| SAN-124 (M4), step 1 | Worker: stats rules in core (`src/core/stats.ts`, `buildStats`) | `worker/san-124-stats` at `e1024d1` (worktree `.claude/worktrees/agent-ab3ac71efafc0b677`), rebased on main `c563b20` | 959 unit tests pass. Review round 1 blocked on one missing test (a leap day). The lead added it, plus one for solves on a week's first and last day. **Needs a fresh reviewer (round 2), then merge.** Core only, so no UI or end-to-end run is needed beyond `npm run check` |
-| SAN-132 (M4) | Lead: export and import, data layer only (`src/data/transfer.ts`, 18 tests) | `lead/san-132-export-import` at `35df3f6` (worktree `.claude/worktrees/lead-m4`), **stacked on `lead/m3-plan-core`** | 1044 unit tests pass. Not ready to merge: see the to-do list in SAN-132 and under Cold start. When M3 core changes or merges, re-stack with `git rebase --onto <new base> <old base> lead/san-132-export-import` |
+| SAN-134 | Lead: "Settings…" right after "Open ParaLeet" left the window on Today (a lost request while the window opens; in main since M2) | `lead/navigate-race` at `c08da91` (`.claude/worktrees/agent-ab3ac71efafc0b677`), off main | 959 unit tests pass; the new end-to-end test failed before the fix and passes after. UI and end-to-end suites running; with a fresh reviewer. **Merge first: the M3 branch is rebased on it** |
+| SAN-120 to SAN-123 (M3 core) | Lead: plan rules, migration 003, `llm`, plan services, the sealed API key, bridge methods, plain errors across the bridge | `lead/m3-plan-core` at `7286b10` (`.claude/worktrees/lead-m3`) | Review round 1 **blocked** on one defect: the launch check gave the graduation cap for a plan finished with Again. Fixed in `7286b10` with tests (a finished plan stores `finished_from_attempt`; migration 003 changed, which is allowed because it is not in main). 1056 unit tests pass. **To do: rebase on main after SAN-134 merges; run check, UI and end-to-end; fresh reviewer (round 2); merge** |
+| SAN-124, step 2 | Lead: the `getStats` bridge method, service, mock scenarios `stats-year` and `stats-fails`; a day's count is now different problems, not attempts | `lead/san-124-stats-bridge` at `8dce8f6` (`.claude/worktrees/lead-m4`), stacked on M3 core | 1059 unit tests pass. **To do after M3 core merges: rebase, suites, fresh reviewer, merge** |
+| SAN-124, step 3 | Worker: the Stats screen | `worker/san-124-stats-screen`, based on `lead/san-124-stats-bridge` `8dce8f6` | Worker running |
+| SAN-130 | Worker: the Plan screen | `worker/san-130-plan-screen`, based on `lead/m3-plan-core` `f443f0e` | Worker running |
+| SAN-131 | Worker: "Learning plans" in Settings (the key, the model); the same worker gets the "Data" group next | `worker/san-131-settings-plans`, based on `lead/m3-plan-core` `f443f0e` | Worker running |
+| SAN-132 | Lead: export and import, data layer only (`src/data/transfer.ts`) | `lead/san-132-export-import` at `3d137c5`, stacked on M3 core `f443f0e`, checked out nowhere | Not ready: services, bridge, main wiring, mock, end-to-end test and decision 0017 are still to do (see Cold start) |
 
-Leftovers that are not work in flight: `lead/m2-contract` (two work-in-progress commits from session 1, superseded by the SAN-114 merge; delete after a look) and `worktree-agent-ab3ac71efafc0b677` (the empty branch the worker's worktree was created on).
+Worker branches sit on lead branches that will be rebased. After a base merges: `git rebase --onto main <old base commit> <worker branch>`, run inside the worktree that has the branch checked out.
+
+Leftovers that are not work in flight: `lead/m2-contract` (superseded; delete after a look), `worktree-agent-ab3ac71efafc0b677` and `worker/san-124-stats` (merged; delete).
 
 ## Next
 
-1. Set the goal again (PRD section 14, kickoff step 6), then re-read this file.
-2. Two cheap merges first: launch a fresh reviewer for `worker/san-124-stats`; run the UI and end-to-end suites on `lead/m3-plan-core` and launch its reviewer. Never run two end-to-end suites at once on this Mac: test apps take focus from each other.
-3. After M3 core merges: workers for SAN-130 (the Plan screen; mock scenarios `plan-nokey`, `plan-nostore`, `plan-fails`, `plan-draft`, `plan-active`) and SAN-131 ("Learning plans" in Settings). The lead adds step 4 of the first-launch flow (the optional API key; design section 10) and ticks the M3 checklist in `docs/PRD.md`.
-4. After the stats rules merge: the lead adds `getStats` (channels, contract, service, mock; see Cold start), then a worker builds the Stats screen (SAN-124, step 3).
-5. Finish SAN-132 (export and import), then a worker adds the "Data" group to Settings. SAN-131 and this both edit the Settings screen: run them one after the other, or give both to one worker.
-6. SAN-125: the `.dmg`, the install note, the log file, and the checks in the packaged app. Start after M3 core merges (both change `package.json`).
-7. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; and the hand checks under "Notes for the owner".
+1. Merge SAN-134, then M3 core (round 2 review), then the stats bridge. One end-to-end run at a time on this Mac.
+2. As workers report: go down the criteria, look at their screenshots, run the merge gate, fresh reviewer, merge. Rebase each worker branch on main first.
+3. The lead adds step 4 of the first-launch flow (the optional API key; design section 10), ticks the M3 checklist in `docs/PRD.md`, and updates `docs/design-references.md` ("as built" notes for Plan, Stats and Settings).
+4. Finish SAN-132 (export and import services), then send the Settings worker the "Data" group.
+5. SAN-125: the `.dmg`, the install note, the log file, and the checks in the packaged app.
+6. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; and the hand checks under "Notes for the owner".
 
 ## Cold start: what is not written down anywhere else
 
 **Agents do not survive a cleared session.** The stats worker cannot be continued with `SendMessage`. For the Stats screen, brief a new `implementer` and tell it to work on top of main once the rules are merged. A worktree left by an old agent may be locked: `git worktree unlock <path>` before removing it.
 
 **Lessons from this session's reviews.** Five branches went to review; four were blocked in round 1, each time for the same reason: an acceptance criterion in the brief had no test that would fail if it broke (where the card opens after a notification click; the card's failed-load state; a leap day). Before sending a branch to review, go down the criteria in the brief and name the test for each one. The reviewers' non-blocking notes were worth fixing before the merge every time.
+
+**Never `cd` in the lead's shell, and never rebase a branch from the main checkout.** Session 3 learned both the hard way. A bare `cd <worktree>` moves the whole session into that worktree (the harness then treats it as the working directory). Use `git -C <path>` and `npm --prefix <path>`. And `git -C <main checkout> rebase --onto A B <branch>` checks `<branch>` out in the main checkout: run a rebase only inside the worktree that has the branch checked out, and check `git -C /Users/sandy/projects/ParaLeet rev-parse --abbrev-ref HEAD` says `main` before every merge.
+
+**A lone end-to-end failure is not always load.** The one in session 3 (`tray.spec.ts`, "Settings…" after "Open ParaLeet") was a real race in the app (SAN-134). Read the error context before rerunning.
 
 **Check exit codes.** `npm run test:ui 2>&1 | tail -3 && git commit ...` commits past a failing test, because the pipe's exit code is `tail`'s. This happened once this session (caught before the merge). Run each suite to a log file and print `$?`.
 
