@@ -14,3 +14,4 @@ One short file per non-obvious choice: context, decision, alternatives rejected.
 | [0008](0008-daily-loop-wiring.md) | How the daily loop is wired in the main process |
 | [0009](0009-platform-links.md) | Recognizing problem links |
 | [0010](0010-pet-window.md) | The floating pet window |
+| [0011](0011-pet-rules.md) | Pet rules: stages, moods, voice, accessories, reminders |

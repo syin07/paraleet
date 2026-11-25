@@ -14,6 +14,8 @@ Last updated: 2026-11-25 (session 1, lead)
 
 ## Notes for the owner
 
+- **Please try Para with a real mouse.** Tests drive the pet window from inside the app, so one thing is unconfirmed by a person: with another app in front, hover Para (a bubble appears), click it (ParaLeet opens), drag it, and click on the empty area around it (the click should reach the window underneath). Run `npm run dev` to try.
+
 - **Mobbin needs a paid plan.** The Mobbin connector answered "requires a paid plan", so screens are designed from PRD section 11 and well-known app patterns, as section 13 allows. `docs/design-references.md` says so at the top. Nothing is blocked.
 - **No git remote.** The repo has no remote, so work is committed locally and not pushed. To back it up: create an empty private repo, then `git remote add origin <url> && git push -u origin main`.
 - **Playwright MCP is not connected** in this session. Playwright is used as an npm library instead (same screenshots and end-to-end tests). Nothing is blocked.
@@ -26,16 +28,14 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-114 (slice 2) | Lead: the floating pet window, its bridge methods, hover bubble, right-click menu, Dock hiding | `lead/san-114-pet-window` at `68720b3` (worktree `.claude/worktrees/lead-san-111`) | In review, round 1 |
-| SAN-112 + SAN-113 | Worker: procedural sprite, seed traits, `Sprite` component, gallery at `#/gallery` | `worker/san-112-sprite` (worktree `.claude/worktrees/agent-a76a928ef3328cd62`) | Code accepted by the lead; sent back for one art pass (upright posture, small hooked beak, wing and tail apart, moods that differ in silhouette, menu bar head crop). Not yet reviewed |
-| SAN-128 | Worker: mood rules, speech lines, accessory unlocks, reminder timing (pure core) | `worker/san-128-pet-rules` at `3857522` (worktree `.claude/worktrees/agent-acaa4f7617470f92f`) | In review, round 2 (round 1 blocked on the fed-sleep window and on Again unlocking streak accessories; both fixed) |
-| SAN-129 | Worker: Settings screen | `worker/san-129-settings` at `a11370f` (worktree `.claude/worktrees/agent-a0964102f926a80cc`) | In review, round 2 (round 1 blocked on field widths and missing lower-half screenshots; fixed) |
+| SAN-112 + SAN-113 | Worker: procedural sprite, seed traits, `Sprite` component, gallery at `#/gallery` | `worker/san-112-sprite` (worktree `.claude/worktrees/agent-a76a928ef3328cd62`) | Reviewer PASS at `e825ceb`. Back with the worker for a short polish pass from the reviewer's notes (sleeping Z's, egg outline, scarf with bow tie, a tighter jump test). Then the lead rebases (the pet window imports the old placeholder, which this branch deletes: switch `PetWindow.tsx` to `Sprite`), runs the suites and merges |
+| SAN-116 | Lead: Para comes alive. Migration 002, real mood and line in `petSummary`, accessory unlocks inside `submitReport`, the "missed you" greeting, mood changes pushed to windows | `lead/san-116-pet-life` (worktree `.claude/worktrees/lead-san-111`) | Starting |
 
 ## Next
 
-1. Gate and merge the four branches above as their reviews pass. At the SAN-129 merge, bring `docs/design-references.md` section 8 in line with what was built (day boundary 00:00 to 08:00, "Show Para on the desktop", text time inputs, stacked accessories row). At the SAN-128 merge, write decision 0011 (pet rules: egg stage and hatching, the four accessories, "first Hard" means the first Hard problem solved, an Again attempt unlocks nothing, a fed Para sleeps 23:00 to 06:00, how lines avoid repeating).
-2. Lead, once SAN-128, SAN-112 and SAN-114 are on main: wire the real mood, line and accessories into `petSummary` (`src/main/services/today.ts` has a placeholder mood), unlock accessories inside `submitReport`'s transaction with `unlockedAfterAttempt`, show the real `Sprite` in the pet window and the sidebar with the pet's own seed, and tell windows when the mood changes (short timers for the checking and eating steps, the 30-second tick for the rest). This needs migration 002 for what must be remembered: the day the "missed you" greeting was seen and the day each reminder was sent.
-3. Then SAN-115 (menu bar icon from the sprite's head with the streak as its title; the compact card from the pet and the icon, reusing `ReportForm`), SAN-116 (checking and eating animations, growth), SAN-117 (two daily notifications from `dueReminder`, clicking one opens the compact card), SAN-118 (launch at login, only when packaged; the first-launch hatching flow, without forcing people who already use the app through it). Define the bridge for these in one lead slice first, then give the compact card page and the first-launch screens to workers while the lead does the main-process side.
+1. Merge SAN-112 + SAN-113 when the polish pass is back. Attach the gallery screenshots to both Linear issues.
+2. Finish SAN-116 (above). Migration 002 also adds what M3's catalog needs (`problems.solved_count`, `catalog_sources`), so the catalog worker (SAN-119) can start as soon as it is on main.
+3. Then SAN-115 (menu bar icon from the sprite's head with the streak as its title; the compact card from the pet and the icon, reusing `ReportForm`), SAN-117 (two daily notifications from `dueReminder`, clicking one opens the compact card), SAN-118 (launch at login, only when packaged; the first-launch hatching flow, without forcing people who already use the app through it). Define the bridge for these in one lead slice first, then give the compact card page and the first-launch screens to workers while the lead does the main-process side.
 4. Then M3 (catalog and learning plans; load the `claude-api` skill before writing the `llm` module) and M4 (stats, export and import, the `.dmg`).
 
 ## Done
@@ -51,13 +51,16 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 | SAN-108 | Platform adapters and link recognition for LeetCode, CSES, Codeforces and Other (lead took it over after three failed reviews) | `398b61e` |
 | SAN-127 | Add a problem from Today; "I solved it today" in the add dialog; report form keyboard and focus fixes; scroll hint in tall dialogs | `ef1a667` |
 | SAN-111 | The loop wired end to end: review cards on report, launch-time reconcile, end-to-end tests. Closes M1 | `2b2b8b5` |
+| SAN-129 | Settings screen: reminder times, day boundary, target retention, pet switches, accessories, LeetCode handle | `b908ee1` |
+| SAN-128 | Pet rules in core: mood, speech lines, accessory unlocks, reminder timing | `a3393c2` |
+| SAN-114 | The floating pet window (slice 1, shared types, was `44b278d`) | `17bce45` |
 
 ## Linear
 
 - Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4.
 - M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). SAN-112, 113, 128 and 129 are detailed; SAN-114 to SAN-118 are coarse. M3: SAN-119 to SAN-123 (coarse). M4: SAN-124 to SAN-126 (coarse; SAN-126 is the owner's one-week trial).
 - Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (group `Module`).
-- SAN-114 slice 1 (shared M2 types and the accessories part of the bridge) merged as `44b278d`.
+- M2 so far: SAN-114, SAN-128 and SAN-129 are Done with screenshots attached where there is a screen.
 
 ## How the loop is run in this repo
 
@@ -91,4 +94,4 @@ None.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0009`; `0010` (the pet window) arrives with the SAN-114 merge. Decided for M2 and to be written down as `0011` with the SAN-128 merge: the egg stage shows Para in a cracked shell (the PRD has both an egg stage until 3 growth solves and a hatching on first launch); the four accessories are scarf, bow tie, crown and graduation cap; "first Hard" means the first Hard problem solved, not the first attempt rated Hard; an attempt rated Again unlocks nothing and the next other attempt picks the milestone up; a fed Para sleeps from 23:00 to 06:00 local time whatever the day boundary.
+See `docs/decisions/0001` to `0011`. `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
