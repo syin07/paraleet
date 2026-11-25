@@ -1,3 +1,4 @@
+import { addDays } from '../../../core/day';
 import { describe, expect, it } from 'vitest';
 import { axisTicks, barPercent, dayTooltip, monthMarks, shortDay, weekTooltip } from './statsModel';
 
@@ -37,6 +38,29 @@ describe('monthMarks', () => {
       { column: 0, label: 'Oct' },
       { column: 4, label: 'Nov' },
     ]);
+  });
+});
+
+describe('monthMarks across a year change', () => {
+  it('labels January after December', () => {
+    // Dec starts at column 0 but Jan comes two columns later, so only Jan is kept.
+    const marks = monthMarks(weeks(['2025-12-22', '2025-12-29', '2026-01-05', '2026-01-12', '2026-01-19', '2026-01-26']));
+    expect(marks).toEqual([{ column: 2, label: 'Jan' }]);
+    // With room, both show.
+    expect(monthMarks(weeks(['2025-12-01', '2025-12-08', '2025-12-15', '2025-12-22', '2025-12-29', '2026-01-05']))).toEqual([
+      { column: 0, label: 'Dec' },
+      { column: 5, label: 'Jan' },
+    ]);
+  });
+
+  it('keeps one label per month over a year that starts in the previous year', () => {
+    const starts = Array.from({ length: 53 }, (_, index) => addDays('2025-11-24', index * 7));
+    expect(starts.at(-1)).toBe('2026-11-23');
+    const marks = monthMarks(weeks(starts));
+    // Nov 2025 is dropped (Dec follows at once); Dec 2025 to Nov 2026 is twelve labels, in order.
+    expect(marks.map((mark) => mark.label)).toEqual(['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov']);
+    expect(marks[0]?.column).toBe(1);
+    expect(marks[1]?.column).toBe(6);
   });
 });
 

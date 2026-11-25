@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { ParaLeetApi } from '../../src/bridge/contract';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -24,6 +24,31 @@ async function captureLower(page: Page, name: string): Promise<void> {
     });
     await page.screenshot({ path: resolve(dir, `${name}-lower-${label}.png`), animations: 'disabled' });
   }
+}
+
+/** Hovers `target` at both window sizes, checks the tooltip text and saves `<name>-default.png` and `-min.png`. */
+async function captureHovered(page: Page, name: string, target: Locator, label: string): Promise<void> {
+  for (const [suffix, size] of [
+    ['min', WINDOW_MIN],
+    ['default', WINDOW_DEFAULT],
+  ] as const) {
+    await page.setViewportSize(size);
+    await target.scrollIntoViewIfNeeded();
+    await target.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(label);
+    await page.screenshot({
+      path: resolve(import.meta.dirname, `../../artifacts/screenshots/${name}-${suffix}.png`),
+      animations: 'disabled',
+    });
+  }
+}
+
+/** True when the tooltip's box overlaps the box of the card title `heading`. */
+async function tooltipCoversTitle(page: Page, card: Locator, heading: string): Promise<boolean> {
+  const tip = await page.getByRole('tooltip').boundingBox();
+  const title = await card.getByRole('heading', { name: heading }).boundingBox();
+  if (!tip || !title) throw new Error('tooltip or title not found');
+  return tip.x < title.x + title.width && tip.x + tip.width > title.x && tip.y < title.y + title.height && tip.y + tip.height > title.y;
 }
 
 const heatmap = (page: Page) => page.getByTestId('stats-heatmap');
@@ -71,8 +96,7 @@ test.describe('Stats screen', () => {
     const text = (await withProblems.getAttribute('aria-label')) ?? '';
     expect(text).toMatch(/^[A-Z][a-z]{2} \d{1,2} · \d+ problems?$/);
     await expect(page.getByRole('tooltip')).toHaveText(text);
-    await captureBothSizes(page, 'stats-tooltip-day');
-    await heatmap(page).hover({ position: { x: 1, y: 1 } });
+    await captureHovered(page, 'stats-tooltip-day', withProblems, text);
   });
 
   test('a day with nothing shows only its date, and days after today are blank', async ({ page }) => {
@@ -86,7 +110,8 @@ test.describe('Stats screen', () => {
     const one = grid.getByRole('img', { name: empty[0] ?? '', exact: true }).first();
     await one.hover();
     await expect(page.getByRole('tooltip')).toHaveText(empty[0] ?? '');
-    await expect(page.getByRole('tooltip')).not.toContainText(/missed|0/);
+    await expect(page.getByRole('tooltip')).not.toContainText('missed');
+    await expect(page.getByRole('tooltip')).not.toContainText('·');
     // Nov 26 to Nov 29 come after today: no cell, no label.
     for (const day of ['Nov 26', 'Nov 27', 'Nov 28', 'Nov 29']) {
       await expect(grid.getByRole('img', { name: day })).toHaveCount(0);
@@ -144,30 +169,94 @@ test.describe('Stats screen', () => {
     const bar = card.getByRole('img', { name: label });
     await bar.hover();
     await expect(page.getByRole('tooltip')).toHaveText(label);
-    // The chart sits below the fold at the small size: scroll it into view and hover again at each size.
-    for (const [suffix, size] of [
-      ['min', WINDOW_MIN],
-      ['default', WINDOW_DEFAULT],
-    ] as const) {
+    await captureHovered(page, 'stats-tooltip-week', bar, label);
+  });
+
+  test('a week with exactly one solve says "1 solve"', async ({ page }) => {
+    // Only the default scenario has such a week (stats-year and many have none in any range).
+    await openScreen(page, 'stats');
+    const data = await page.evaluate(() => (globalThis as unknown as Host).paraleet.getStats({ range: '6m' }));
+    const week = data.weeks.find((candidate) => candidate.solves === 1);
+    expect(week, 'the default scenario must have a week with exactly one solve').toBeDefined();
+    const [year, month, day] = (week?.start ?? '').split('-').map(Number);
+    const date = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+    const bar = page.getByTestId('stats-weekly').getByRole('img', { name: `Week of ${date} · 1 solve`, exact: true });
+    await expect(bar).toHaveCount(1);
+    await bar.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(`Week of ${date} · 1 solve`);
+  });
+
+  test('the tooltip never covers its card title, above the mark when there is room and below otherwise', async ({ page }) => {
+    await openScreen(page, 'stats', 'stats-year');
+    for (const size of [WINDOW_MIN, WINDOW_DEFAULT]) {
       await page.setViewportSize(size);
-      await card.scrollIntoViewIfNeeded();
-      await bar.hover();
-      await expect(page.getByRole('tooltip')).toHaveText(label);
-      await page.screenshot({
-        path: resolve(import.meta.dirname, `../../artifacts/screenshots/stats-tooltip-week-${suffix}.png`),
-        animations: 'disabled',
-      });
+      // Top row of the heatmap (Mondays): no room above inside the grid, so it goes below.
+      const heatCard = page.getByTestId('stats-heatmap-card');
+      const monday = heatmap(page).locator('[data-mark$="-0"]').nth(3);
+      await monday.scrollIntoViewIfNeeded();
+      await monday.hover();
+      await expect(page.getByRole('tooltip')).toBeVisible();
+      expect(await tooltipCoversTitle(page, heatCard, 'Fed days')).toBe(false);
+      const cellBox = await monday.boundingBox();
+      const tipBox = await page.getByRole('tooltip').boundingBox();
+      expect(cellBox && tipBox && tipBox.y >= cellBox.y + cellBox.height - 1).toBe(true);
+
+      // A cell lower down has room: the tooltip sits above it.
+      const lower = heatmap(page).locator('[data-mark$="-5"]').nth(3);
+      await lower.hover();
+      const lowerBox = await lower.boundingBox();
+      const lowerTip = await page.getByRole('tooltip').boundingBox();
+      expect(lowerBox && lowerTip && lowerTip.y + lowerTip.height <= lowerBox.y + 1).toBe(true);
+      expect(await tooltipCoversTitle(page, heatCard, 'Fed days')).toBe(false);
+
+      // The first bars: same rule for the weekly chart.
+      const weekly = page.getByTestId('stats-weekly');
+      const first = weekly.getByRole('img').first();
+      await first.scrollIntoViewIfNeeded();
+      await first.hover();
+      await expect(page.getByRole('tooltip')).toBeVisible();
+      expect(await tooltipCoversTitle(page, weekly, 'Solves per week')).toBe(false);
     }
   });
 
-  test('a week with one solve says "1 solve"', async ({ page }) => {
-    await openScreen(page, 'stats');
-    const labels = await page
-      .getByTestId('stats-weekly')
-      .getByRole('img')
-      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label') ?? ''));
-    expect(labels.some((label) => / · 1 solve$/.test(label) || / · \d+ solves$/.test(label))).toBe(true);
-    expect(labels.every((label) => !/ · 1 solves/.test(label))).toBe(true);
+  test('the heatmap is one tab stop and the arrow keys move between days showing the tooltip', async ({ page }) => {
+    await openScreen(page, 'stats', 'stats-year');
+    const grid = heatmap(page);
+    await grid.focus();
+    // Starts on today (Wed Nov 25).
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 25/);
+    await page.keyboard.press('ArrowUp');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 24/);
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 17/);
+    // Days after today cannot be reached: Down from Tuesday reaches Wednesday and stops there.
+    await page.keyboard.press('ArrowRight');
+    for (let step = 0; step < 7; step += 1) await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 25/);
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 25/);
+    // One tab stop: the next Tab leaves the grid.
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('stats-heatmap-card').getByRole('tooltip')).toHaveCount(0);
+    expect(await grid.locator('[tabindex]').count()).toBe(0);
+  });
+
+  test('the weekly bars are one tab stop and the arrow keys move between weeks', async ({ page }) => {
+    await openScreen(page, 'stats', 'stats-year');
+    const plot = page.getByTestId('stats-weekly').getByRole('group');
+    await plot.focus();
+    await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 23 · /);
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 16 · /);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 23 · /);
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('stats-weekly').getByRole('tooltip')).toHaveCount(0);
   });
 
   test('topic coverage lists the most solved first, zeros muted last, and folds after 8 rows', async ({ page }) => {
