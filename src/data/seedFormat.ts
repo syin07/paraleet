@@ -27,7 +27,33 @@ export const starterSeedSchema = z.object({
   problems: z.array(seedProblemSchema).min(1),
 });
 
+/** A catalog entry: a seed problem plus how many people solved it, when the source says. Strict, so no stray field (a statement, say) can ride along. */
+export const catalogProblemSchema = seedProblemSchema.extend({ solvedCount: z.number().int().min(0).nullable() }).strict();
+
+export const CATALOG_PLATFORMS = ['leetcode', 'cses', 'codeforces'] as const;
+export type CatalogPlatform = (typeof CATALOG_PLATFORMS)[number];
+
+export const catalogSeedSchema = z
+  .object({
+    /** When the generating script ran. */
+    generatedAt: z.iso.datetime(),
+    /** Where the metadata was fetched from. */
+    source: z.string().min(1),
+    platform: z.enum(CATALOG_PLATFORMS),
+    problems: z.array(catalogProblemSchema),
+  })
+  .strict()
+  .superRefine((seed, context) => {
+    seed.problems.forEach((problem, index) => {
+      if (problem.platform !== seed.platform) {
+        context.addIssue({ code: 'custom', path: ['problems', index, 'platform'], message: `must be ${seed.platform}` });
+      }
+    });
+  });
+
 export type SeedProblem = z.infer<typeof seedProblemSchema>;
+export type CatalogProblem = z.infer<typeof catalogProblemSchema>;
+export type CatalogSeed = z.infer<typeof catalogSeedSchema>;
 export type StarterSeed = z.infer<typeof starterSeedSchema>;
 
 /**
