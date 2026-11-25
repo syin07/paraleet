@@ -1,0 +1,284 @@
+import { describe, expect, it } from 'vitest';
+import { addDays } from './day';
+import { LINES, MAX_LINE_LENGTH, fillTemplate, pickLine, type LineContext } from './petLines';
+import { MOODS, type Mood } from './types';
+
+const LONG_TITLE = 'Find Minimum Number of Operations to Make Every Element of a Very Long Array Equal';
+
+function context(overrides: Partial<LineContext> = {}): LineContext {
+  return {
+    seed: 12345,
+    today: '2026-01-15',
+    mood: 'peckish',
+    problemTitle: 'Two Sum',
+    platformLabel: 'LeetCode',
+    streak: 5,
+    ...overrides,
+  };
+}
+
+const templates = MOODS.flatMap((mood) => LINES[mood].map((template) => ({ mood, template })));
+
+describe('LINES pools', () => {
+  it('has enough templates per mood', () => {
+    for (const mood of ['content', 'peckish', 'hungry', 'missed_you'] as const) {
+      expect(LINES[mood].length).toBeGreaterThanOrEqual(8);
+    }
+    for (const mood of ['sleeping', 'checking', 'eating', 'nibbling'] as const) {
+      expect(LINES[mood].length).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it('has unfed templates both with and without the problem', () => {
+    for (const mood of ['peckish', 'hungry'] as const) {
+      const withProblem = LINES[mood].filter((t) => t.includes('{title}'));
+      const without = LINES[mood].filter((t) => !t.includes('{title}') && !t.includes('{platform}'));
+      expect(withProblem.length).toBeGreaterThanOrEqual(2);
+      expect(without.length).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('has no duplicate templates within a mood', () => {
+    for (const mood of MOODS) expect(new Set(LINES[mood]).size).toBe(LINES[mood].length);
+  });
+
+  it('only uses the known placeholders', () => {
+    for (const { template } of templates) {
+      for (const match of template.matchAll(/\{(\w+)\}/g)) {
+        expect(['title', 'platform', 'streak']).toContain(match[1]);
+      }
+    }
+  });
+
+  it('only uses streak lines in the fed mood', () => {
+    for (const { mood, template } of templates) {
+      if (template.includes('{streak}')) expect(mood).toBe('content');
+    }
+  });
+});
+
+describe('every template, filled', () => {
+  it.each(templates)('$mood: $template stays short with no placeholder left', ({ template, mood }) => {
+    const long = fillTemplate(
+      template,
+      context({
+        mood,
+        problemTitle: LONG_TITLE,
+        platformLabel: 'Codeforces',
+        streak: 99999,
+      }),
+    );
+    const short = fillTemplate(
+      template,
+      context({
+        mood,
+        problemTitle: 'Two Sum',
+        platformLabel: 'Codeforces',
+        streak: 12,
+      }),
+    );
+    expect(long).not.toMatch(/\{|\}/);
+    expect(long.length).toBeLessThanOrEqual(MAX_LINE_LENGTH);
+    expect(short.length).toBeLessThanOrEqual(60);
+  });
+
+  it('cuts a long title with an ellipsis and keeps a short one whole', () => {
+    const cut = fillTemplate('Fancy {title}? It is on {platform}.', context({ problemTitle: LONG_TITLE }));
+    expect(cut).toContain('…');
+    expect(cut.length).toBeLessThanOrEqual(MAX_LINE_LENGTH);
+    expect(cut.endsWith('? It is on LeetCode.')).toBe(true);
+    expect(fillTemplate('Fancy {title}?', context({ problemTitle: 'Two Sum' }))).toBe('Fancy Two Sum?');
+  });
+
+  it('keeps a short title whole', () => {
+    for (let day = 0; day < 30; day += 1) {
+      const text = pickLine(context({ mood: 'peckish', today: addDays('2026-01-01', day) })) as string;
+      expect(text).not.toContain('…');
+    }
+  });
+});
+
+describe('voice: banned words', () => {
+  const banned: RegExp[] = [
+    /\bmissed\b/i,
+    /\blate\b/i,
+    /\bagain\?/i,
+    /\bfinally\b/i,
+    /where were you/i,
+    /\boverdue\b/i,
+    /\bbehind\b/i,
+    /streak lost/i,
+    /\bshould\b/i,
+    /\bmust\b/i,
+    /\bforgot\b/i,
+    /\bdays?\b.*\bmissed\b/i,
+    /\bwaiting\b/i,
+    /\breviews?\b/i,
+    /\bdue\b/i,
+    /\bwhy\b/i,
+    /\bdisappoint/i,
+    /\bguilt/i,
+    /\bsorry\b/i,
+  ];
+
+  it.each(templates)('$mood: $template', ({ mood, template }) => {
+    // Pure delight at seeing the user is the one place "missed you" belongs.
+    const text = mood === 'missed_you' ? template.replace(/\bmissed you\b/gi, 'ok') : template;
+    for (const pattern of banned) expect(text).not.toMatch(pattern);
+    // Digits only through the streak placeholder.
+    expect(template.replaceAll('{streak}', '')).not.toMatch(/\d/);
+  });
+
+  it('keeps "missed you" out of every other mood', () => {
+    for (const { mood, template } of templates) {
+      if (mood !== 'missed_you') expect(template).not.toMatch(/missed/i);
+    }
+  });
+
+  it('is one short sentence-ish line: no newlines, within 60 characters unfilled', () => {
+    for (const { template } of templates) {
+      expect(template).not.toMatch(/\n/);
+      expect(template.replace(/\{title\}/g, '').length).toBeLessThanOrEqual(60);
+    }
+  });
+});
+
+describe('pickLine', () => {
+  const seeds = [0, 1, 42, 99999, 4294967295];
+
+  it('is deterministic for the same context', () => {
+    for (const mood of MOODS) {
+      expect(pickLine(context({ mood }))).toBe(pickLine(context({ mood })));
+    }
+  });
+
+  it('never repeats the previous day for 365 days, for several seeds and moods', () => {
+    for (const seed of seeds) {
+      for (const mood of MOODS) {
+        let previous: string | null = null;
+        for (let day = 0; day < 365; day += 1) {
+          const line = pickLine(context({ seed, mood, today: addDays('2026-01-01', day) }));
+          expect(line).not.toBeNull();
+          expect(line).not.toBe(previous);
+          previous = line;
+        }
+      }
+    }
+  });
+
+  it('never repeats the previous day without a problem or a streak either', () => {
+    for (const seed of seeds) {
+      for (const mood of MOODS) {
+        let previous: string | null = null;
+        for (let day = 0; day < 120; day += 1) {
+          const line = pickLine(
+            context({
+              seed,
+              mood,
+              problemTitle: null,
+              platformLabel: null,
+              streak: 0,
+              today: addDays('2026-03-01', day),
+            }),
+          );
+          expect(line).not.toBe(previous);
+          previous = line;
+        }
+      }
+    }
+  });
+
+  it('uses more than one template over time', () => {
+    const seen = new Set<string | null>();
+    for (let day = 0; day < 60; day += 1)
+      seen.add(pickLine(context({ mood: 'content', today: addDays('2026-01-01', day) })));
+    expect(seen.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('respects eligibility: no problem means no {title} or {platform} template', () => {
+    const problemLines = new Set(
+      (['peckish', 'hungry'] as const).flatMap((mood) =>
+        LINES[mood].filter((t) => t.includes('{title}') || t.includes('{platform}')),
+      ),
+    );
+    expect(problemLines.size).toBeGreaterThan(0);
+    for (const mood of ['peckish', 'hungry'] as const) {
+      for (let day = 0; day < 200; day += 1) {
+        for (const missing of [
+          { problemTitle: null, platformLabel: null },
+          { problemTitle: 'Two Sum', platformLabel: null },
+          { problemTitle: null, platformLabel: 'CSES' },
+        ]) {
+          const line = pickLine(context({ mood, today: addDays('2026-01-01', day), ...missing })) as string;
+          expect(line).not.toMatch(/\{|\}/);
+          expect(line).not.toContain('Two Sum');
+          expect(line).not.toContain('CSES');
+          expect(LINES[mood].some((t) => !t.includes('{') && t === line)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('uses problem templates when a problem is known', () => {
+    let named = 0;
+    for (let day = 0; day < 60; day += 1) {
+      const line = pickLine(context({ mood: 'peckish', today: addDays('2026-01-01', day) })) as string;
+      if (line.includes('Two Sum') && line.includes('LeetCode')) named += 1;
+    }
+    expect(named).toBeGreaterThan(0);
+  });
+
+  it('respects eligibility: no {streak} template under a streak of 2', () => {
+    for (const streak of [0, 1]) {
+      for (let day = 0; day < 200; day += 1) {
+        const line = pickLine(
+          context({
+            mood: 'content',
+            streak,
+            today: addDays('2026-01-01', day),
+          }),
+        ) as string;
+        expect(LINES.content).toContain(line);
+      }
+    }
+  });
+
+  it('names the streak on some days once it is 2 or more', () => {
+    let named = 0;
+    for (let day = 0; day < 60; day += 1) {
+      const line = pickLine(
+        context({
+          mood: 'content',
+          streak: 12,
+          today: addDays('2026-01-01', day),
+        }),
+      ) as string;
+      if (line.includes('12')) named += 1;
+    }
+    expect(named).toBeGreaterThan(0);
+    // A streak of exactly 2 is the lowest that may be named.
+    const lowest = Array.from({ length: 60 }, (_, day) =>
+      pickLine(
+        context({
+          mood: 'content',
+          streak: 2,
+          today: addDays('2026-01-01', day),
+        }),
+      ),
+    );
+    expect(lowest.some((line) => line?.includes('2'))).toBe(true);
+  });
+
+  it('gives different seeds different lines on some days', () => {
+    let different = 0;
+    for (let day = 0; day < 60; day += 1) {
+      const today = addDays('2026-01-01', day);
+      if (pickLine(context({ seed: 1, today })) !== pickLine(context({ seed: 2, today }))) different += 1;
+    }
+    expect(different).toBeGreaterThan(5);
+  });
+
+  it('returns null when a mood has no usable template', () => {
+    expect(pickLine(context({ mood: 'nonexistent' as Mood }))).toBeNull();
+  });
+});
