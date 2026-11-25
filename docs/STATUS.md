@@ -30,14 +30,12 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-115 (main-process side) | Lead: menu bar icon from the sprite's head with the streak; the compact card window and its placement; bridge methods `showCard`, `hideCard`, `setCardSize`, `completeOnboarding`; the floating pet waits until Para has hatched | `lead/san-115-tray-card` at `b5e3ce5` (worktree `.claude/worktrees/lead-b`) | In review, round 1 |
-| SAN-119 | Worker: problem catalog for LeetCode (3,332), CSES (400) and Codeforces (3,905), built by scripts, loaded at launch, searchable | `worker/san-119-catalog` at `e1d98bc` (worktree `.claude/worktrees/agent-ac6983be5414551ee`) | In review, round 1 |
+| SAN-115 (main-process side) | Lead: menu bar icon from the sprite's head with the streak; the compact card window and its placement; bridge methods `showCard`, `hideCard`, `setCardSize`, `completeOnboarding` | `lead/san-115-tray-card` at `ce749e7` (worktree `.claude/worktrees/lead-b`) | In review, round 2 (round 1: the card hid the Dock icon, could open on the wrong screen, and closing on a click elsewhere was untested; fixed) |
 | SAN-117 + SAN-118 (main-process side) | Lead: the two daily notifications from `dueReminder`; launch at login | `lead/san-117-reminders` (worktree `.claude/worktrees/lead-san-111`), stacked on the SAN-115 branch | Being built |
 
 ## Next
 
-1. Merge SAN-115's main-process side when its review passes. Then launch two UI workers from main: the compact card's page (`src/ui/windows/card/**`, design section 9: problem, Open problem, I solved it, the report form in place, the fed state; it calls `setCardSize` and `hideCard`) and the first-launch screens (`src/ui/screens/onboarding/**`, design section 10: hatch, meet Para, reminder times; it calls `completeOnboarding`; `App.tsx` shows it while `pet.hatched` is false; mock scenario `hatching`). When the card page merges, switch the floating pet's click from `showMainWindow` to `showCard({ anchor: 'pet' })` and update the pet tests.
-2. Merge SAN-119 when its review passes. Write decision 0014 (the catalog: sources, the Codeforces floor of 9,000 solves, load rules, unmapped tags).
+1. Merge SAN-115's main-process side when its review passes. Then launch two UI workers from main: the compact card's page (`src/ui/windows/card/**`, design section 9: problem, Open problem, I solved it, the report form in place, the fed state; it calls `setCardSize` and `hideCard`) and the first-launch screens (`src/ui/screens/onboarding/**`, design section 10: hatch, meet Para, reminder times; it calls `completeOnboarding`; `App.tsx` shows it while `pet.hatched` is false; mock scenario `hatching`). When the first-launch screens merge, also hold the floating pet back until Para has hatched (one condition in `PetWindowController.sync`, removed from the SAN-115 slice so nobody is left without a pet in between) and add the end-to-end test for it. When the card page merges, switch the floating pet's click from `showMainWindow` to `showCard({ anchor: 'pet' })` and update the pet tests.
 3. Finish SAN-117 and SAN-118's main-process side: a notifier port on the app context (faked in tests, recorded in end-to-end runs), `sendDueReminder` on the tick, clicking a notification opens the card; the login item set only in a packaged app; opened at login means no main window (macOS 13 and later does not say whether the app was opened at login, so the plan is: the setting is on and the Mac has been up for under three minutes).
 4. Tick the M2 checklist in the PRD when SAN-115, SAN-117 and SAN-118 are fully merged.
 5. M3 after the catalog: plan tables (migration 003), the `llm` module (load the `claude-api` skill first; look up the current model list), plan validation against the catalog, the Plan screen, the API key stored with Electron `safeStorage` outside the database, the daily loop drawing from the active plan, the graduation cap (`plansFinished`), and an in-app "refresh Codeforces" using the worker's pure transform.
@@ -61,6 +59,7 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 | SAN-114 | The floating pet window (slice 1, shared types, was `44b278d`) | `17bce45` |
 | SAN-112 + SAN-113 | Para drawn by code: four stages, eight moods, hatching, accessories, seed traits; the gallery at `#/gallery` | `73ff1b4` |
 | SAN-116 | Para comes alive: moods through the day, lines, checking and eating on report, the greeting, accessory unlocks, migration 002 | `63ec870` |
+| SAN-119 | The problem catalog: 3,332 LeetCode, 400 CSES and 3,905 Codeforces problems, built by scripts, loaded at launch, found by quick log | `848c2da` |
 
 ## Linear
 
@@ -101,4 +100,4 @@ None.
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0012` (`0012`: wiring the living pet; `0013`, the menu bar icon and card, arrives with the SAN-115 merge). `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
+See `docs/decisions/0001` to `0014` (`0012`: wiring the living pet; `0014`: the catalog). `0013` (menu bar icon and card) and `0015` (reminders and launch at login) arrive with their merges. `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
