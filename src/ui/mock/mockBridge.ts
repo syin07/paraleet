@@ -22,7 +22,9 @@ import { applyAttempt, EMPTY_PET_FACTS, stageFor } from '../../core/petFacts';
 import { DEFAULT_SETTINGS, type Settings } from '../../core/settings';
 import { displayedStreak, isFedOn } from '../../core/streak';
 import type { TopicId } from '../../core/topics';
+import { ACCESSORY_IDS } from '../../core/types';
 import type {
+  AccessoryId,
   AssignmentReason,
   DifficultyNorm,
   ParaDay,
@@ -49,6 +51,9 @@ interface MockState {
   settings: Settings;
   starterIds: number[];
   opened: string[];
+  unlockedAccessories: AccessoryId[];
+  equippedAccessories: AccessoryId[];
+  hatched: boolean;
 }
 
 // A few non-LeetCode problems so every platform shows up in the mock. Mock data only.
@@ -108,6 +113,9 @@ function baseState(): MockState {
     settings: { ...DEFAULT_SETTINGS },
     starterIds: seeded.map((problem) => problem.id),
     opened: [],
+    unlockedAccessories: [],
+    equippedAccessories: [],
+    hatched: true,
   };
 }
 
@@ -237,6 +245,11 @@ function todayView(state: MockState): TodayView {
       stage: stageFor(state.pet.growthSolves),
       growthSolves: state.pet.growthSolves,
       totalAttempts: state.pet.totalAttempts,
+      mood: isFedOn(streakState, MOCK_TODAY) ? 'content' : 'peckish',
+      line: null,
+      unlockedAccessories: ACCESSORY_IDS.filter((id) => state.unlockedAccessories.includes(id)),
+      equippedAccessories: ACCESSORY_IDS.filter((id) => state.equippedAccessories.includes(id)),
+      hatched: state.hatched,
     },
   };
 }
@@ -477,6 +490,14 @@ function createApi(state: MockState): ParaLeetApi {
       return { ok: true, problem, created: true };
     },
 
+    setEquippedAccessories: async ({ accessories }) => {
+      const locked = accessories.filter((id) => !state.unlockedAccessories.includes(id));
+      if (locked.length > 0) throw new Error(`Not unlocked yet: ${locked.join(', ')}`);
+      state.equippedAccessories = [...accessories];
+      changed();
+      return todayView(state);
+    },
+
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
@@ -523,6 +544,8 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
   /** The default: a user a few weeks in. */
   default: (state) => {
     midway(state);
+    state.unlockedAccessories = ['scarf', 'bow_tie'];
+    state.equippedAccessories = ['scarf'];
     assignToday(state);
   },
   /** First launch: nothing logged, the first starter problem assigned. */

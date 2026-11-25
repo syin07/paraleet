@@ -1,11 +1,11 @@
 // Today: the assignment for the current ParaLeet day and everything the Today screen shows.
-import type { StreakSummary, SwapCandidatesView, TodayView } from '../../bridge/contract';
+import type { PetSummary, StreakSummary, SwapCandidatesView, TodayView } from '../../bridge/contract';
 import { chooseDailyProblem, otherDueReviews, swapCandidates } from '../../core/assignment';
 import { addDays, weekdayIndex } from '../../core/day';
 import { stageFor } from '../../core/petFacts';
 import { dueDayOf, isDueOn } from '../../core/scheduler';
 import { displayedStreak, isFedOn } from '../../core/streak';
-import type { AssignmentInput } from '../../core/types';
+import { ACCESSORY_IDS, type AccessoryId, type AssignmentInput } from '../../core/types';
 import {
   getAssignment,
   listAssignmentsBefore,
@@ -14,6 +14,7 @@ import {
 } from '../../data/repos/assignments';
 import { countAttemptsOnDay, listFedDays } from '../../data/repos/attempts';
 import { listActiveCards } from '../../data/repos/cards';
+import { getPet, saveEquippedAccessories, type PetRecord } from '../../data/repos/pet';
 import { getProblem, listStarterQueue } from '../../data/repos/problems';
 import { currentMoment, type AppContext, type Moment } from './context';
 import { requireProblem, toDueReviewItems, toSummary } from './views';
@@ -72,9 +73,10 @@ export function buildTodayView(ctx: AppContext, moment: Moment): TodayView {
     const assignment = ensureAssignment(ctx, moment, input);
     const problem = assignment ? getProblem(ctx.db, assignment.problemId) : null;
     const others = otherDueReviews(input, assignment?.problemId ?? null);
+    const fed = isFedOn({ current: pet.currentStreak, longest: pet.longestStreak, lastFedDay: pet.lastFedDay }, today);
     return {
       today,
-      fed: isFedOn({ current: pet.currentStreak, longest: pet.longestStreak, lastFedDay: pet.lastFedDay }, today),
+      fed,
       attemptsToday: countAttemptsOnDay(ctx.db, today),
       assignment:
         assignment && problem
@@ -82,14 +84,43 @@ export function buildTodayView(ctx: AppContext, moment: Moment): TodayView {
           : null,
       dueReviews: toDueReviewItems(ctx.db, others, moment),
       streak: streakSummary(ctx, moment),
-      pet: {
-        seed: pet.seed,
-        stage: stageFor(pet.growthSolves),
-        growthSolves: pet.growthSolves,
-        totalAttempts: pet.totalAttempts,
-      },
+      pet: petSummary(pet, fed),
     };
   });
+}
+
+/** Accessories in the fixed order of `ACCESSORY_IDS`, dropping anything unknown. */
+function knownAccessories(stored: readonly string[]): AccessoryId[] {
+  return ACCESSORY_IDS.filter((id) => stored.includes(id));
+}
+
+function petSummary(pet: PetRecord, fed: boolean): PetSummary {
+  const unlocked = knownAccessories(pet.unlockedAccessories);
+  return {
+    seed: pet.seed,
+    stage: stageFor(pet.growthSolves),
+    growthSolves: pet.growthSolves,
+    totalAttempts: pet.totalAttempts,
+    // The full mood rules and speech lines arrive with SAN-128; until then Para is simply
+    // content when fed and peckish when not.
+    mood: fed ? 'content' : 'peckish',
+    line: null,
+    unlockedAccessories: unlocked,
+    equippedAccessories: knownAccessories(pet.equippedAccessories).filter((id) => unlocked.includes(id)),
+    hatched: pet.hatchedAt !== null,
+  };
+}
+
+/** Puts accessories on Para or takes them off. Only unlocked accessories can be worn. */
+export function setEquippedAccessories(ctx: AppContext, accessories: readonly AccessoryId[]): TodayView {
+  ctx.db.transaction(() => {
+    const unlocked = knownAccessories(getPet(ctx.db).unlockedAccessories);
+    const locked = accessories.filter((id) => !unlocked.includes(id));
+    if (locked.length > 0) throw new Error(`Not unlocked yet: ${locked.join(', ')}`);
+    saveEquippedAccessories(ctx.db, ACCESSORY_IDS.filter((id) => accessories.includes(id)));
+  });
+  ctx.notifyChanged();
+  return getToday(ctx);
 }
 
 export function getToday(ctx: AppContext): TodayView {

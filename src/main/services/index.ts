@@ -16,7 +16,7 @@ import {
   searchProblems,
 } from './problems';
 import { getReportContext, revealKeyInsight, submitReport } from './report';
-import { getSwapCandidates, getToday, swapToday } from './today';
+import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
 export type { AppContext } from './context';
 export { reconcile, type ReconcileResult } from './reconcile';
@@ -62,6 +62,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     searchProblems: (input) => searchProblems(ctx, input),
     parseProblemUrl: ({ url }) => parseProblemUrl(ctx, url),
     addProblem: (input) => addProblem(ctx, input),
+    setEquippedAccessories: ({ accessories }) => setEquippedAccessories(ctx, accessories),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

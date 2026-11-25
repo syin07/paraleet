@@ -8,7 +8,7 @@ The full product spec is in [`docs/PRD.md`](docs/PRD.md). Build progress is in [
 
 ## Run it
 
-You need macOS and Node.js 22.12 or newer.
+You need macOS and Node.js 22.13 or newer (the unit tests use Node's built-in SQLite).
 
 ```sh
 npm install

@@ -50,6 +50,14 @@ export function getPet(db: Db): PetRecord {
   return toPet(row);
 }
 
+export function saveEquippedAccessories(db: Db, accessories: readonly string[]): void {
+  db.run('UPDATE pet SET equipped_accessories = ? WHERE id = 1', [JSON.stringify(accessories)]);
+}
+
+export function saveUnlockedAccessories(db: Db, accessories: readonly string[]): void {
+  db.run('UPDATE pet SET unlocked_accessories = ? WHERE id = 1', [JSON.stringify(accessories)]);
+}
+
 export function savePetFacts(db: Db, facts: PetFacts): void {
   db.run(
     `UPDATE pet SET growth_solves = :growthSolves, total_attempts = :totalAttempts,
