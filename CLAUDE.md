@@ -38,6 +38,8 @@ npm run test:unit    # unit tests; add a path to narrow: npm run test:unit -- sr
 npm run test:ui      # Playwright against the mock bridge; writes artifacts/screenshots/
 npm run test:e2e     # builds, then runs the real Electron app end to end
 npm run build        # production build into out/
+npm run dist         # builds, then packs dist/ParaLeet-<version>.dmg (universal, ad hoc signed)
+npm run dist:check   # starts the packaged app from dist/ and checks it (run after dist)
 npm run seed:starter # regenerate seed/starter.json from live LeetCode metadata
 ```
 

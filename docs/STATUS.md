@@ -1,84 +1,78 @@
+DONE
+
 # ParaLeet status
 
-Last updated: 2026-11-25 (session 4, in progress. NOT done: three branches are unmerged; the In flight table is the truth)
+Last updated: 2026-11-25 (end of session 4). Milestones M1 to M4 are built and merged, except the one line that is the owner's: a week of his own daily use (SAN-126). No agent and no test run is in flight. On main: type check and lint clean, 1155 unit, 319 UI and 29 end-to-end tests pass.
+
+## How to run it and how to install it
+
+- **Run from the code:** `npm install`, then `npm run dev`. Data for this is kept apart, in `~/Library/Application Support/ParaLeet-dev`.
+- **Build the installer:** `npm run dist`. It writes `dist/ParaLeet-0.1.0.dmg` (about 221 MB), one file for Apple silicon and Intel Macs. One built from main at the end of session 4 is already there. `npm run dist:check` starts the packaged app and checks it (19 checks).
+- **Install it** (your own Mac, or a friend's): open the `.dmg`, drag ParaLeet to Applications, and follow `docs/INSTALL.md` for the one-time macOS warning. The installed app keeps its data in `~/Library/Application Support/ParaLeet`.
+- **Main is not pushed.** `git push origin main` was refused by this session's permission rules, and the lead does not work around a refusal. Main is ahead of `origin/main`; run `git push origin main` yourself.
 
 ## What works today
 
-**Milestones M1 and M2 are complete and merged.** Run `npm install`, then `npm run dev`.
-
-- First launch: an egg hatches, Para says hello, you pick two reminder times. Under a minute.
+- First launch: an egg hatches, Para says hello, you pick two reminder times, and you can add an Anthropic API key or skip that. Under a minute.
 - Para is a pixel-art parakeet drawn by code. It floats on the desktop in its own see-through window, follows the day (asleep, peckish, hungry, content), says a different line each day, checks and eats when you report a solve, greets you after days away, grows (egg, chick, fledgling, adult) and earns accessories you can put on in Settings.
 - Click Para, or the bird in the menu bar, for a small card: today's problem, "Open problem", "I solved it" (the report form opens right in the card), and the streak. The menu bar shows Para's mood and the streak.
-- Para picks one problem a day: a due review first, otherwise the next starter problem. "Open problem" opens the browser; "I solved it" records a rating in two clicks.
+- Para picks one problem a day: a due review first, then the next problem of your active plan, otherwise the next starter problem. "Open problem" opens the browser; "I solved it" records a rating in two clicks.
 - Two reminders a day at most (16:00 and 21:00 unless you change them), each naming the problem, none once Para is fed. A click on one opens the card.
 - Every reported problem gets a review card (FSRS). A problem rated Again is tomorrow's problem. Up to five other due reviews are listed, never a count. Today's problem can be swapped.
 - Any problem can be logged from Today by search or by pasting its link (LeetCode, CSES, Codeforces or another site). The Problems screen lists everything logged, with filters, attempt history, notes, retire and reset.
+- **Plan:** with an API key saved, pick one to four topics, platforms, a level and a size, and Para asks Claude for a staged plan made only of problems in the built-in catalog. Review the draft (remove, move up and down, swap), activate it, and follow progress by topic, stage and pattern group. Without a key the screen says what plans need; everything else works.
+- **Stats:** current and longest streak, total solves, reviews done, a calendar of fed days, solves per week and topic coverage, for 12 weeks, 6 months or 1 year.
+- **Settings:** reminder times, day start, review schedule, Para on the desktop, launch at login, accessories, the API key and model for plans, and **Data**: "Export…" saves a complete copy of your data as one file; "Import…" shows what is in a file next to what is in the app and asks before replacing; the data an import replaces is kept as `paraleet.sqlite3.before-import`; "Show in Finder" shows where the database is.
 - The streak holds across the 04:00 boundary, restarts, sleep and time-zone changes. All data is one SQLite file.
-- Stats shows the current and longest streak, total solves, reviews done, a calendar of fed days, solves per week and topic coverage, for 12 weeks, 6 months or 1 year.
-- Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories), and now has "Learning plans": add, test and remove your Anthropic API key, and choose the model. The key is stored encrypted and never shown back.
-- The Plan screen works: with an Anthropic API key saved in Settings, pick one to four topics, generate a plan, review the draft (remove, reorder, swap), activate it, and the daily problem comes from the plan. Without a key the screen says what plans need.
-- Not in the app yet: the buttons for export and import in Settings (the work underneath is merged), the optional API key step of the first launch, and the installer. All three are built on branches and not merged.
+- An installed copy writes `paraleet.log` next to the database (one line per launch, warnings and failures, never the API key), so a friend can send it when something goes wrong.
 
 ## Notes for the owner
 
-- **Please try Para with a real mouse.** Tests drive the pet window from inside the app, so one thing is unconfirmed by a person: with another app in front, hover Para (a bubble appears), click it (the small card opens beside it; a second click closes it), drag it, right-click it (a menu), and click on the empty area around it (the click should reach the window underneath). Run `npm run dev` to try.
-
-- **Mobbin needs a paid plan.** The Mobbin connector answered "requires a paid plan", so screens are designed from PRD section 11 and well-known app patterns, as section 13 allows. `docs/design-references.md` says so at the top. Nothing is blocked.
-- **Please click a real reminder once.** Tests click the notification from inside the app. With another app in front, a click on a real "Para is peckish" notification should show the small card and not bring the main window forward. The first notification makes macOS ask for permission.
-- **Playwright MCP is not connected** in this session. Playwright is used as an npm library instead (same screenshots and end-to-end tests). Nothing is blocked.
+- **Your week (SAN-126).** The last M4 line is a week of your own daily use. Install from the `.dmg` and use it; anything that week turns up becomes a Linear issue.
+- **Hand checks nobody but a person can do.** (1) With another app in front, hover Para (a bubble), click it (the small card opens; a second click closes it), drag it, right-click it (a menu), and click the empty area around it (the click should reach the window underneath). (2) Click a real "Para is peckish" notification: the small card should show, and the main window should not come forward. The first notification makes macOS ask for permission. (3) Open the app from the `.dmg` on a Mac that has never seen it, ideally an Intel Mac too: the Intel half was only started under Rosetta here. (4) Log out and in once: only Para and the menu bar icon should appear, and the login item should still be there.
+- **No live call to Anthropic was made by the build.** Plan generation is tested against a scripted model and saved answers. The first real plan you generate is the first real call. The server-side refusal fallback is on for plan generation (decision 0016, item 11).
+- **The packaged-app check and your login items.** In session 3, `npm run dist:check` switched a real "ParaLeet" login item on and off again on this Mac. Since session 4 the check uses a copy of the app with its own identifier (`app.paraleet.mac.packaged-check`), so it cannot touch the login item of a real install, and it switches its own off before it ends. If System Settings, General, Login Items ever shows a stray "ParaLeet" entry while the app is not installed, remove it.
+- **A worker once left a preview server running** (session 3, pid 45616; it later said it stopped it). Session 4 left no process running.
+- **Mobbin needs a paid plan**, so screens were designed from PRD section 11 and well-known app patterns, as section 13 allows. `docs/design-references.md` says so at the top. **Playwright MCP was not connected**; Playwright is used as an npm library instead. Neither blocked anything.
+- **Two small things were filed, not built** (neither is on the M1 to M4 checklist): SAN-136 (an imported file that makes the app quit while it opens should be undone at the next launch; no data is at risk) and SAN-137 (the sidebar logo and empty states show a sample bird, not your own Para).
 
 ## Current milestone
 
-M3 and M4, side by side. M3 lacks the Plan screen (SAN-130) and the first-launch API key step. M4 lacks export and import (SAN-132, then the "Data" group in Settings) and the installer (SAN-125). The PRD checklist for M3 and M4 is not ticked yet: tick each line when its last branch merges.
+M1 to M4 are complete except SAN-126, the owner's week. The PRD checklist in section 12 is ticked to match.
 
 ## In flight
 
-**Session 4 (2026-11-25).** Merged so far this session, both through the gate: SAN-132 main-process side, export and import (`8863c92`), and SAN-130, the Plan screen (`acb4ec8`). Main is NOT pushed: `git push origin main` was refused by the session's permission rules, so the owner pushes (see Blockers).
+Nothing. No worker, reviewer or test run is in flight. The only worktree is the main checkout, and the only branches are `main` and `lead/m2-contract` (two superseded work-in-progress commits from session 1, not in main; it can be deleted after a look).
 
-| Issue | What | Branch (worktree) | State and what to do |
-| --- | --- | --- | --- |
-| SAN-132 (UI side) | The "Data" group in Settings | `worker/san-132-data-group` (`.claude/worktrees/agent-a4b2b520d42c6a8ad`), stacked on main `acb4ec8` | Review round 1 **blocked** on one finding (the confirm dialog could leave out the line about replacing an earlier backup). The worker is fixing it. Then: suites, fresh reviewer, the lead's real-app walk (`tests/e2e/data-screen.spec.ts`, drafted in the session scratchpad), merge |
-| SAN-123 (rest) | Step 4 of the first-launch flow: the optional API key | `worker/san-123-onboarding-key-2` (`.claude/worktrees/agent-a966378b9d8757b05`), based on main `e29ef85`; the older `worker/san-123-onboarding-key` is superseded | Review round 2 **blocked** on two missing tests (double-finish; a slow answer). The worker is fixing them. Then: rebase on main, suites (its end-to-end tests have never been run), fresh reviewer, merge |
-| SAN-125 | The `.dmg`, the icon, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` (`.claude/worktrees/agent-ab3ac71efafc0b677`), rebased on main `acb4ec8`, plus one commit fixing two import messages | Check passes (1150 unit). To do: rebase after the two branches above merge; `npm run dist`, `npm run dist:check`; start the Intel half once under Rosetta with 40 seconds and no suite running; suites; reviewer; merge |
-
-After those: a lead branch with two real-app tests through the screens (`plan-screen.spec.ts` passes on main's tree, `data-screen.spec.ts` is drafted); tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` (Plan, Stats); screenshot sheets on Linear for the "Data" group and the onboarding step (SAN-130's is attached); `npm ci` in the main checkout, then all suites on main; DONE.
-
-Follow-up to file on Linear (not on the M1 to M4 checklist): an imported database that makes the app die, not throw, while it is opened leaves the app unable to start until the files are fixed by hand (the data is safe under `paraleet.sqlite3.before-import`). A marker kept until the first successful open after a swap would cover it.
-
-Leftovers that are not work in flight: `lead/m2-contract` (two superseded work-in-progress commits) can be deleted after a look.
+Merged in session 4, all through the gate: `8863c92`, `acb4ec8`, `a0f41f7`, `6e67562`, `bd47257`, `5086c9f` (see Done).
 
 ## Next
 
-1. Set the goal again, read this file, then finish the four rows above in this order: SAN-132, SAN-130, the onboarding step, SAN-125. One end-to-end run at a time.
-2. Then the "Data" group worker, the docs and Linear items listed above, the suites on main, and DONE at the top of this file with how to run and install.
-3. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; the packaged-app check switched a real login item on and off again; a worker once left a preview server running (pid 45616; it later said it stopped it); and the hand checks under "Notes for the owner".
+1. The owner's week (SAN-126). Fix what it turns up, each as its own Linear issue through the gate.
+2. Then, if wanted: SAN-136 and SAN-137.
+3. Nothing on the PRD's "Later" list is started until the owner asks for it.
 
 ## Cold start: what is not written down anywhere else
 
-**Agents do not survive a cleared session.** The stats worker cannot be continued with `SendMessage`. For the Stats screen, brief a new `implementer` and tell it to work on top of main once the rules are merged. A worktree left by an old agent may be locked: `git worktree unlock <path>` before removing it.
+**Agents do not survive a cleared session.** A worker from an earlier session cannot be continued with `SendMessage`: brief a new `implementer`, tell it which branch to start from (`git checkout -b <new> <existing branch>`), and give it the reviewer's findings word for word. A worktree left by an old agent may be locked: `git worktree unlock <path>` before removing it.
 
-**Lessons from this session's reviews.** Five branches went to review; four were blocked in round 1, each time for the same reason: an acceptance criterion in the brief had no test that would fail if it broke (where the card opens after a notification click; the card's failed-load state; a leap day). Before sending a branch to review, go down the criteria in the brief and name the test for each one. The reviewers' non-blocking notes were worth fixing before the merge every time.
+**What the reviews of sessions 3 and 4 taught.** Most blocked rounds had the same cause: an acceptance criterion with no test that would fail if it broke, or a test that could not fail (a key press that never reaches a dialog because focus has left it; a file that the test itself created; a junk journal that SQLite deletes by itself). Before sending a branch to review, go down the criteria and name the test for each, and for each new test break the code once and see it fail. The reviewers' non-blocking notes were worth fixing before the merge every time. Give a reviewer the claims and the criteria, never the conclusion.
 
-**Never `cd` in the lead's shell, and never rebase a branch from the main checkout.** Session 3 learned both the hard way. A bare `cd <worktree>` moves the whole session into that worktree (the harness then treats it as the working directory). Use `git -C <path>` and `npm --prefix <path>`. And `git -C <main checkout> rebase --onto A B <branch>` checks `<branch>` out in the main checkout: run a rebase only inside the worktree that has the branch checked out, and check `git -C /Users/sandy/projects/ParaLeet rev-parse --abbrev-ref HEAD` says `main` before every merge.
+**Stack branches instead of rebasing after every merge.** When several branches are ready, rebase each onto the one that merges before it and run the suites on each stacked tip. Merging them in order with `--no-ff` then gives main exactly the trees that were tested, and no branch needs a second full run.
 
-**A lone end-to-end failure is not always load.** The one in session 3 (`tray.spec.ts`, "Settings…" after "Open ParaLeet") was a real race in the app (SAN-134). Read the error context before rerunning.
+**Never `cd` in the lead's shell, and never rebase a branch from the main checkout.** A bare `cd <worktree>` moves the whole session into that worktree. Use `git -C <path>` and `npm --prefix <path>`, or a subshell `(cd <path> && ...)`. Run a rebase only inside the worktree that has the branch checked out, and check `git -C /Users/sandy/projects/ParaLeet rev-parse --abbrev-ref HEAD` says `main` before every merge.
 
-**Read the numbers before writing them.** A merge message in session 3 was written with test counts guessed ahead of the log, and they were wrong. Print the counts, then write the message.
+**A lone end-to-end failure is not always load. Read the error first.** Session 3's (`tray.spec.ts`, "Settings…" after "Open ParaLeet") was a real race in the app (SAN-134). Session 4's (`tray.spec.ts`, `hideCard`) was a race in the test: the card closes itself a moment after it answers, so the test driver can lose the page before it hears back. Both were fixed, not rerun.
 
-**Check exit codes.** `npm run test:ui 2>&1 | tail -3 && git commit ...` commits past a failing test, because the pipe's exit code is `tail`'s. This happened once this session (caught before the merge). Run each suite to a log file and print `$?`.
+**Read the numbers before writing them, and check exit codes.** A merge message in session 3 had test counts guessed ahead of the log. And `npm run test:ui 2>&1 | tail -3 && git commit ...` commits past a failing test, because the pipe's exit code is `tail`'s. Run each suite to a log file, print `$?`, then print the counts.
 
-**Do not assert heights that depend on how text wraps** in UI tests. The web font may or may not have loaded when the test measures, and a cell's height changed between 74 and 90 points from run to run. Assert positions (same row, same column) instead.
+**One Playwright run at a time in one worktree; several worktrees at once are fine** for UI runs (each has its own port). End-to-end runs are kept to one at a time on the whole Mac. A worker that waits "until no Playwright is running anywhere" waits forever while the lead runs suites: tell workers not to wait for other worktrees.
+
+**Do not assert heights that depend on how text wraps** in UI tests. Assert positions (same row, same column) instead.
 
 **The Anthropic SDK (1.14), as found by running it.** `messages.parse` throws on an answer that is cut off or is not JSON, so the client calls `messages.create` and reads the text itself. The SDK sends the key as `Authorization: Bearer`, not `x-api-key`; tests accept either. The client takes a `fetch` option, which is how `src/llm/anthropicClient.test.ts` runs without the network. End-to-end runs always get the scripted model (`scriptedModels` in `src/main/index.ts`), with or without `PARALEET_E2E_LLM_ANSWERS`.
 
-**Decided for M4, not yet in the decision log** (write `docs/decisions/0017-stats-and-data.md` on the M4 branch; `src/data/transfer.ts` already points at it):
-
-- Stats. A solve is an attempt rated Hard, Good or Easy. A fed day is a day with any attempt, also one rated Again. The heatmap colors days by attempts (0, 1, 2, 3, 4 or more; the tokens `heat-0` to `heat-4` exist in `src/ui/styles.css`). The weekly bars count solves. Topic coverage counts different problems solved per topic. Weeks start on Monday, in ParaLeet days. Ranges: 12, 26 and 53 weeks. Attempts dated after today count in totals but never light a future day. Streaks are not computed in `buildStats`: the `getStats` service takes them from the pet facts (`displayedStreak` for the current one). The service builds `StatsAttempt` rows from the attempts joined with each problem's topics.
-- Export. `VACUUM INTO` a file beside the target, then rename: a complete, compact copy, safe while the app runs. The API key is not in it.
-- Import. Check the file (`inspectDatabaseFile`: a real ParaLeet database, not newer than the app, passes SQLite's integrity check), show the user what is in it, then copy it next to the database as `paraleet.sqlite3.import` and restart. At launch, before the database is opened, `applyStagedImport` checks it again and swaps it in; the old database becomes `paraleet.sqlite3.before-import` (one backup is kept). The open database is never replaced while the app runs. Rejected: swapping the connection in place (every holder of the database would need to follow).
-- Import, still to build. Ports on the service context: `files.chooseSavePath`, `files.chooseOpenPath`, `files.reveal`, and `restart` (main: `dialog`, `shell.showItemInFolder`, `app.relaunch()` then `app.exit(0)`; in end-to-end runs the paths come from test hooks and restart only quits, and the test launches the app again on the same folder). The UI never passes a file path to main: `chooseImport` remembers the path in `ctx.session` and `applyImport` takes no input. Bridge methods: `getDataInfo`, `exportData`, `chooseImport`, `applyImport`, `cancelImport`, `showDataInFinder`. In `src/main/index.ts`, call `applyStagedImport(userData)` before `openDatabase`, and log a rejected file.
-- Log file. `paraleet.log` in the data folder, appended, rotated at about 1 MB to `paraleet.log.old`. It gets the launch self-check's failures, bridge failures (`registerBridge`'s `onFailure` already exists on the M3 branch), failed tick steps and uncaught errors. Never an input, never the key.
-- Installer. See SAN-125's notes. This Mac is arm64, macOS 26.6.
+**Packaging, as found by running it.** This Mac is arm64, macOS 26.6. `npm run dist` builds a universal app signed ad hoc (`identity: "-"`); nothing of `electron-builder` ships. The Intel half takes 35 to 75 seconds to start under Rosetta the first time; `dist:check` waits a minute. A copy of the app can be given its own identifier with `plutil` and signed again with `codesign --force --deep --sign -`, and it still starts. `start()` in `src/main/index.ts` runs inside a promise, so a throw from it is a rejection, not an uncaught exception: it is caught where `start` is called (`startFailed`).
 
 ## Done
 
@@ -110,14 +104,20 @@ Leftovers that are not work in flight: `lead/m2-contract` (two superseded work-i
 | SAN-131 | Settings, "Learning plans": add, test and remove the API key; choose the model | `aa94c95` |
 | SAN-124 (step 3) | The Stats screen | `f69fc27` |
 | SAN-135 | An empty model answer is said at once; clearer words for a request Anthropic does not accept | `ce82f0e` |
+| SAN-132 (main-process side) | Export and import of all data as one file: the copy, the checks, the launch-time swap with a backup, six bridge methods | `8863c92` |
+| SAN-130 | The Plan screen: pick topics, generate, review and edit a draft, activate, follow progress | `acb4ec8` |
+| SAN-123 (first-launch step) | The optional fourth step of the first launch: add an Anthropic API key. Closes SAN-123 | `a0f41f7` |
+| SAN-132 (UI side) | Settings, "Data": Export, Import with a confirm dialog, what the last restart did, Show in Finder. Closes SAN-132 | `6e67562` |
+| Lead's M3 and M4 slice | Two real-app tests through the Plan screen and through Settings, Data; as-built notes for Plan and Stats | `bd47257` |
+| SAN-125 | The `.dmg`, the app icon, `paraleet.log`, a failed start that quits, `npm run dist:check`, `docs/INSTALL.md`. Closes M4 except the owner's week | `5086c9f` |
 
 ## Linear
 
 - Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4. Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (one per issue: they are one label group).
-- M1 and M2: all Done.
-- M3: SAN-119 to SAN-122, SAN-131 and SAN-135 Done. SAN-130 (Plan screen) In Review. SAN-123 In Progress: only the first-launch API key step is open.
-- M4: SAN-124 (Stats) and SAN-134 (the lost "Settings…" request) Done. SAN-132 (export and import) In Review. SAN-125 (installer) In Progress. SAN-126 is the owner's week.
-- Every open issue has a comment from the end of session 3 with its branch, its tip and what is left.
+- M1, M2 and M3: all Done.
+- M4: SAN-124 (Stats), SAN-132 (export and import), SAN-134 and SAN-125 (installer) Done. SAN-126 is the owner's week and is the only open milestone issue.
+- Backlog, no milestone: SAN-136 and SAN-137.
+- Screenshot sheets are attached to SAN-124, SAN-130, SAN-131, SAN-132 and SAN-123.
 
 ## How the loop is run in this repo
 
@@ -132,26 +132,20 @@ Leftovers that are not work in flight: `lead/m2-contract` (two superseded work-i
 
 ## Watch list (not blocking)
 
-- A failed launch self-check (`reconcile`) is only written to the console. A packaged app's user cannot see that. Add a log file in M4.
 - `lead/m2-contract` is a leftover work-in-progress branch from session 1 (two commits, not in main, superseded by the SAN-114 merge). It can be deleted once someone has looked at it.
-- `scripts/contact-sheet.ts` builds the screenshot sheet for a UI issue; run it from the main checkout now that it is merged.
-
-- The end-to-end smoke test failed once under heavy load before its timeouts were raised in SAN-111. Treat a lone e2e failure under load as a rerun.
-
-- `isRendererUrl` (the bridge's sender check) has only been run against the unpackaged build. Confirm it inside the packaged app in M4, including an install path with unusual characters.
-- The renderer bundle is not minified (about 600 kB). Harmless for a local app; revisit at packaging.
-
-- A real desktop screenshot cannot be taken from this session: `screencapture` and the computer-use tools have no screen-recording permission, and the lead does not raise permission prompts on the owner's Mac. The pet window is checked through the real Electron windows instead (window flags, bounds, Dock state, and `capturePage` pixels for see-through corners).
-- Reviewers and workers must not run two Playwright runs at once in one worktree; they interfere.
-- The sidebar logo and empty states will use a fixed sample seed after SAN-112 merges; wire the pet's own seed in the lead's integration slice.
-- Settings worker notes for later: `Field`'s `Input` has no `aria-invalid` and forces `w-full`; `Page` in `Layout.tsx` is capped at 960px with no width option.
+- The renderer bundle is not minified (about 600 kB). Harmless for a local app.
+- A real desktop screenshot cannot be taken from a session: `screencapture` and the computer-use tools have no screen-recording permission, and the lead does not raise permission prompts on the owner's Mac. Windows are checked through the real Electron windows instead (window flags, bounds, Dock state, and `capturePage` pixels), and screens through Playwright screenshots of the real app (`artifacts/screenshots/e2e-*.png`).
+- The sidebar logo and the empty states use a fixed sample bird (SAN-137).
+- Settings notes for later: `Field`'s `Input` has no `aria-invalid` and forces `w-full`; `Page` in `Layout.tsx` is capped at 960px with no width option. The shared `Modal` always shows its close icon, also where a dialog cannot be closed (it then does nothing).
+- The Electron switch that lets the app binary run as plain Node is left on in the packaged app (decision 0018, Limits). Hardening for later.
+- First launch, step 3: if the small "Skip" is pressed before the app knows whether a key can be stored, and the finish then fails, the dots can change from three to four. Nothing is lost.
 
 ## Blockers
 
-None. Nothing is waiting on the owner. The M4 line "a week of the owner's own daily use" (SAN-126) is the owner's and starts when he likes; it is easier once the installer exists.
+Nothing blocks the build. One thing waits on the owner: `git push origin main`, which this session was not allowed to run. And the one open line of M4 is the owner's week (SAN-126).
 
 ## Decisions since last entry
 
-In main: `docs/decisions/0001` to `0017`. `0016` is learning plans, the model, the API key and plain errors across the bridge (it gained: a finished plan stores the ID of the attempt that finished it; the plan records the model that answered). `0017` is stats; its export and import part is on `lead/san-132-export-import` and arrives with that merge. `0018` (the installer, the log file, the packaged-app check) is on `lead/san-125-installer`.
+In main: `docs/decisions/0001` to `0018`. `0017` is stats, and export and import (item 12 holds the rare cases the reviews hardened: an import that stopped half way is undone at the next launch, a journal left by a crash cannot reach a staged file, a failed import is kept as `paraleet.sqlite3.import-failed`, and Settings is told when a backup was put back). `0018` is the installer, the log file, a failed start, and the packaged-app check with its own identifier.
 
-Decided in session 3 and not in a decision file yet, to add to `docs/design-references.md` as "as built" notes when the screens merge: Stats tooltips use the raised surface and the topic column is 132px; on the Plan screen an active plan has no "Edit", reordering is up and down buttons, swap choices open as a list under the row, "Remove" does not ask, activating a draft over an active plan asks first, and "Create a plan" is offered while a plan is active.
+As-built notes are in `docs/design-references.md` for Plan (section 6), Stats (7), Settings and its Data group (8) and the first-launch flow (10).

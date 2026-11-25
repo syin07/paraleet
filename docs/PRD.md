@@ -360,15 +360,15 @@ Build in vertical slices. Each milestone ends with something the owner can use, 
 **M3. Catalog and learning plans**
 
 - [x] Catalog seeded for all three platforms by scripts in the repo, with validation
-- [ ] Topic picker, plan generation and schema validation with one retry
-- [ ] No plan ever contains a problem that is not in the catalog (tested with a faked bad model response)
-- [ ] Plan review, edit and activate; daily loop draws from the active plan
-- [ ] App works with no API key; the key is stored encrypted
+- [x] Topic picker, plan generation and schema validation with one retry
+- [x] No plan ever contains a problem that is not in the catalog (tested with a faked bad model response)
+- [x] Plan review, edit and activate; daily loop draws from the active plan
+- [x] App works with no API key; the key is stored encrypted
 
 **M4. Ready for a friend**
 
-- [ ] Stats screen; export and import
-- [ ] A `.dmg` build that installs on a second Mac, with a one-page install note covering the unsigned-app warning
+- [x] Stats screen; export and import
+- [x] A `.dmg` build that installs on a second Mac, with a one-page install note covering the unsigned-app warning
 - [ ] A week of the owner's own daily use with no data loss; fix what that week turns up
 
 **Later:** Codeforces verification by handle, LeetCode verification, history import, pattern-level scheduling. Do not start any of these, or ask about them, until the owner requests one.
