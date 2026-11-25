@@ -3,6 +3,7 @@ import { Select } from '../../components/Field';
 import { QueryNotice } from '../../components/Layout';
 import { Toast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { DataGroup } from './DataGroup';
 import { LearningPlansGroup } from './LearningPlansGroup';
 import { AccessoryChips, DraftInput, Group, Row, Segmented, sameValue, type SegmentOption } from './SettingsParts';
 import { useSettingsModel, type RowKey } from './useSettingsModel';
@@ -165,6 +166,8 @@ export function SettingsScreen() {
           </div>
         </Row>
       </Group>
+
+      <DataGroup />
 
       <Toast message={model.toastMessage} />
     </div>

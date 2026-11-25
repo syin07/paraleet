@@ -82,16 +82,23 @@ interface MockState {
 /** Export and import in the mock: there are no files, so the dialogs' answers are scripted. */
 interface MockDataState {
   /** What the open dialog "picks": a good backup, a file that is not ParaLeet's, one from a newer ParaLeet, or nothing. */
-  importFile: 'good' | 'not-paraleet' | 'newer' | 'none';
+  importFile: 'good' | 'empty' | 'not-paraleet' | 'newer' | 'none';
   /** What saving a copy does: works, is cancelled in the dialog, or fails. */
   save: 'ok' | 'cancel' | 'fails';
   /** True between a good `chooseImport` and the yes or no that follows. */
   pending: boolean;
   hasBackup: boolean;
   lastImport: DataInfo['lastImport'];
+  /** Applying the chosen file fails (main then forgets the file). */
+  applyFails: boolean;
+  /** The database path is very long. */
+  longPath: boolean;
+  /** Reading the data details fails. */
+  infoFails: boolean;
 }
 
 const MOCK_DATA_PATH = '/Users/you/Library/Application Support/ParaLeet/paraleet.sqlite3';
+const MOCK_LONG_DATA_PATH = `/Users/someone.with.a.long.name/Library/Application Support/ParaLeet/a-very-long-folder-name-that-keeps-going-and-going/another-deeply-nested-folder-for-the-test/paraleet.sqlite3`;
 /** The backup the mock's open dialog "picks". */
 const MOCK_IMPORT_SUMMARY: DataSummary = {
   attempts: 214,
@@ -177,7 +184,7 @@ function baseState(): MockState {
     celebration: null,
     plans: emptyPlanState(),
     statsFail: false,
-    data: { importFile: 'good', save: 'ok', pending: false, hasBackup: false, lastImport: null },
+    data: { importFile: 'good', save: 'ok', pending: false, hasBackup: false, lastImport: null, applyFails: false, longPath: false, infoFails: false },
   };
 }
 
@@ -718,13 +725,16 @@ function createApi(state: MockState): ParaLeetApi {
       };
     },
 
-    getDataInfo: async () => ({
-      path: MOCK_DATA_PATH,
-      summary: dataSummary(state),
-      hasImportBackup: state.data.hasBackup,
-      importBackupName: 'paraleet.sqlite3.before-import',
-      lastImport: state.data.lastImport,
-    }),
+    getDataInfo: async () => {
+      if (state.data.infoFails) throw new Error('The database could not be read.');
+      return {
+        path: state.data.longPath ? MOCK_LONG_DATA_PATH : MOCK_DATA_PATH,
+        summary: dataSummary(state),
+        hasImportBackup: state.data.hasBackup,
+        importBackupName: 'paraleet.sqlite3.before-import',
+        lastImport: state.data.lastImport,
+      };
+    },
     exportData: async () => {
       if (state.data.save === 'cancel') return { saved: false };
       if (state.data.save === 'fails') throw new Error('The copy could not be saved there. Choose another place and try again.');
@@ -749,12 +759,20 @@ function createApi(state: MockState): ParaLeetApi {
         chosen: true,
         ok: true,
         fileName: 'ParaLeet backup 2026-10-31.sqlite3',
-        incoming: { ...MOCK_IMPORT_SUMMARY },
+        incoming:
+          state.data.importFile === 'empty'
+            ? { attempts: 0, problems: 0, firstDay: null, lastDay: null, longestStreak: 0 }
+            : { ...MOCK_IMPORT_SUMMARY },
         current: dataSummary(state),
       };
     },
     applyImport: async () => {
       if (!state.data.pending) throw new Error('Choose a file to import first.');
+      if (state.data.applyFails) {
+        // Main forgets the file whether or not the import worked.
+        state.data.pending = false;
+        throw new Error('The import failed and your data was not changed. Choose the file again to retry.');
+      }
       // The real app restarts on the imported data. The mock keeps its own and says what a
       // restart would: an import was applied and the old data is kept as a backup.
       state.data.pending = false;
@@ -1031,6 +1049,30 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     midway(state);
     assignToday(state);
     state.data.lastImport = { status: 'rejected', reason: 'That file is damaged and cannot be imported. Your data was not changed.' };
+  },
+  /** Data: the file picked for import has no attempts in it. */
+  'data-import-empty': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.importFile = 'empty';
+  },
+  /** Data: applying the chosen import fails. An earlier backup exists. */
+  'data-apply-fails': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.applyFails = true;
+  },
+  /** Data: the database path is very long. */
+  'data-long-path': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.longPath = true;
+  },
+  /** Data: the data details cannot be read. */
+  'data-info-fails': (state) => {
+    midway(state);
+    assignToday(state);
+    state.data.infoFails = true;
   },
   /** More than five reviews due, to check the cap of five. */
   backlog: (state) => {
