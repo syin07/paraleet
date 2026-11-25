@@ -1,0 +1,204 @@
+@import 'tailwindcss';
+
+/*
+ * ParaLeet theme. Tokens come from docs/design-references.md, section B. Tailwind's default
+ * colors, text sizes and radii are cleared so only these tokens can be used:
+ *   bg-canvas bg-sunken bg-surface bg-raised   text-fg text-fg-secondary text-fg-muted
+ *   border-line border-line-subtle             bg-accent text-accent text-on-accent
+ *   text-easy text-medium text-hard-text       text-xs sm base md lg xl 2xl
+ *   rounded-xs sm md lg full
+ * Orange is the only accent. Green, amber and red are for difficulty and ratings only.
+ */
+@theme {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  --color-canvas: #1a1a1a;
+  --color-sunken: #141414;
+  --color-surface: #262626;
+  --color-raised: #303030;
+  --color-raised-hover: #383838;
+
+  --color-line: #3e3e3e;
+  --color-line-subtle: #2e2e2e;
+  --color-line-strong: #4a4a4a;
+
+  --color-fg: #efefef;
+  --color-fg-secondary: #a8a8a8;
+  --color-fg-muted: #999999;
+  --color-on-accent: #1a1a1a;
+
+  --color-accent: #ffa116;
+  --color-accent-hover: #ffb340;
+  --color-accent-pressed: #e08a00;
+  --color-accent-subtle: rgb(255 161 22 / 0.12);
+  --color-accent-border: rgb(255 161 22 / 0.4);
+
+  --color-easy: #2cbb5d;
+  --color-medium: #ffb800;
+  --color-hard: #ef4743;
+  --color-hard-hover: #f25c58;
+  --color-hard-pressed: #d93c38;
+  --color-hard-text: #ff6b66;
+
+  --color-overlay: rgb(0 0 0 / 0.6);
+
+  --color-heat-0: #262626;
+  --color-heat-1: #5c3d0f;
+  --color-heat-2: #8f5a0e;
+  --color-heat-3: #c77a0f;
+  --color-heat-4: #ffa116;
+
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  --text-*: initial;
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-sm: 12px;
+  --text-sm--line-height: 16px;
+  --text-base: 13px;
+  --text-base--line-height: 20px;
+  --text-md: 15px;
+  --text-md--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 22px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 36px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  /* Pet text only: speech bubbles, the pet's mood line, the hatching flow. */
+  --font-pixel: 'Press Start 2P', 'Silkscreen', ui-monospace, monospace;
+
+  --shadow-*: initial;
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+/* Keyboard focus on every control: a 2px canvas gap, then a 2px orange ring. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px #1a1a1a,
+      0 0 0 4px #ffa116;
+  }
+}
+
+/* Small caps section headers: "DUE FOR REVIEW". */
+@utility section-label {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-fg-muted);
+}
+
+/* The window's drag strip (hidden title bar). Controls inside it must opt out with app-no-drag. */
+@utility app-drag {
+  -webkit-app-region: drag;
+}
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Pixel art is always scaled with nearest-neighbor. */
+@utility pixelated {
+  image-rendering: pixelated;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    cursor: default;
+    overflow: hidden;
+  }
+  input,
+  textarea,
+  [data-selectable] {
+    user-select: text;
+  }
+  button {
+    cursor: default;
+  }
+  ::selection {
+    background: rgb(255 161 22 / 0.35);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #3e3e3e;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@utility animate-rise-in {
+  animation: rise-in 200ms ease-out;
+}
+@utility animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+@utility animate-slide-in-right {
+  animation: slide-in-right 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
