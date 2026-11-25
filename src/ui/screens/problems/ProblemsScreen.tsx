@@ -257,7 +257,9 @@ export function ProblemsScreen() {
           }}
         />
       )}
-      {reportFor !== null && <ReportDialog problemId={reportFor} onClose={() => closeReport(reportFor)} />}
+      {reportFor !== null && (
+        <ReportDialog key={reportFor} problemId={reportFor} onClose={() => closeReport(reportFor)} />
+      )}
     </div>
   );
 }

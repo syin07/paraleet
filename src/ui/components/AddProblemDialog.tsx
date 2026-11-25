@@ -1,7 +1,7 @@
 // "Add a problem": paste a link, see what ParaLeet recognizes, fill in the rest. Shared by the
 // Problems screen and Today's quick log (docs/design-references.md, section 5).
 import { Check } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ParsedProblemUrl, ProblemSummary } from '../../bridge/contract';
 import { TOPICS, type TopicId } from '../../core/topics';
 import { api } from '../bridge';
@@ -98,6 +98,15 @@ export function AddProblemDialog({ initialUrl = '', solvedToday = false, onAdded
       : null;
   const canAdd = recognized !== null && (known !== null || (title.trim() !== '' && !ratingProblem));
 
+  // False once the dialog is gone: an add that finishes after Cancel must not open anything.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   async function submit(): Promise<void> {
     if (!recognized || !canAdd) return;
     if (known) {
@@ -113,12 +122,13 @@ export function AddProblemDialog({ initialUrl = '', solvedToday = false, onAdded
         difficultyRaw: difficultyRaw(),
         topics,
       });
+      if (!mounted.current) return;
       if (added.ok) onAdded(added.problem, added.created, report);
       else setSubmitError(added.reason);
     } catch (cause) {
-      setSubmitError(cause instanceof Error ? cause.message : String(cause));
+      if (mounted.current) setSubmitError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setSubmitting(false);
+      if (mounted.current) setSubmitting(false);
     }
   }
 

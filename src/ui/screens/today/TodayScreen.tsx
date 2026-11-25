@@ -84,6 +84,8 @@ export function TodayScreen() {
       )}
       {reportFor !== null && (
         <ReportDialog
+          // A different problem gets a fresh form, never the rating or text typed for another one.
+          key={reportFor}
           problemId={reportFor}
           // A late close from this dialog must not close one opened for another problem since.
           onClose={() => setReportFor((current) => (current === reportFor ? null : current))}

@@ -92,8 +92,8 @@ test('Problems: notes, retire and reset, and adding problems by link from every 
     await expect(page.getByTestId('today-title')).toHaveText('242. Valid Anagram');
     await expect(page.getByTestId('due-row')).toHaveCount(0);
 
-    // Reset the card: the problem is due again and takes today's slot... tomorrow's pick is
-    // already made for today, so it shows up in the due list and can be made today's.
+    // Reset the card: the problem is due again. Today's pick was already made, so it shows up
+    // in the due list.
     await goTo(page, 'Problems');
     await page.getByTestId('problem-row').filter({ hasText: '1. Two Sum' }).click();
     await drawer(page).getByRole('button', { name: 'Reset schedule' }).click();

@@ -212,8 +212,14 @@ test.describe('the report form', () => {
     await expect(form.getByRole('radio', { name: /^Easy/ })).toBeDisabled();
     await expect(form.getByRole('radio', { name: /^Hard/ })).toHaveAttribute('aria-checked', 'true');
     await expect(form.getByText('Revealing the key insight limits the rating to Hard.')).toBeVisible();
+    // After the reveal focus is in the insight field, where digits are text. Move to a rating
+    // first, so the 3 and 4 keys really ask for Good and Easy, and check both are refused.
+    await form.getByRole('radio', { name: /^Hard/ }).focus();
     await page.keyboard.press('3');
     await expect(form.getByRole('radio', { name: /^Hard/ })).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('4');
+    await expect(form.getByRole('radio', { name: /^Hard/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(form.getByLabel(/Key insight/)).toHaveValue(/Store each value's index in a hash map and look up the complement\.$/);
     await form.getByRole('radio', { name: /^Again/ }).click();
     await expect(form.getByRole('radio', { name: /^Again/ })).toHaveAttribute('aria-checked', 'true');
     await form.getByRole('radio', { name: /^Hard/ }).click();
