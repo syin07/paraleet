@@ -163,7 +163,7 @@ export function searchProblems(db: Db, query: string, limit: number): Problem[] 
        WHERE p.title LIKE :like ESCAPE '\\' OR p.display_id = :exact OR p.platform_id LIKE :like ESCAPE '\\'
        ORDER BY
          -- IS, not =: a missing display ID must count as "no match", not as unknown (which sorts last).
-         (p.display_id IS :exact OR p.platform_id = :exact) DESC,
+         (p.display_id IS :exact OR p.platform_id = :exact COLLATE NOCASE) DESC,
          (p.title LIKE :prefix ESCAPE '\\') DESC,
          EXISTS (SELECT 1 FROM attempts a WHERE a.problem_id = p.id) DESC,
          p.solved_count DESC,

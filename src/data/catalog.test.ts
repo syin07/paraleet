@@ -90,7 +90,7 @@ describe('checked-in catalog files', () => {
     });
   }
 
-  it('LeetCode has well over a thousand problems, in numeric order, none paid-only', () => {
+  it('LeetCode has well over a thousand problems, in numeric order', () => {
     const { problems } = catalogSeedSchema.parse(catalogLeetcode);
     expect(problems.length).toBeGreaterThan(1000);
     for (let i = 1; i < problems.length; i++) {
@@ -182,7 +182,10 @@ describe('loadCatalogSeed', () => {
     const id = getProblemByPlatformId(db, 'leetcode', 'a')!.id;
     const result = loadCatalogSeed(
       db,
-      catalog([entry('a', { title: 'New title', difficultyRaw: 'Hard', difficultyNorm: 5, solvedCount: 7 }), entry('c')], T2),
+      catalog(
+        [entry('a', { title: 'New title', difficultyRaw: 'Hard', difficultyNorm: 5, solvedCount: 7 }), entry('c')],
+        T2,
+      ),
       LATER,
     );
     expect(result.status).toBe('loaded');
@@ -212,7 +215,21 @@ describe('loadCatalogSeed', () => {
       },
       T1,
     );
-    loadCatalogSeed(db, catalog([entry('a', { displayId: '9', title: 'Catalog title', difficultyRaw: 'Medium', difficultyNorm: 3, topics: ['math'], sourceTags: ['Math'], solvedCount: 55 })]), NOW);
+    loadCatalogSeed(
+      db,
+      catalog([
+        entry('a', {
+          displayId: '9',
+          title: 'Catalog title',
+          difficultyRaw: 'Medium',
+          difficultyNorm: 3,
+          topics: ['math'],
+          sourceTags: ['Math'],
+          solvedCount: 55,
+        }),
+      ]),
+      NOW,
+    );
     const after = getProblemByPlatformId(db, 'leetcode', 'a');
     expect(after).toMatchObject({
       id: mine.id,
@@ -297,7 +314,8 @@ describe('loadCatalogSeed', () => {
     const catalogIds = new Map(slugs.map((slug) => [slug, getProblemByPlatformId(catalogFirst, 'leetcode', slug)!.id]));
     loadStarterSeed(catalogFirst, starterSeed, LATER);
     expect(positions(catalogFirst)).toEqual(expected);
-    for (const slug of slugs) expect(getProblemByPlatformId(catalogFirst, 'leetcode', slug)?.id).toBe(catalogIds.get(slug));
+    for (const slug of slugs)
+      expect(getProblemByPlatformId(catalogFirst, 'leetcode', slug)?.id).toBe(catalogIds.get(slug));
   });
 
   it('loads nothing from an invalid file and leaves catalog_sources alone', () => {
@@ -305,7 +323,13 @@ describe('loadCatalogSeed', () => {
     loadCatalogSeed(db, catalog([entry('a')], T1), NOW);
     const bad = catalog([entry('b'), entry('c', { url: 'https://leetcode.com/problems/other/' })], T2);
     expect(() => loadCatalogSeed(db, bad, LATER)).toThrow(/invalid/);
-    expect(() => loadCatalogSeed(db, { generatedAt: T2, source: 'x', platform: 'leetcode', problems: [{ platform: 'leetcode' }] }, LATER)).toThrow();
+    expect(() =>
+      loadCatalogSeed(
+        db,
+        { generatedAt: T2, source: 'x', platform: 'leetcode', problems: [{ platform: 'leetcode' }] },
+        LATER,
+      ),
+    ).toThrow();
     expect(() => loadCatalogSeed(db, catalog([entry('b', { platform: 'cses' as Platform })], T2), LATER)).toThrow();
     expect(rowCount(db)).toBe(1);
     expect(getCatalogSource(db, 'leetcode')).toMatchObject({ generatedAt: T1, loadedAt: NOW });
@@ -329,7 +353,14 @@ describe('loadCatalogSeed', () => {
     loadCatalogSeed(
       db,
       catalog(
-        [entry('1068', { platform: 'cses', url: csesAdapter.buildUrl('1068'), difficultyRaw: null, difficultyNorm: null })],
+        [
+          entry('1068', {
+            platform: 'cses',
+            url: csesAdapter.buildUrl('1068'),
+            difficultyRaw: null,
+            difficultyNorm: null,
+          }),
+        ],
         T2,
         'cses',
       ),
@@ -341,7 +372,12 @@ describe('loadCatalogSeed', () => {
 });
 
 describe('searchProblems with the catalog loaded', () => {
-  function titled(platformId: string, title: string, solvedCount: number | null, displayId: string | null = null): CatalogProblem {
+  function titled(
+    platformId: string,
+    title: string,
+    solvedCount: number | null,
+    displayId: string | null = null,
+  ): CatalogProblem {
     return entry(platformId, { title, solvedCount, displayId });
   }
 
@@ -389,7 +425,11 @@ describe('searchProblems with the catalog loaded', () => {
 
   it('honors the limit and treats % and _ literally', () => {
     const db = freshDb();
-    loadCatalogSeed(db, catalog([titled('a', '100% Sure', 1), titled('b', 'Fully Sure', 2), titled('c', 'Under_score', 3)]), NOW);
+    loadCatalogSeed(
+      db,
+      catalog([titled('a', '100% Sure', 1), titled('b', 'Fully Sure', 2), titled('c', 'Under_score', 3)]),
+      NOW,
+    );
     expect(searchProblems(db, '%', 5).map((p) => p.platformId)).toEqual(['a']);
     expect(searchProblems(db, '_', 5).map((p) => p.platformId)).toEqual(['c']);
     expect(searchProblems(db, 'sure', 1)).toHaveLength(1);
@@ -402,7 +442,8 @@ describe('searchProblems with the catalog loaded', () => {
     );
     loadCatalogSeed(db, catalog(problems), NOW);
     const started = performance.now();
-    for (const query of ['a', 'arrays', 'number 59', '4000']) expect(searchProblems(db, query, 8).length).toBeGreaterThan(0);
+    for (const query of ['a', 'arrays', 'number 59', '4000'])
+      expect(searchProblems(db, query, 8).length).toBeGreaterThan(0);
     const perQuery = (performance.now() - started) / 4;
     expect(perQuery).toBeLessThan(100);
     expect(searchProblems(db, '4000', 8)[0]?.platformId).toBe('p3999');
@@ -434,5 +475,81 @@ describe('loading the real catalog', () => {
       expect(loadCatalogSeed(db, seed, LATER).status).toBe('up-to-date');
     }
     expect(performance.now() - again).toBeLessThan(500);
+  });
+});
+
+describe('opening the database with a bad catalog file', () => {
+  it('still opens, loads the good catalogs, and says which one failed', async () => {
+    const { openDatabase } = await import('./index');
+    const good = catalog([entry('two-sum'), entry('three-sum')], T1, 'leetcode');
+    const broken = { generatedAt: T1, source: 'test', platform: 'cses', problems: [{ nonsense: true }] };
+    const result = openDatabase(':memory:', T1, [broken, good, null]);
+    try {
+      expect(result.catalogProblems).toHaveLength(2);
+      expect(result.catalogProblems[0]).toMatch(/^The cses catalog could not be loaded: /);
+      expect(result.catalogProblems[1]).toMatch(/^The problem catalog could not be loaded: /);
+      // The good file is in, the starter list is in, and the bad one changed nothing.
+      expect(getProblemByPlatformId(result.db, 'leetcode', 'three-sum')).not.toBeNull();
+      expect(getCatalogSource(result.db, 'leetcode')?.problemCount).toBe(2);
+      expect(getCatalogSource(result.db, 'cses')).toBeNull();
+      expect(listStarterProblems(result.db).length).toBeGreaterThan(20);
+    } finally {
+      result.db.close();
+    }
+  });
+
+  it('reports nothing when every built-in catalog loads', async () => {
+    const { openDatabase } = await import('./index');
+    const result = openDatabase(':memory:', T1);
+    try {
+      expect(result.catalogProblems).toEqual([]);
+      expect(rowCount(result.db)).toBeGreaterThan(7000);
+    } finally {
+      result.db.close();
+    }
+  });
+});
+
+describe('the starter list and the catalog', () => {
+  it('describe the same problems the same way, so neither undoes the other at launch', () => {
+    const byId = new Map(
+      (catalogLeetcode as unknown as { problems: CatalogProblem[] }).problems.map((problem) => [
+        problem.platformId,
+        problem,
+      ]),
+    );
+    type Described = Omit<CatalogProblem, 'solvedCount'>;
+    for (const starter of (starterSeed as unknown as { problems: Described[] }).problems) {
+      const inCatalog = byId.get(starter.platformId);
+      expect(inCatalog, `${starter.platformId} is in the catalog`).toBeDefined();
+      expect({
+        title: inCatalog?.title,
+        url: inCatalog?.url,
+        displayId: inCatalog?.displayId,
+        difficultyRaw: inCatalog?.difficultyRaw,
+        difficultyNorm: inCatalog?.difficultyNorm,
+        topics: inCatalog?.topics,
+        sourceTags: inCatalog?.sourceTags,
+      }).toEqual({
+        title: starter.title,
+        url: starter.url,
+        displayId: starter.displayId,
+        difficultyRaw: starter.difficultyRaw,
+        difficultyNorm: starter.difficultyNorm,
+        topics: starter.topics,
+        sourceTags: starter.sourceTags,
+      });
+    }
+  });
+});
+
+describe('searching by ID', () => {
+  it('puts the exact problem first however the ID is typed', () => {
+    const db = freshDb();
+    loadCatalogSeed(db, catalogCodeforces, T1);
+    for (const query of ['1352C', '1352c']) {
+      expect(searchProblems(db, query, 5)[0]?.platformId).toBe('1352C');
+    }
+    db.close();
   });
 });
