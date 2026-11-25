@@ -1,6 +1,6 @@
 # ParaLeet status
 
-Last updated: 2026-11-25 (session 3, lead; in progress. If you are reading this cold, the In flight table is the truth: agents do not survive a cleared session)
+Last updated: 2026-11-25 (session 3 stopped at a usage limit, mid-run. NOT done. No agent is running; the In flight table is the truth)
 
 ## What works today
 
@@ -30,27 +30,28 @@ M3. Catalog and learning plans, with M4 work running beside it. (M2 closed with 
 
 ## In flight
 
-**Session 3 (2026-11-25).** Merged so far this session: the stats rules (`db6b465`), SAN-134 the lost "Settings…" request (`89c87ab`), and the M3 core, SAN-120 to SAN-123 (`ea88274`, three review rounds). Only `main` is on the remote; every branch below is local.
+**Session 3 (2026-11-25) stopped at a usage limit.** Merged this session, all through the gate: the stats rules (`db6b465`), SAN-134 the lost "Settings…" request (`89c87ab`), the M3 core SAN-120 to SAN-123 (`ea88274`), the `getStats` bridge (`a03c90e`), SAN-131 "Learning plans" in Settings (`aa94c95`), the Stats screen (`f69fc27`) and SAN-135 plan polish (`ce82f0e`). So the app now has a working Stats screen and the API key and model rows in Settings. Main is pushed up to this file's commit.
 
-| Issue | What | Branch (worktree) | State |
+Correction: the merge message of `f69fc27` gives wrong test counts. The real ones on that branch were 1075 unit, 222 UI and 22 end-to-end, all passing.
+
+No worker or reviewer is running. Every branch below is local, with its work committed.
+
+| Issue | What | Branch (worktree) | State and what to do |
 | --- | --- | --- | --- |
-| SAN-124, step 2 | Lead: the `getStats` bridge method, service, mock scenarios | `lead/san-124-stats-bridge` at `1099cfd` (`.claude/worktrees/lead-m4`), on main | **Review passed.** Suites running. Merge when green |
-| SAN-131 | Worker: "Learning plans" in Settings (the key, the model) | `worker/san-131-settings-plans` at `f168456` (`.claude/worktrees/agent-a1872a23e2bd011b5`), stacked on the stats bridge | **Review passed (round 2).** Suites running. Merge after the stats bridge. The same worker gets the "Data" group next |
-| SAN-124, step 3 | Worker: the Stats screen | `worker/san-124-stats-screen` at `bbf24f6` (`.claude/worktrees/agent-a50ce7a2eafcd8d45`), based on the old stats bridge `8dce8f6` | The screen passed review; keyboard use was added afterwards and is with a reviewer. To do: `git rebase --onto main 8dce8f6` in its worktree, suites, merge |
-| SAN-130 | Worker: the Plan screen | `worker/san-130-plan-screen` at `3cc7b40` (`.claude/worktrees/agent-a5a3d15bdbcd7d43f`), based on old M3 `f443f0e` | Round 1 blocked (activating a draft archived the active plan without asking); fixed; round 2 with a reviewer. To do: `git rebase --onto main f443f0e`, suites, merge |
-| SAN-123 (rest) | Worker: step 4 of the first-launch flow, the optional API key | `worker/san-123-onboarding-key`, on main `ea88274` | Worker running. It edits `tests/e2e/onboarding.spec.ts` without running it: the lead runs the end-to-end suite |
-| SAN-132 | Lead: export and import: services, six bridge methods, the launch-time swap, mock, tests, decision 0017 (data part) | `lead/san-132-export-import` at `2b84e9b`, checked out nowhere, based on the old stats bridge `cf49075` | 1093 unit tests and its two end-to-end tests pass. With a reviewer. To do: `git rebase --onto main cf49075` (in a worktree with it checked out), suites, merge; then brief the Settings worker for the "Data" group (mock scenarios `data-*` exist) |
-| SAN-125 | Lead: the `.dmg` (electron-builder, universal, ad hoc signed), the icon drawn from Para, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` at `23f0e2f` (`.claude/worktrees/agent-ab3ac71efafc0b677`), based on old M3 `e72f6de` | `npm run dist` builds `dist/ParaLeet-0.1.0.dmg`; `npm run dist:check` passed 14 of 14 on the packaged app. To do: start the Intel half under Rosetta once (give it 40 seconds, no test suite running); rebase on main; send the import-at-launch messages to the log too once SAN-132 is in; suites; reviewer; merge |
+| SAN-130 | The Plan screen | `worker/san-130-plan-screen` at `5c1b457` (`.claude/worktrees/agent-a5a3d15bdbcd7d43f`), based on old M3 `f443f0e` | Review round 2 **passed** at `3cc7b40`; `5c1b457` then fixed the reviewer's four small notes (worker reports 1062 unit and 225 UI tests passing). To do: `git rebase --onto main f443f0e` inside its worktree, `npm ci`, check, UI and end-to-end suites, a fresh reviewer for `3cc7b40..5c1b457`, merge |
+| SAN-132 | Export and import, main-process side | `lead/san-132-export-import` at `863d7ff` (`.claude/worktrees/lead-m4`), on main `f69fc27` | Round 1 **blocked** (a file could pass the check, be swapped in and then not open). Fixed in `863d7ff` (`stageCheckedImport`, `openDataFolder`); 1113 unit tests pass. The round 2 reviewer was stopped before it answered, and a background run of check, UI and end-to-end was in progress when the session stopped (results, if it finished, are not recorded: run them again). To do: rebase on main, suites (the new third test in `tests/e2e/data.spec.ts` has never been run), fresh reviewer (round 2), merge. Then the "Data" group in Settings (mock scenarios `data-*` exist; tell the UI to say that an import replaces the earlier backup) |
+| SAN-123 (rest) | Step 4 of the first-launch flow: the optional API key | `worker/san-123-onboarding-key` at `919690b` (`.claude/worktrees/agent-ac3dbc0838ba8d3b5`), on main `ea88274` | Worker reports 1057 unit and 198 UI tests passing. Its reviewer was stopped before it answered. Its edits to `tests/e2e/onboarding.spec.ts` have never been run. To do: rebase on main, suites, fresh reviewer, merge |
+| SAN-125 | The `.dmg`, the icon, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` at `23f0e2f` (`.claude/worktrees/agent-ab3ac71efafc0b677`), based on old M3 `e72f6de` | `npm run dist` builds `dist/ParaLeet-0.1.0.dmg` (universal, ad hoc signed, about 220 MB); `npm run dist:check` passed 14 of 14 on the packaged app. Not reviewed. To do: rebase on main (after SAN-132, then send `openDataFolder`'s problems to the log in `src/main/index.ts`); start the Intel half once under Rosetta with 40 seconds and no suite running (12 seconds was not enough to see it start); suites; reviewer; merge |
 
-After everything above: tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` for Plan, Stats, Settings and the first-launch flow; screenshot sheets on the Linear issues; a small polish branch for the M3 round 3 notes (an empty model answer; "did not accept the request" wording; `toPlanView` taking section progress from core).
+After those: tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` (Plan, Stats, Settings, first-launch flow; tooltips use the raised surface, the topic column is 132px); screenshot sheets on Linear for SAN-130, SAN-131 (built at session end, not uploaded), SAN-132 and the onboarding step (SAN-124's is attached); mark SAN-131 and SAN-135 Done in Linear with their merge commits and comment SAN-124; a real-app walk through Plan, Stats and Settings by the lead; `npm ci` in the main checkout, then all suites on main; DONE.
 
-Leftovers that are not work in flight: `lead/m2-contract` (superseded; delete after a look), `worktree-agent-*` branches, and merged branches (`worker/san-124-stats`, `lead/navigate-race`, `lead/m3-plan-core`). The Plan screen worker left a preview server running once (`npm run dev:ui`, pid 45616) and later said it stopped it.
+Leftovers that are not work in flight: merged branches and `worktree-agent-*` branches can be deleted; `lead/m2-contract` after a look. The lead's shell ended inside `.claude/worktrees/lead-m3` (branch `lead/plan-polish`, merged).
 
 ## Next
 
-1. Merge in this order, one end-to-end run at a time: stats bridge, SAN-131, Stats screen, Plan screen, SAN-132, the onboarding key step, the "Data" group, SAN-125.
-2. For each worker branch: rebase on main inside its worktree, `npm ci` if dependencies changed, check, UI and end-to-end suites to log files with exit codes, a fresh reviewer after any change, then `git merge --no-ff` from the main checkout (check it is on `main` first).
-3. When everything is merged and the suites pass on main (run `npm ci` in the main checkout first: its `node_modules` predates the Anthropic SDK), write DONE at the top of this file with how to run and install. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; the packaged-app check switched a real login item on and off again; and the hand checks under "Notes for the owner".
+1. Set the goal again, read this file, then finish the four rows above in this order: SAN-132, SAN-130, the onboarding step, SAN-125. One end-to-end run at a time.
+2. Then the "Data" group worker, the docs and Linear items listed above, the suites on main, and DONE at the top of this file with how to run and install.
+3. In the final report tell the owner: the server-side refusal fallback is on for plan generation (decision 0016, item 11); no live call to Anthropic was made by the build; the packaged-app check switched a real login item on and off again; a worker once left a preview server running (pid 45616; it later said it stopped it); and the hand checks under "Notes for the owner".
 
 ## Cold start: what is not written down anywhere else
 
@@ -61,6 +62,8 @@ Leftovers that are not work in flight: `lead/m2-contract` (superseded; delete af
 **Never `cd` in the lead's shell, and never rebase a branch from the main checkout.** Session 3 learned both the hard way. A bare `cd <worktree>` moves the whole session into that worktree (the harness then treats it as the working directory). Use `git -C <path>` and `npm --prefix <path>`. And `git -C <main checkout> rebase --onto A B <branch>` checks `<branch>` out in the main checkout: run a rebase only inside the worktree that has the branch checked out, and check `git -C /Users/sandy/projects/ParaLeet rev-parse --abbrev-ref HEAD` says `main` before every merge.
 
 **A lone end-to-end failure is not always load.** The one in session 3 (`tray.spec.ts`, "Settings…" after "Open ParaLeet") was a real race in the app (SAN-134). Read the error context before rerunning.
+
+**Read the numbers before writing them.** A merge message in session 3 was written with test counts guessed ahead of the log, and they were wrong. Print the counts, then write the message.
 
 **Check exit codes.** `npm run test:ui 2>&1 | tail -3 && git commit ...` commits past a failing test, because the pipe's exit code is `tail`'s. This happened once this session (caught before the merge). Run each suite to a log file and print `$?`.
 
