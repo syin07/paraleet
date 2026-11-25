@@ -96,18 +96,33 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
     await running.petPage();
     await expect.poll(async () => (await running?.pet())?.bounds).toMatchObject({ x: moved.x, y: moved.y });
 
-    // Dragged past the right edge until the bird is out of view, it is pulled back so the whole
-    // bird shows again (macOS itself stops the window a little short of leaving the screen).
+    // Dragged far past an edge until the bird is out of view, it is pulled back so the whole
+    // bird shows again on some screen.
+    const birdOnAScreen = async (): Promise<boolean> => {
+      const bounds = (await running!.pet()).bounds!;
+      const areas = await running!.app.evaluate(({ screen }) => screen.getAllDisplays().map((d) => d.workArea));
+      // The bird is drawn from 56 to 184 points across and 114 to 242 down the 240×250 window.
+      const bird = { left: bounds.x + 56, right: bounds.x + 184, top: bounds.y + 114, bottom: bounds.y + 242 };
+      return areas.some(
+        (area) =>
+          bird.left >= area.x &&
+          bird.right <= area.x + area.width &&
+          bird.top >= area.y &&
+          bird.bottom <= area.y + area.height,
+      );
+    };
     const edgePet = await running.petPage();
-    const screenRight = await running.app.evaluate(({ screen }) => {
-      const area = screen.getPrimaryDisplay().workArea;
-      return area.x + area.width;
-    });
-    await dragPetBy(edgePet, 3900, 0);
+    for (let step = 0; step < 8; step += 1) {
+      await edgePet.evaluate(async () => {
+        const api = (globalThis as unknown as { paraleet: { movePetWindowBy(input: object): Promise<unknown> } })
+          .paraleet;
+        await api.movePetWindowBy({ dx: 3900, dy: 0 });
+      });
+    }
+    expect(await birdOnAScreen()).toBe(false);
+    await dragPetBy(edgePet, 0, 0);
+    expect(await birdOnAScreen()).toBe(true);
     const rescued = (await running.pet()).bounds!;
-    // The bird is drawn from 56 to 184 points across the 240-point window.
-    expect(rescued.x + 184).toBeLessThanOrEqual(screenRight);
-    expect(rescued.x + 184).toBeGreaterThan(screenRight - 60);
     expect(rescued.y).toBe(moved.y);
 
     // And that rescued place is what the next launch uses.
@@ -115,6 +130,20 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
     running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:10:00.000Z' });
     await running.petPage();
     await expect.poll(async () => (await running?.pet())?.bounds).toMatchObject({ x: rescued.x, y: rescued.y });
+
+    // A saved place that is on no screen at all (its display was unplugged) is not used as it is:
+    // at the next launch Para is back on a visible screen.
+    const lastPet = await running.petPage();
+    await lastPet.evaluate(() =>
+      (
+        globalThis as unknown as { paraleet: { updateSettings(patch: object): Promise<unknown> } }
+      ).paraleet.updateSettings({ petWindowPosition: { x: 99999, y: 99999 } }),
+    );
+    await running.close();
+    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:15:00.000Z' });
+    await running.petPage();
+    await expect.poll(birdOnAScreen).toBe(true);
+    expect((await running.pet()).visible).toBe(true);
   } finally {
     await running?.close().catch(() => undefined);
     data.remove();
@@ -155,7 +184,7 @@ test('the pet opens the main window, offers its menu, and can be hidden', async 
     await main.getByRole('radio', { name: /^Good/ }).click();
     await main.getByRole('button', { name: 'Feed Para' }).click();
     await pet.getByTestId('pet-bird').hover();
-    await expect(pet.getByTestId('pet-bubble')).toHaveText('Fed and happy!');
+    await expect(pet.getByTestId('pet-bubble')).toHaveText('1-day streak!');
 
     // Closing the main window leaves Para running, with no Dock icon while only the pet shows.
     expect(await running.dockVisible()).toBe(true);
@@ -184,6 +213,13 @@ test('the pet opens the main window, offers its menu, and can be hidden', async 
       );
     await setPetVisible(false);
     await expect.poll(async () => (await running?.pet())?.visible).toBe(false);
+    await setPetVisible(true);
+    await expect.poll(async () => (await running?.pet())?.visible).toBe(true);
+
+    // Hidden for an hour, switching the setting off and on again brings Para straight back.
+    await running.clickPetMenu('Hide Para for 1 hour');
+    await expect.poll(async () => (await running?.pet())?.visible).toBe(false);
+    await setPetVisible(false);
     await setPetVisible(true);
     await expect.poll(async () => (await running?.pet())?.visible).toBe(true);
 

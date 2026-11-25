@@ -71,7 +71,7 @@ test('hovering shows a speech bubble: the problem when not fed, the streak when 
 
   await openPet(page, 'fed');
   await page.getByTestId('pet-bird').hover();
-  await expect(page.getByTestId('pet-bubble')).toHaveText(/-day streak!$/);
+  await expect(page.getByTestId('pet-bubble')).toHaveText(/^\d+-day streak!$/);
   await capture(page, 'pet-window-fed');
 
   await openPet(page, 'nothing');
@@ -156,19 +156,58 @@ test('right-click asks for the menu and never opens the main window', async ({ p
   expect(calls).not.toContain('showMainWindow:');
 });
 
-test('the window only takes clicks while the pointer is over the bird or its bubble', async ({ page }) => {
+test('the window only takes clicks while the pointer is over the bird', async ({ page }) => {
   await openPet(page);
   await page.mouse.move(4, 4);
   await page.getByTestId('pet-bird').hover();
   await expect.poll(async () => (await windowCalls(page)).at(-1)).toBe('setPetInteractive:true');
-  // Moving up onto the bubble keeps it interactive.
+  // The bubble only informs: moving up onto it lets clicks through again and it goes away.
   const bubble = await page.getByTestId('pet-bubble').boundingBox();
   expect(bubble).not.toBeNull();
+  await page.mouse.move(bubble!.x + bubble!.width / 2, bubble!.y + bubble!.height / 2);
+  await expect.poll(async () => (await windowCalls(page)).at(-1)).toBe('setPetInteractive:false');
+  await expect(page.getByTestId('pet-bubble')).toHaveCount(0);
+  await page.getByTestId('pet-bird').hover();
+  await expect.poll(async () => (await windowCalls(page)).at(-1)).toBe('setPetInteractive:true');
   await page.mouse.move(4, 4);
   await expect.poll(async () => (await windowCalls(page)).at(-1)).toBe('setPetInteractive:false');
   const interactive = (await windowCalls(page)).filter((call) => call.startsWith('setPetInteractive:'));
   // One message per change, not one per pointer movement.
-  expect(interactive).toEqual(['setPetInteractive:true', 'setPetInteractive:false']);
+  expect(interactive).toEqual([
+    'setPetInteractive:true',
+    'setPetInteractive:false',
+    'setPetInteractive:true',
+    'setPetInteractive:false',
+  ]);
+});
+
+test('a drag whose release never arrives stops following the pointer', async ({ page }) => {
+  await openPet(page);
+  await page.mouse.move(120, 180);
+  await page.mouse.down();
+  await page.mouse.move(140, 190, { steps: 4 });
+  // The button is let go where the page cannot see it (a native menu took the release).
+  await page.getByTestId('pet-bird').dispatchEvent('pointermove', {
+    buttons: 0,
+    screenX: 400,
+    screenY: 400,
+    pointerId: 1,
+    bubbles: true,
+  });
+  const afterLoss = await windowCalls(page);
+  expect(afterLoss.at(-1)).toBe('endPetDrag');
+  const movesBefore = afterLoss.filter((call) => call.startsWith('movePetWindowBy:')).length;
+  await page.getByTestId('pet-bird').dispatchEvent('pointermove', {
+    buttons: 0,
+    screenX: 500,
+    screenY: 500,
+    pointerId: 1,
+    bubbles: true,
+  });
+  const later = await windowCalls(page);
+  expect(later.filter((call) => call.startsWith('movePetWindowBy:')).length).toBe(movesBefore);
+  expect(later.filter((call) => call === 'endPetDrag').length).toBe(1);
+  expect(later).not.toContain('showMainWindow:');
 });
 
 test('the bubble follows the day without a reload', async ({ page }) => {
@@ -193,5 +232,5 @@ test('the bubble follows the day without a reload', async ({ page }) => {
     });
   });
   await page.getByTestId('pet-bird').hover();
-  await expect(page.getByTestId('pet-bubble')).toHaveText(/streak!$|^Fed and happy!$/);
+  await expect(page.getByTestId('pet-bubble')).toHaveText(/^\d+-day streak!$/);
 });

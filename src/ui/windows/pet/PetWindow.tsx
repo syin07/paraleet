@@ -1,6 +1,6 @@
 // The floating pet window's page (PRD section 11). The window is transparent and click-through;
-// this page tells main when the pointer is over the bird or its bubble, handles dragging, and
-// shows a speech bubble on hover.
+// this page tells main when the pointer is over the bird, handles dragging, and shows a speech
+// bubble while the pointer is over the bird.
 import { useEffect, useRef, useState } from 'react';
 import type { TodayView } from '../../../bridge/contract';
 import { api } from '../../bridge';
@@ -16,9 +16,7 @@ const BIRD_SIZE = 128;
 /** What the bubble says: today's problem and platform when not fed, the streak when fed. */
 export function bubbleText(today: TodayView): string {
   if (today.pet.line) return today.pet.line;
-  if (today.fed) {
-    return today.streak.current > 1 ? `${today.streak.current}-day streak!` : 'Fed and happy!';
-  }
+  if (today.fed) return `${Math.max(today.streak.current, 1)}-day streak!`;
   const assignment = today.assignment;
   if (assignment && !assignment.completed) {
     return `${problemTitle(assignment.problem)} on ${PLATFORM_LABELS[assignment.problem.platform]}?`;
@@ -32,7 +30,8 @@ export function PetWindow() {
   const interactive = useRef(false);
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
 
-  // The window lets clicks through except while the pointer is over something marked data-hit.
+  // The window lets clicks through except while the pointer is over something marked data-hit
+  // (the bird).
   useEffect(() => {
     function setInteractive(next: boolean): void {
       if (interactive.current === next) return;
@@ -61,9 +60,23 @@ export function PetWindow() {
     press.current = { x: event.screenX, y: event.screenY, dragging: false };
   }
 
+  /** Ends a press. A drag that was under way is finished, so its position is kept. */
+  function release(): { dragging: boolean } | null {
+    const state = press.current;
+    press.current = null;
+    if (state?.dragging) void api().endPetDrag();
+    return state;
+  }
+
   function onPointerMove(event: React.PointerEvent): void {
     const state = press.current;
     if (!state) return;
+    // The button was let go without this page hearing of it (a menu or another window took the
+    // release): stop following the pointer.
+    if ((event.buttons & 1) === 0) {
+      release();
+      return;
+    }
     const dx = Math.round(event.screenX - state.x);
     const dy = Math.round(event.screenY - state.y);
     if (!state.dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
@@ -75,18 +88,17 @@ export function PetWindow() {
   }
 
   function onPointerUp(event: React.PointerEvent): void {
-    const state = press.current;
-    press.current = null;
-    if (!state || event.button !== 0) return;
-    if (state.dragging) void api().endPetDrag();
-    else void api().showMainWindow({ screen: null });
+    if (event.button !== 0) return;
+    const state = release();
+    if (state && !state.dragging) void api().showMainWindow({ screen: null });
   }
 
   const data = today.data;
   return (
     <div className="flex h-full flex-col items-center justify-end pb-2">
       {data && hovering && (
-        <div data-hit className="mb-3" data-testid="pet-bubble">
+        // The bubble only informs: clicks on it pass through to whatever is underneath.
+        <div className="mb-3" data-testid="pet-bubble">
           <SpeechBubble>{bubbleText(data)}</SpeechBubble>
         </div>
       )}
@@ -99,9 +111,8 @@ export function PetWindow() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={() => {
-          press.current = null;
-        }}
+        onPointerCancel={release}
+        onLostPointerCapture={release}
         onPointerEnter={() => setHovering(true)}
         onPointerLeave={() => setHovering(false)}
         onContextMenu={(event) => {

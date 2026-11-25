@@ -35,6 +35,8 @@ export class PetWindowController {
   private window: BrowserWindow | null = null;
   private hiddenUntil: Date | null = null;
   private interactive = false;
+  /** The "show Para" setting as last seen, to notice it being switched back on. */
+  private lastWanted: boolean | null = null;
 
   constructor(
     private readonly db: Db,
@@ -50,14 +52,23 @@ export class PetWindowController {
    */
   sync(): void {
     const settings = getSettings(this.db);
-    if (this.hiddenUntil !== null && this.clock.now().getTime() >= this.hiddenUntil.getTime()) {
-      this.hiddenUntil = null;
+    // Switching "Show Para on the desktop" back on is a clear request to see Para now.
+    if (settings.petVisible && this.lastWanted === false) this.hiddenUntil = null;
+    this.lastWanted = settings.petVisible;
+    if (this.hiddenUntil !== null) {
+      const remaining = this.hiddenUntil.getTime() - this.clock.now().getTime();
+      // Over, or the clock was set back so far that "an hour" would last longer than an hour.
+      if (remaining <= 0 || remaining > HIDE_FOR_MS) this.hiddenUntil = null;
     }
     const wanted = settings.petVisible && this.hiddenUntil === null;
     const wasVisible = this.isVisible();
 
     if (!wanted) {
-      if (this.window && !this.window.isDestroyed()) this.window.hide();
+      if (this.window && !this.window.isDestroyed() && this.window.isVisible()) {
+        this.window.hide();
+        // Come back click-through; the page switches it off again when the pointer is on the bird.
+        this.setInteractive(false);
+      }
     } else if (!this.window || this.window.isDestroyed()) {
       this.window = this.create(settings.petWindowPosition);
     } else {
@@ -180,7 +191,15 @@ export class PetWindowController {
     });
     hardenWindow(window);
     window.setAlwaysOnTop(true, 'floating');
+    // Side effect on macOS: this also hides the Dock icon. `updateDock` in index.ts puts it back
+    // whenever the main window is open, so keep that call after any change here.
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // If the page dies, drop the window; the next tick makes a new one.
+    window.webContents.on('render-process-gone', () => {
+      if (!window.isDestroyed()) window.destroy();
+      if (this.window === window) this.window = null;
+      this.onVisibilityChanged();
+    });
     // Start click-through; the page turns it off while the pointer is over the bird.
     this.interactive = false;
     window.setIgnoreMouseEvents(true, { forward: true });

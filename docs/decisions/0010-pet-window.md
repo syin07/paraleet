@@ -12,7 +12,7 @@ Para lives in a small window that floats over everything: transparent, no frame,
 
 2. **Services ask for window actions through a port.** `AppContext.windows` (`WindowPort`) has `showMain`, `movePetBy`, `endPetDrag`, `setPetInteractive` and `showPetMenu`. Main implements it with Electron; tests use a fake that records calls. The service layer stays free of Electron (decision 0004).
 
-3. **Click-through is switched by the page.** The window starts with `setIgnoreMouseEvents(true, { forward: true })`. The page still receives pointer movement, and calls `setPetInteractive` once when the pointer enters or leaves anything marked `data-hit` (the bird and its bubble). Only main knows window state; only the page knows where the bird is.
+3. **Click-through is switched by the page.** The window starts with `setIgnoreMouseEvents(true, { forward: true })`. The page still receives pointer movement, and calls `setPetInteractive` once when the pointer enters or leaves anything marked `data-hit` (the bird; the bubble only informs and stays click-through). Only main knows window state; only the page knows where the bird is.
 
 4. **Dragging goes over the bridge, not `-webkit-app-region: drag`.** A drag region swallows every mouse event, so the bird could not also be clicked, hovered or right-clicked. Instead the page captures the pointer, sends whole-point deltas with `movePetWindowBy`, and calls `endPetDrag` on release. A press that travels less than 4 points is a click.
 
@@ -22,7 +22,7 @@ Para lives in a small window that floats over everything: transparent, no frame,
 
 7. **macOS moves a window fully onto the screen as it is shown.** So after `showInactive()` the window is put back at its exact position (`showAt`). Without this a bird left at a screen edge jumps inward on every launch.
 
-8. **"Hide for 1 hour" lives in memory.** It is checked on the 30-second tick, so Para is back within half a minute of the hour. Quitting and reopening the app shows Para again, which is what a user who relaunches expects. The lasting switch is the `petVisible` setting.
+8. **"Hide for 1 hour" lives in memory.** It is checked on the 30-second tick, so Para is back within half a minute of the hour. Quitting and reopening the app shows Para again, which is what a user who relaunches expects, and so does switching "Show Para on the desktop" off and on. If the clock is set back, the hide ends rather than lasting longer than an hour. The lasting switch is the `petVisible` setting.
 
 9. **The Dock icon is hidden only while the pet is the only thing showing.** With the main window open, or with the pet hidden, the icon stays so the app can always be reached. macOS ignores a request to hide the icon made while a window is closing or within a second of the icon being shown, so `updateDock` decides a moment after the event, touches the icon only when it is wrong, and checks again until it is right.
 
@@ -38,6 +38,9 @@ Para lives in a small window that floats over everything: transparent, no frame,
 - **Saving "hidden until" in the database:** a schema or settings change for a one-hour state that should not outlive the session.
 
 ## Limits
+
+- Tests send pointer events straight into the page, which goes around the operating system's own delivery. Hover, click, drag and click-through with a real mouse while another app is in front were confirmed in the spike, not by an automated test. Electron has no way to read back whether a window ignores mouse events, so the tests check the controller's own record of it.
+- If the pet page's process dies, the window is dropped and the next tick creates a new one.
 
 - A desktop screenshot could not be taken in this session (no screen-recording permission), so see-through rendering is checked by reading the real window's pixels (`capturePage`): its corners have no pixels and the bird does.
 - The menu bar icon and the compact card come with SAN-115; until then a click on the bird opens the main window.
