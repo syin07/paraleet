@@ -15,13 +15,28 @@ api.onChanged = (listener: () => void) => {
   };
 };
 
+// Main may ask for a screen before the UI has started listening: the page is loaded, but the app
+// in it is still starting. The last such request is kept and handed to the next listener to register.
+const navigateListeners = new Set<(path: string) => void>();
+let waitingPath: string | null = null;
+ipcRenderer.on(NAVIGATE_EVENT, (_event: unknown, path: unknown): void => {
+  if (typeof path !== 'string') return;
+  if (navigateListeners.size === 0) {
+    waitingPath = path;
+    return;
+  }
+  for (const listener of navigateListeners) listener(path);
+});
+
 api.onNavigate = (listener: (path: string) => void) => {
-  const handler = (_event: unknown, path: unknown): void => {
-    if (typeof path === 'string') listener(path);
-  };
-  ipcRenderer.on(NAVIGATE_EVENT, handler);
+  navigateListeners.add(listener);
+  if (waitingPath !== null) {
+    const path = waitingPath;
+    waitingPath = null;
+    listener(path);
+  }
   return () => {
-    ipcRenderer.removeListener(NAVIGATE_EVENT, handler);
+    navigateListeners.delete(listener);
   };
 };
 
