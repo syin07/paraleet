@@ -95,6 +95,11 @@ export async function generatePlan(
     if (answer.kind === 'truncated') {
       throw new PlanGenerationError('truncated', 'The plan came back cut off. Try again with fewer topics or a smaller size.');
     }
+    if (answer.kind === 'unparseable' && answer.text.trim() === '') {
+      // Nothing to send back for a retry: an empty turn would be refused by the API with a
+      // message about the request, not about the answer.
+      throw new PlanGenerationError('invalid', 'The model sent back an empty answer. Nothing was saved. Try again.');
+    }
     if (answer.kind === 'unparseable') {
       problems = ['The answer was not valid JSON in the required shape.'];
     } else {

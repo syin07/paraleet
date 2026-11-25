@@ -169,7 +169,7 @@ describe('failures', () => {
       'a request refused twice',
       [apiError(400, 'invalid_request_error'), apiError(400, 'invalid_request_error')],
       'other',
-      /refused the request \(400\)/,
+      /did not accept the request \(400\)/,
     ],
   ];
   for (const [name, replies, kind, text] of cases) {

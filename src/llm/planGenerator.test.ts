@@ -104,6 +104,14 @@ describe('generatePlan', () => {
     expect(model.calls[1]?.turns[1]?.text).toBe('I think you should start with Two Sum.');
   });
 
+  it('does not send an empty answer back: it says so at once', async () => {
+    const model = scripted([{ kind: 'unparseable', text: '  \n' }, json(good)]);
+    await expect(generatePlan(model, 'm', request, candidates)).rejects.toThrow(
+      'The model sent back an empty answer. Nothing was saved. Try again.',
+    );
+    expect(model.calls).toHaveLength(1);
+  });
+
   it('does not retry a refusal or a cut-off answer: each is its own plain error', async () => {
     const refused = scripted([{ kind: 'refused', explanation: null }]);
     const first = await generatePlan(refused, 'm', request, candidates).catch((error: unknown) => error);

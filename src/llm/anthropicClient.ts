@@ -67,7 +67,7 @@ export function toLlmError(error: unknown): LlmError {
   if (error instanceof Anthropic.APIError) {
     const status = typeof error.status === 'number' ? error.status : 0;
     if (status >= 500) return new LlmError('unavailable', 'Anthropic is having trouble right now. Try again in a few minutes.');
-    return new LlmError('other', `Anthropic refused the request (${status || 'error'}). Try another model in Settings.`);
+    return new LlmError('other', `Anthropic did not accept the request (${status || 'error'}). Try another model in Settings.`);
   }
   return new LlmError('other', 'The request to Anthropic failed. Try again.');
 }

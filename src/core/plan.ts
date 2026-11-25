@@ -362,7 +362,8 @@ export interface PlanProgress {
   pending: number;
 }
 
-function count(items: readonly PlanItemProgress[]): PlanProgress {
+/** How far a run of plan items is: the one place that says what done, skipped and pending add up to. */
+export function progressOf(items: readonly { state: PlanItemState }[]): PlanProgress {
   const done = items.filter((item) => item.state === 'done').length;
   const skipped = items.filter((item) => item.state === 'skipped').length;
   return { total: items.length, done, skipped, pending: items.length - done - skipped };
@@ -383,12 +384,12 @@ export function planProgress(items: readonly PlanItemProgress[]): {
     }
   }
   return {
-    overall: count(items),
+    overall: progressOf(items),
     sections: sections.map((section) => ({
       topic: section.topic,
       stage: section.stage,
       groupName: section.groupName,
-      progress: count(section.items),
+      progress: progressOf(section.items),
     })),
   };
 }
