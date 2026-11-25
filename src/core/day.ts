@@ -64,8 +64,17 @@ export function isParaDay(value: string): value is ParaDay {
   return addDays(value, 0) === value;
 }
 
-/** The ParaLeet day that `instant` falls on, for someone in `timeZone`. */
+/**
+ * The ParaLeet day that `instant` falls on, for someone in `timeZone`. The rule is only "local
+ * hour below the boundary belongs to the previous date", so a boundary hour skipped by a
+ * spring-forward needs no special case, and a repeated hour on a fall-back day gives both passes
+ * the same day.
+ */
 export function paraDayOf(instant: Date, timeZone: string, boundaryHour: number = DEFAULT_BOUNDARY_HOUR): ParaDay {
+  if (!Number.isInteger(boundaryHour) || boundaryHour < 0 || boundaryHour > 23) {
+    throw new RangeError(`Boundary hour must be an integer from 0 to 23, got ${boundaryHour}`);
+  }
+  // An unknown zone makes Intl throw a RangeError; it is never swallowed or replaced by another zone.
   const local = localParts(instant, timeZone);
   const calendarDay = toParaDay(local.year, local.month, local.day);
   return local.hour < boundaryHour ? addDays(calendarDay, -1) : calendarDay;
