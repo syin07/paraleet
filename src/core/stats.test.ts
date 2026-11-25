@@ -145,6 +145,42 @@ describe('solves per week', () => {
   });
 });
 
+describe('week edges', () => {
+  it('puts a solve on a Sunday and on a Monday in the right week', () => {
+    // Weeks before the current one: Mon 2026-11-16 to Sun 2026-11-22, and Mon 11-09 to Sun 11-15.
+    const stats = build([attempt('2026-11-22'), attempt('2026-11-16'), attempt('2026-11-15')]);
+    expect(stats.weeks.at(-1)!.solves).toBe(0);
+    expect(stats.weeks.at(-2)!.start).toBe('2026-11-16');
+    expect(stats.weeks.at(-2)!.solves).toBe(2);
+    expect(stats.weeks.at(-3)!.solves).toBe(1);
+    expect(dayOf(stats, '2026-11-22').count).toBe(1);
+    expect(dayOf(stats, '2026-11-16').count).toBe(1);
+    expect(dayOf(stats, '2026-11-15').count).toBe(1);
+  });
+
+  it('keeps February 29 in its place in a leap year', () => {
+    // 2028-02-29 is a Tuesday; today is the Friday after it.
+    const stats = build([attempt('2028-02-29'), attempt('2028-02-29', 'again'), attempt('2028-03-01')], '2028-03-03');
+    const week = stats.weeks.at(-1)!;
+    expect(week.start).toBe('2028-02-28');
+    expect(week.days.map((d) => d.day)).toEqual([
+      '2028-02-28', '2028-02-29', '2028-03-01', '2028-03-02', '2028-03-03', '2028-03-04', '2028-03-05',
+    ]);
+    expect(week.days.map((d) => d.count)).toEqual([0, 2, 1, 0, 0, 0, 0]);
+    expect(week.days.map((d) => d.future)).toEqual([false, false, false, false, false, true, true]);
+    expect(week.solves).toBe(2);
+    stats.weeks.forEach((each, i) => {
+      if (i > 0) expect(each.start).toBe(addDays(stats.weeks[i - 1]!.start, 7));
+    });
+    // The year before has no such day: the same week of 2027 runs straight from February into March.
+    const plain = build([], '2027-03-03');
+    expect(plain.weeks.at(-1)!.days.map((d) => d.day)).toEqual([
+      '2027-03-01', '2027-03-02', '2027-03-03', '2027-03-04', '2027-03-05', '2027-03-06', '2027-03-07',
+    ]);
+    expect(plain.weeks.at(-2)!.days.map((d) => d.day).slice(-2)).toEqual(['2027-02-27', '2027-02-28']);
+  });
+});
+
 describe('totals', () => {
   it('counts solves, reviews, distinct problems and fed days', () => {
     const stats = build([
