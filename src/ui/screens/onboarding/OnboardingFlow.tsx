@@ -14,6 +14,8 @@ import { useBridgeQuery } from '../../lib/useBridgeQuery';
 import { Row } from '../settings/SettingsParts';
 
 const MIN_KEY_LENGTH = 10;
+const MAX_KEY_LENGTH = 300;
+const TOO_LONG_MESSAGE = 'That is too long to be an API key.';
 const TIME_MESSAGE = 'Use a 24-hour time like 16:00';
 /** Six frames at this pace make about 1.5 seconds. */
 const HATCH_FRAME_MS = 300;
@@ -208,32 +210,90 @@ function RemindersStep({
   );
 }
 
-/** The optional last step: the key is saved through the bridge, never kept in the page. */
+/**
+ * The optional last step: the key is saved through the bridge, never kept in the page. A failed
+ * finish is shown here too, since the buttons on this step are the ones that finish the flow.
+ */
 function KeyStep({
   onSave,
-  onSkip,
+  onFinish,
   busy,
+  keySaved,
+  finishError,
 }: {
   onSave: (apiKey: string) => Promise<string | null>;
-  onSkip: () => void;
+  onFinish: () => void;
   busy: boolean;
+  keySaved: boolean;
+  finishError: string | null;
 }) {
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const working = saving || busy;
+  const fieldRef = useRef<HTMLInputElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+
+  // The field is disabled while saving, which drops focus: hand it back once it can take it.
+  useEffect(() => {
+    if (!working && refocus.current) {
+      refocus.current = false;
+      fieldRef.current?.focus();
+    }
+  }, [working]);
+  // Focus goes to the field when the step appears, and to "Try again" once the failed finish
+  // leaves it enabled (it is busy while the first finish is still running).
+  useEffect(() => {
+    if (!keySaved) fieldRef.current?.focus();
+  }, [keySaved]);
+  useEffect(() => {
+    if (keySaved && !busy) retryRef.current?.focus();
+  }, [keySaved, busy]);
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
     if (working || value.trim().length < MIN_KEY_LENGTH) return;
+    // Refused here, in plain words, without sending it; the field keeps what was typed.
+    if (value.length > MAX_KEY_LENGTH) {
+      setError(TOO_LONG_MESSAGE);
+      return;
+    }
     const apiKey = value;
     // Cleared at once so the typed key is not left in the page, whatever the answer is.
     setValue('');
     setError(null);
     setSaving(true);
+    refocus.current = true;
     const refused = await onSave(apiKey);
     setError(refused);
     setSaving(false);
+  }
+
+  if (keySaved) {
+    return (
+      <div className="flex w-full flex-col items-center" aria-label="API key">
+        <h1 className="text-lg font-semibold text-fg">Want learning plans?</h1>
+        <p className="mt-2 max-w-[400px] text-base text-fg-secondary">Your key is saved.</p>
+        {finishError && (
+          <p role="alert" className="mt-3 max-w-[400px] text-sm text-hard-text">
+            {finishError}
+          </p>
+        )}
+        <Button
+          ref={retryRef}
+          type="button"
+          variant="primary"
+          size="lg"
+          className="mt-6"
+          loading={busy}
+          disabled={busy}
+          onClick={onFinish}
+        >
+          {busy ? 'Saving…' : 'Try again'}
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -250,20 +310,23 @@ function KeyStep({
       </p>
       <Field label="Anthropic API key" className="mt-5 w-full text-left">
         <Input
+          ref={fieldRef}
           type="password"
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setError(null);
+          }}
           invalid={error !== null}
           aria-invalid={error !== null}
           autoComplete="off"
           spellCheck={false}
           disabled={working}
-          autoFocus
         />
       </Field>
-      {error && (
+      {(error ?? finishError) && (
         <p role="alert" className="mt-1 w-full text-left text-sm text-hard-text">
-          {error}
+          {error ?? finishError}
         </p>
       )}
       <div className="mt-6 flex gap-3">
@@ -276,7 +339,16 @@ function KeyStep({
         >
           {saving ? 'Saving…' : 'Save key'}
         </Button>
-        <Button type="button" variant="secondary" size="lg" disabled={working} onClick={onSkip}>
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          disabled={working}
+          onClick={() => {
+            setError(null);
+            onFinish();
+          }}
+        >
           Skip for now
         </Button>
       </div>
@@ -293,6 +365,8 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [times, setTimes] = useState<Times | null>(null);
+  // Set once the key is stored, so a failed finish retries the finish and never saves it twice.
+  const [keySaved, setKeySaved] = useState(false);
   // Decided once: null until the answer comes. A slow or failed answer never holds the first
   // three steps back; if it is still missing when the reminders are done, the flow has three.
   const [withKeyStep, setWithKeyStep] = useState<boolean | null>(null);
@@ -363,7 +437,10 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
       setSaving(false);
       return error instanceof Error ? error.message : String(error);
     }
-    return finish(times ?? saved);
+    setKeySaved(true);
+    // A failed finish shows its own message on this step; the key is saved either way.
+    await finish(times ?? saved);
+    return null;
   }
 
   // The times already in Settings are the starting point and what "Skip" keeps. On a new install
@@ -408,7 +485,15 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
                 saveError={saveError}
               />
             )}
-            {step === 'key' && <KeyStep onSave={saveKey} onSkip={() => void finish(times ?? saved)} busy={saving} />}
+            {step === 'key' && (
+              <KeyStep
+                onSave={saveKey}
+                onFinish={() => void finish(times ?? saved)}
+                busy={saving}
+                keySaved={keySaved}
+                finishError={saveError}
+              />
+            )}
           </div>
         </div>
       </div>

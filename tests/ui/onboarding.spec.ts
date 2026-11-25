@@ -555,33 +555,183 @@ test('in four steps Skip on step 3 finishes the whole flow', async ({ page }) =>
   expect((await calls(page)).map((c) => c.method)).toEqual(['completeOnboarding']);
 });
 
-test('step 4 fits the minimum window without scrolling', async ({ page }) => {
+/** Makes a bridge method fail on its first call only; later calls run for real. */
+async function failOnce(page: Page, method: string, message: string): Promise<void> {
+  await page.evaluate(
+    ({ method: name, message: text }) => {
+      const host = globalThis as unknown as {
+        paraleet: Record<string, (input: unknown) => Promise<unknown>>;
+        __calls: { method: string; input: unknown }[];
+      };
+      const original = host.paraleet[name]!;
+      host.__calls ??= [];
+      let failed = false;
+      host.paraleet[name] = async (input: unknown) => {
+        host.__calls.push({ method: name, input });
+        if (!failed) {
+          failed = true;
+          throw new Error(text);
+        }
+        return original(input);
+      };
+    },
+    { method, message },
+  );
+}
+
+const count = async (page: Page, method: string): Promise<number> =>
+  (await calls(page)).filter((c) => c.method === method).length;
+
+for (const [label, press] of [
+  ['Skip for now', (page: Page) => page.getByRole('button', { name: 'Skip for now', exact: true }).click()],
+  ['the small Skip at the top right', (page: Page) => skipTop(page).click()],
+] as const) {
+  test(`a failed finish on step 4 says so, and ${label} works when pressed again`, async ({ page }) => {
+    await openKeyFlow(page);
+    await toKey(page);
+    await failOnce(page, 'completeOnboarding', 'The database is locked');
+    await press(page);
+    await expect(page.getByRole('alert')).toHaveText('The database is locked');
+    await expect(page.getByTestId('onboarding-step')).toHaveText('Step 4 of 4');
+    await expect(page.getByRole('button', { name: 'Skip for now', exact: true })).toBeEnabled();
+    await expect(skipTop(page)).toBeEnabled();
+    if (label === 'Skip for now') await captureBothSizes(page, 'onboarding-4-finish-failed');
+    await press(page);
+    await expect(page.getByTestId('screen-today')).toBeVisible();
+    expect(await count(page, 'completeOnboarding')).toBe(2);
+  });
+}
+
+test('step 4 puts focus in the key field when it appears', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await expect(keyField(page)).toBeFocused();
+});
+
+test('after a refused key, focus is back in the key field', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey'], { saveApiKey: 'That does not look like an API key.' });
+  await keyField(page).fill(SECRET);
+  await keyField(page).press('Enter');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(keyField(page)).toBeEnabled();
+  await expect(keyField(page)).toBeFocused();
+});
+
+test('a saved key whose finish failed says it is saved, and Try again never saves it twice', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey']);
+  await failOnce(page, 'completeOnboarding', 'The database is locked');
+  await keyField(page).fill(SECRET);
+  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  await expect(page.getByText('Your key is saved.')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveText('The database is locked');
+  await expect(keyField(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save key', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeFocused();
+  expect(await page.content()).not.toContain(SECRET);
+  await captureBothSizes(page, 'onboarding-4-key-saved-finish-failed');
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await count(page, 'saveApiKey')).toBe(1);
+  expect(await count(page, 'completeOnboarding')).toBe(2);
+  expect(await hasKey(page)).toBe(true);
+});
+
+test('a saved key whose finish failed can still be skipped from the top right', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey']);
+  await failOnce(page, 'completeOnboarding', 'The database is locked');
+  await keyField(page).fill(SECRET);
+  await keyField(page).press('Enter');
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
+  await skipTop(page).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await count(page, 'saveApiKey')).toBe(1);
+});
+
+test('a key over 300 characters is refused in the page, without being sent or cleared', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey', 'completeOnboarding']);
+  const long = 'k'.repeat(301);
+  await keyField(page).fill(long);
+  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('That is too long to be an API key.');
+  await expect(keyField(page)).toHaveAttribute('aria-invalid', 'true');
+  await expect(keyField(page)).toHaveValue(long);
+  expect(await page.getByRole('alert').innerText()).not.toContain('kkkk');
+  expect(await calls(page)).toEqual([]);
+  // Exactly 300 is allowed.
+  await keyField(page).fill('k'.repeat(300));
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await count(page, 'saveApiKey')).toBe(1);
+});
+
+test('step 4 fits the minimum window without scrolling in every state', async ({ page }) => {
   await page.setViewportSize(WINDOW_MIN);
   await openKeyFlow(page);
   await toKey(page);
-  await keyField(page).fill(SECRET);
+  const fits = async (): Promise<void> => {
+    const sizes = await page.evaluate<{
+      sh: number;
+      ih: number;
+      sw: number;
+      iw: number;
+      top: number;
+      bottom: number;
+    }>(`({
+      sh: document.documentElement.scrollHeight,
+      ih: window.innerHeight,
+      sw: document.documentElement.scrollWidth,
+      iw: window.innerWidth,
+      top: Math.min(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, h1, p)')].map((el) => el.getBoundingClientRect().top)),
+      bottom: Math.max(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, h1, p)')].map((el) => el.getBoundingClientRect().bottom)),
+    })`);
+    expect(sizes.sh).toBeLessThanOrEqual(sizes.ih);
+    expect(sizes.sw).toBeLessThanOrEqual(sizes.iw);
+    expect(sizes.top).toBeGreaterThanOrEqual(0);
+    expect(sizes.bottom).toBeLessThanOrEqual(sizes.ih);
+  };
+  await fits();
+  // Too long.
+  await keyField(page).fill('k'.repeat(301));
+  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await fits();
+  // Refused by main.
   await page.evaluate(
     `globalThis.paraleet.saveApiKey = async () => { throw new Error('Anthropic did not accept that key. Check it and try again.'); }`,
   );
+  await keyField(page).fill(SECRET);
   await page.getByRole('button', { name: 'Save key', exact: true }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
-  const sizes = await page.evaluate<{
-    sh: number;
-    ih: number;
-    sw: number;
-    iw: number;
-    top: number;
-    bottom: number;
-  }>(`({
+  await expect(page.getByRole('alert')).toContainText('Anthropic did not accept');
+  await fits();
+  // A failed finish with no key saved.
+  await failOnce(page, 'completeOnboarding', 'The database is locked. Close other copies of the app and try again.');
+  await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('The database is locked');
+  await fits();
+});
+
+test('step 4 with a saved key and a failed finish fits the minimum window', async ({ page }) => {
+  await page.setViewportSize(WINDOW_MIN);
+  await openKeyFlow(page);
+  await toKey(page);
+  await failOnce(page, 'completeOnboarding', 'The database is locked. Close other copies of the app and try again.');
+  await keyField(page).fill(SECRET);
+  await keyField(page).press('Enter');
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
+  const sizes = await page.evaluate<{ sh: number; ih: number; bottom: number }>(`({
     sh: document.documentElement.scrollHeight,
     ih: window.innerHeight,
-    sw: document.documentElement.scrollWidth,
-    iw: window.innerWidth,
-    top: Math.min(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, h1, p)')].map((el) => el.getBoundingClientRect().top)),
-    bottom: Math.max(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, h1, p)')].map((el) => el.getBoundingClientRect().bottom)),
+    bottom: Math.max(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, h1, p)')].map((el) => el.getBoundingClientRect().bottom)),
   })`);
   expect(sizes.sh).toBeLessThanOrEqual(sizes.ih);
-  expect(sizes.sw).toBeLessThanOrEqual(sizes.iw);
-  expect(sizes.top).toBeGreaterThanOrEqual(0);
   expect(sizes.bottom).toBeLessThanOrEqual(sizes.ih);
 });
