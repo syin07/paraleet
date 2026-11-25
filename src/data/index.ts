@@ -155,8 +155,14 @@ export function openDataFolder(
   let lastImport: ImportOutcome | null = null;
   let applied = false;
 
-  if (restoreMissingDatabase(dataDir)) {
-    problems.push('The database was missing and the backup of an import was there: an import had stopped half way. The backup was put back.');
+  if (restoreMissingDatabase(dataDir, options.rename)) {
+    problems.push('The database was missing and the backup of an import was there: an import had stopped half way, or the file was removed. The backup was put back.');
+    // Told to the user too, unless a staged import below has more to say: data they did not
+    // expect to see must never appear without a word.
+    lastImport = {
+      status: 'rejected',
+      reason: 'The data file was missing, so the copy kept from your last import was put back.',
+    };
   }
 
   const age = stagedImportAgeMs(dataDir, options.realNowMs);
@@ -175,14 +181,14 @@ export function openDataFolder(
         applied = true;
         lastImport = { status: 'applied' };
       } else if (staged.status === 'rejected') {
-        lastImport = { status: 'rejected', reason: staged.reason };
+        lastImport = { status: 'rejected', reason: `${staged.reason} Your data was not changed.` };
       }
     } catch (error) {
       // The old database is back in place. Do not try again at every launch.
       problems.push(`The staged import could not be put in place: ${describe(error)}`);
       // If it is not back in place (putting it back failed too), this puts it back or throws:
       // the launch then fails, which is better than opening a new, empty database over it.
-      if (restoreMissingDatabase(dataDir)) problems.push('The database was put back from the backup of the import.');
+      if (restoreMissingDatabase(dataDir, options.rename)) problems.push('The database was put back from the backup of the import.');
       try {
         discardStagedImport(dataDir);
       } catch (discardError) {

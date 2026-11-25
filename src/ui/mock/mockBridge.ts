@@ -1017,7 +1017,7 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
   'data-import-refused': (state) => {
     midway(state);
     assignToday(state);
-    state.data.lastImport = { status: 'rejected', reason: 'That file is damaged and cannot be imported.' };
+    state.data.lastImport = { status: 'rejected', reason: 'That file is damaged and cannot be imported. Your data was not changed.' };
   },
   /** More than five reviews due, to check the cap of five. */
   backlog: (state) => {

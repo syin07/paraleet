@@ -567,9 +567,50 @@ describe('opening the data folder at launch', () => {
     renameSync(join(dataDir, DATABASE_FILE_NAME), join(dataDir, IMPORT_BACKUP_FILE_NAME));
     const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
     open.push(opened.db);
-    expect(opened.lastImport).toBeNull();
+    // The user is told: data they did not expect must not appear without a word.
+    expect(opened.lastImport).toEqual({
+      status: 'rejected',
+      reason: 'The data file was missing, so the copy kept from your last import was put back.',
+    });
     expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(4);
     expect(hasImportBackup(dataDir)).toBe(false);
+  });
+
+  it('says that the data was not changed when a staged file fails its check at launch', () => {
+    const dataDir = makeDataDir(3);
+    writeFileSync(join(dataDir, STAGED_IMPORT_FILE_NAME), 'this is not a database');
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({
+      status: 'rejected',
+      reason: 'That file is not a ParaLeet database, or it is damaged. Your data was not changed.',
+    });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
+  });
+
+  it('fails loudly, and creates no empty database, when the database cannot be put back at all', () => {
+    const dataDir = makeDataDir(3);
+    const { db, path } = makeDatabase('incoming', 6);
+    db.close();
+    stageCheckedImport(path, dataDir, NOW, []);
+    // The database moves to its backup name, and after that the disk refuses every rename.
+    let calls = 0;
+    const failingAfterFirst = (from: string, to: string): void => {
+      calls += 1;
+      if (calls > 1) throw new Error('rename failed');
+      renameSync(from, to);
+    };
+    expect(() => openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [], rename: failingAfterFirst })).toThrow('rename failed');
+    // Nothing was created under the database name, and the user's data is whole under the backup name.
+    expect(existsSync(join(dataDir, DATABASE_FILE_NAME))).toBe(false);
+    expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(3);
+    // Once the disk works again, the next launch puts it back, and then finishes the import the
+    // user asked for: the staged file is still waiting and still fresh.
+    const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [] });
+    open.push(opened.db);
+    expect(opened.lastImport).toEqual({ status: 'applied' });
+    expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(6);
+    expect(countAttempts(join(dataDir, IMPORT_BACKUP_FILE_NAME))).toBe(3);
   });
 
   it('when the swap fails half way and putting the database back fails too, the launch still opens the old data', () => {
@@ -587,7 +628,8 @@ describe('opening the data folder at launch', () => {
     };
     const opened = openDataFolder(dataDir, NOW, { realNowMs: real(), catalogs: [], rename: failingTwice });
     open.push(opened.db);
-    expect(calls).toBe(3);
+    // Database to backup, import into place (fails), put back (fails), put back again (works).
+    expect(calls).toBe(4);
     expect(opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts')?.n).toBe(3);
     expect(opened.lastImport).toEqual({ status: 'rejected', reason: 'The file could not be put in place. Your data was not changed.' });
     expect(opened.problems.join(' ')).toContain('put back from the backup');
@@ -659,6 +701,10 @@ describe('a journal left beside a staged file by a crash', () => {
     const dataDir = makeDataDir(1);
     const { db, path } = makeDatabase('incoming', 2);
     db.close();
+    writeFileSync(journal(dataDir), 'left by a crash');
+    // `stageImport` copies and never opens the file, so only our own code can have removed it.
+    stageImport(path, dataDir);
+    expect(existsSync(journal(dataDir))).toBe(false);
     writeFileSync(journal(dataDir), 'left by a crash');
     stageCheckedImport(path, dataDir, NOW, []);
     expect(existsSync(journal(dataDir))).toBe(false);

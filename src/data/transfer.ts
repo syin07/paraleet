@@ -31,7 +31,7 @@ function removeSideFiles(path: string): void {
   for (const suffix of SIDE_FILE_SUFFIXES) rmSync(`${path}${suffix}`, { force: true });
 }
 
-/** Asks the disk to really hold the file, so "saved" is still true after a power cut. */
+/** Asks the system to write the file out before it is given its name, so "saved" survives a crash. */
 function flushToDisk(path: string): void {
   const handle = openSync(path, 'r');
   try {
@@ -214,8 +214,9 @@ export function stagedImportAgeMs(dataDir: string, nowMs: number): number | null
  * there to put back. Call only before the database is open.
  *
  * The imported file is kept as `FAILED_IMPORT_FILE_NAME`, not deleted. When the user imports the
- * backup of an earlier import to undo it, that backup is the only copy of what they want back;
- * this way no path through an import deletes the last copy of anything.
+ * backup of an earlier import to undo it, that backup is the only copy of what they want back, so
+ * one import, start to finish, never deletes it. One failed file is kept: the next failure
+ * replaces it, as the next import replaces the one backup.
  */
 export function revertAppliedImport(dataDir: string): boolean {
   const current = join(dataDir, DATABASE_FILE_NAME);
@@ -234,14 +235,16 @@ export function revertAppliedImport(dataDir: string): boolean {
  * what a swap looks like when the app died, or the disk failed, between its two renames: the
  * user's data sits under the backup name and nothing sits under the database name. Without this
  * the app would start on a new, empty database. Returns true when it put the backup back. Call
- * at launch, before anything else looks at the folder.
+ * at launch, before anything else looks at the folder. It throws when the backup cannot be moved:
+ * the launch must then fail, not carry on to an empty database. `rename` is replaceable so a test
+ * can make it fail.
  */
-export function restoreMissingDatabase(dataDir: string): boolean {
+export function restoreMissingDatabase(dataDir: string, rename: (from: string, to: string) => void = renameSync): boolean {
   const current = join(dataDir, DATABASE_FILE_NAME);
   const backup = join(dataDir, IMPORT_BACKUP_FILE_NAME);
   if (existsSync(current) || !existsSync(backup)) return false;
   removeSideFiles(current);
-  renameSync(backup, current);
+  rename(backup, current);
   return true;
 }
 
