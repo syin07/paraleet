@@ -1,6 +1,6 @@
 # ParaLeet status
 
-Last updated: 2026-11-25 (session 1, lead)
+Last updated: 2026-11-25 (session 1, lead; stopped on a usage limit, see In flight)
 
 ## What works today
 
@@ -28,18 +28,22 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 
 ## In flight
 
+**The session stopped here on a usage limit (2026-11-25). Nothing below is merged yet. Pick up in this order.**
+
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-115 (main-process side) | Lead: menu bar icon from the sprite's head with the streak; the compact card window and its placement; bridge methods `showCard`, `hideCard`, `setCardSize`, `completeOnboarding` | `lead/san-115-tray-card` at `ce749e7` (worktree `.claude/worktrees/lead-b`) | In review, round 2 (round 1: the card hid the Dock icon, could open on the wrong screen, and closing on a click elsewhere was untested; fixed) |
-| SAN-117 + SAN-118 (main-process side) | Lead: the two daily notifications from `dueReminder`; launch at login | `lead/san-117-reminders` (worktree `.claude/worktrees/lead-san-111`), stacked on the SAN-115 branch | Being built |
+| SAN-117 + SAN-118 (main-process side) | Lead: two daily reminders on the tick, launch at login, quiet login start, bridge `showSwap`, card ignores real focus loss in test runs | `lead/san-117-reminders` at `9905d86` (worktree `.claude/worktrees/lead-san-111`) | Review round 1 blocked on one test that could not fail; fixed with the reviewer's other notes. 933 unit and 16 end-to-end tests pass; the UI suite passed before the fixes (rerun it). **Needs a fresh reviewer (round 2), then merge.** Decision 0015 is on the branch |
+| SAN-115 (UI side) | Worker: the compact card's real page; the pet's click opens the card | `worker/san-115-card-page` at `d9c72b6` (worktree `.claude/worktrees/agent-ab1836c4af2d267e6`) | Worker done (913 unit, 161 UI, 12 e2e). A review was started and stopped at the limit: **launch a fresh reviewer.** At merge: point the card's "Swap" at `showSwap` (on the reminders branch), update design section 11 (the pet's click opens the card), expect a small conflict in `src/main/windows/cardWindow.ts` (`hasShadow` here, `closeOnBlur` on the reminders branch). Worker's note: the report form's rating buttons are tall at 360 points |
+| SAN-118 (UI side) | Worker: first-launch screens (hatch, meet Para, reminder times); `App.tsx` shows them until Para has hatched; the floating pet waits for hatching | `worker/san-118-onboarding` at `ef4ca4f` (worktree `.claude/worktrees/agent-aeeaa52179a1ba71c`) | Worker done (913 unit, 160 UI, 13 e2e). A review was started and stopped at the limit: **launch a fresh reviewer.** The optional API key step is added by the lead with M3 |
+| SAN-120 to SAN-123 (M3) | Lead: plan rules in core (`src/core/plan.ts`, tested), migration 003 (plans, plan_items), `src/data/repos/plans.ts`, the `llm` module (`@anthropic-ai/sdk` 1.14, structured output, one retry, saved-answer tests incl. invented problems), `src/main/services/plans.ts`, API key in a sealed file (`src/main/secrets.ts`, Electron `safeStorage`), bridge methods, mock plans with scenarios | `lead/m3-plan-core` (worktree `.claude/worktrees/lead-m3`), work in progress, all committed | **`src/main/services/plans.test.ts` does not type-check yet** (the test's `request` is `as const`; spread it into mutable arrays where a `PlanRequest` is wanted). Then: run all suites, add an end-to-end test using the scripted model (`PARALEET_E2E_LLM_ANSWERS` points at a JSON file of answers), write decision 0016, review, merge. Then workers: the Plan screen (design section 6; mock scenarios `plan-nokey`, `plan-nostore`, `plan-fails`, `plan-draft`, `plan-active`) and the "Learning plans" group in Settings (key, model, test key) |
 
 ## Next
 
-1. Merge SAN-115's main-process side when its review passes. Then launch two UI workers from main: the compact card's page (`src/ui/windows/card/**`, design section 9: problem, Open problem, I solved it, the report form in place, the fed state; it calls `setCardSize` and `hideCard`) and the first-launch screens (`src/ui/screens/onboarding/**`, design section 10: hatch, meet Para, reminder times; it calls `completeOnboarding`; `App.tsx` shows it while `pet.hatched` is false; mock scenario `hatching`). When the first-launch screens merge, also hold the floating pet back until Para has hatched (one condition in `PetWindowController.sync`, removed from the SAN-115 slice so nobody is left without a pet in between) and add the end-to-end test for it. When the card page merges, switch the floating pet's click from `showMainWindow` to `showCard({ anchor: 'pet' })` and update the pet tests.
-3. Finish SAN-117 and SAN-118's main-process side: a notifier port on the app context (faked in tests, recorded in end-to-end runs), `sendDueReminder` on the tick, clicking a notification opens the card; the login item set only in a packaged app; opened at login means no main window (macOS 13 and later does not say whether the app was opened at login, so the plan is: the setting is on and the Mac has been up for under three minutes).
-4. Tick the M2 checklist in the PRD when SAN-115, SAN-117 and SAN-118 are fully merged.
-5. M3 after the catalog: plan tables (migration 003), the `llm` module (load the `claude-api` skill first; look up the current model list), plan validation against the catalog, the Plan screen, the API key stored with Electron `safeStorage` outside the database, the daily loop drawing from the active plan, the graduation cap (`plansFinished`), and an in-app "refresh Codeforces" using the worker's pure transform.
-6. M4: Stats screen, export and import, the `.dmg` with an install note, a log file for launch self-check failures, confirm `isRendererUrl` and the login item in the packaged app.
+1. Review and merge the three M2 branches above (reminders first, then the card page, then the first-launch screens; rebase each on main and run all three suites). Never run two end-to-end suites at once on this Mac: test apps take focus from each other.
+2. Then M2 is complete: tick the M2 checklist in `docs/PRD.md` section 12, set SAN-115, SAN-117 and SAN-118 to Done in Linear with merge commits and screenshot sheets (card states; first-launch steps), remove the merged worktrees.
+3. Finish M3 on `lead/m3-plan-core` as described in the table. Model notes from the `claude-api` skill (loaded 2026-11-25): default model `claude-opus-5-5`; structured output through `client.beta.messages.parse` with `betaZodOutputFormat`; the request opts into the server-side refusal fallback (`betas: ['server-side-fallback-2026-07-01']`, `fallbacks: 'default'`) and retries the plain way on a 400, so a retired beta flag cannot break plan generation; no `thinking`, `temperature` or `tool_choice` is sent. Tell the owner in the final report that the fallback is on. Still to build for M3: the Plan screen, the key and model in Settings, the daily loop already draws from the active plan (`activePlanQueue`), the graduation cap (`countFinishedPlans`), an optional in-app Codeforces refresh. Tick the M3 checklist when merged.
+4. M4: Stats screen (solves per week, topic coverage, a heatmap of fed days, longest streak; needs a `getStats` bridge method), export and import of the database file from Settings, a `.dmg` with electron-builder and a one-page install note for the unsigned-app warning, a log file for launch self-check failures, and in the packaged app confirm `isRendererUrl`, the login item and the quiet login start.
+5. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install.
 
 ## Done
 
@@ -60,6 +64,7 @@ M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
 | SAN-112 + SAN-113 | Para drawn by code: four stages, eight moods, hatching, accessories, seed traits; the gallery at `#/gallery` | `73ff1b4` |
 | SAN-116 | Para comes alive: moods through the day, lines, checking and eating on report, the greeting, accessory unlocks, migration 002 | `63ec870` |
 | SAN-119 | The problem catalog: 3,332 LeetCode, 400 CSES and 3,905 Codeforces problems, built by scripts, loaded at launch, found by quick log | `848c2da` |
+| SAN-115 (main-process side) | Menu bar icon with mood and streak; the compact card window, its placement and bridge methods | `b803954` |
 
 ## Linear
 
