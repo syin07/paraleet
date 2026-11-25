@@ -233,6 +233,16 @@ Mobbin query: `online course syllabus with module progress`, platform web; `onbo
 - Same layout as the active plan, with a top banner (`--accent-subtle`, radius 8px, 12px padding): "Draft plan. Remove, reorder or swap problems, then activate." and primary md "Activate plan" on the banner's right.
 - Each row gains, on hover, a drag handle at left (6-dot, muted) and right-side ghost icon buttons: Swap (opens a popover listing 5 alternatives from the same topic) and Remove. Already-solved items show a muted "solved, will be offered as review" tag.
 
+**As built in M3** (where the screen differs from the text above)
+- An active plan has no "Edit": a plan is edited while it is a draft, and an active plan is followed. Its header has "Create a plan" (a new draft can be made while a plan is active) and "Archive", which asks first.
+- Reordering is two small buttons per row, up and down within the stage or group, not a drag handle: they work with the keyboard and need no drag code. The row's buttons are always shown, not only on hover.
+- "Swap" opens its choices as a list under the row (five at most), not in a popover, so a long title is never cut off.
+- "Remove" does not ask: the plan is still a draft and the problem can be brought back with a swap. After it, focus moves to the next row, or to the one before when the last row was removed.
+- Activating a draft while another plan is active asks first, because it archives the active one.
+- Drafts and past plans are listed under the active plan (or under "No active plan"); a finished plan is kept and marked finished.
+- While a command runs (activate, archive, delete), its dialog cannot be closed, so a failure always lands where the user can see it.
+- There is no "Why?" link on the no-key card; the paragraph says it.
+
 **ParaLeet adaptation**
 - Course modules become stages; lessons become problems; module descriptions become pattern-group descriptions written by the model.
 - Interest chips become the fixed topic list; level cards become the PRD's three levels.
@@ -252,6 +262,11 @@ Mobbin query: `habit tracker statistics with calendar heatmap`, platform web.
   - **Solves per week**: vertical bars, one per week, bar width 60% of slot, radius 3px top corners, `--accent` fill; current week `--accent-subtle` with dashed `--accent-border` outline. Y axis 3 gridlines `--border-subtle`, labels `--text-xs` muted. Chart height 180px. Tooltip on hover.
   - **Topic coverage**: horizontal bar list, one row per topic (24px rows, 8px gaps): topic name 120px `--text-sm`, a track `--bg-sunken` radius 999px height 8px, fill `--accent` proportional to solved count, count right aligned tabular. Sorted descending; topics with zero shown muted at the bottom (collapsed after 8 rows with "Show all").
 - Empty state (no attempts): the tiles show "0", the heatmap renders all empty cells, and the chart areas show a centered muted line "Your first solve shows up here".
+
+**As built in M4**
+- Heatmap colors count the different problems attempted that day: none, 1, 2, 3, 4 or more (decision 0017). A day rated Again is a fed day too.
+- Tooltips use the raised surface and stay clear of the card titles. Both charts can be walked with the arrow keys, and each move is announced.
+- The topic name column is 132px, so the longest topic name fits on one line.
 
 **ParaLeet adaptation**
 - GitHub contributions become fed days, intensity by problems solved that day.
