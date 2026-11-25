@@ -226,12 +226,128 @@ describe('JSON and mutation', () => {
 
   it('treats malformed state as a new card instead of throwing', () => {
     const fresh = scheduleFirstAttempt(3, 'good', T0, opts);
-    const states: SchedulerState[] = [{}, { stability: 'x' }, { ...fresh.state, fsrsState: 9 }, { ...fresh.state, lastReview: 'nope' }];
+    const states: SchedulerState[] = [{}, { stability: 'x' }, { ...fresh.state, fsrsState: 9 }, { ...fresh.state, lastReviewDay: 'nope' }];
     for (const state of states) {
       const broken: ReviewCard = { problemId: 3, status: 'active', dueAt: T0.toISOString(), state };
       expect(scheduleReview(broken, 'good', T0, opts)).toEqual(fresh);
       expect(() => previewIntervals(broken, T0, opts)).not.toThrow();
     }
+  });
+});
+
+describe('damaged and clock-skewed state', () => {
+  const { card: seasonedCard, now: seasonedNow } = seasoned();
+  const fresh = scheduleFirstAttempt(1, 'good', seasonedNow, opts);
+  const withState = (patch: Record<string, string | number | null>): ReviewCard => ({
+    ...seasonedCard,
+    state: { ...seasonedCard.state, ...patch },
+  });
+  function oldShape(): ReviewCard {
+    const { lastReviewDay: _day, ...rest } = seasonedCard.state;
+    return { ...seasonedCard, state: { ...rest, lastReview: '2026-11-25T20:00:00.000Z' } };
+  }
+  const damaged: Array<[string, ReviewCard]> = [
+    ['zero stability on a review card', withState({ stability: 0 })],
+    ['negative stability', withState({ stability: -3 })],
+    ['negative difficulty', withState({ difficulty: -1 })],
+    ['difficulty above the maximum', withState({ difficulty: 11 })],
+    ['fractional reps', withState({ reps: 1.5 })],
+    ['negative lapses', withState({ lapses: -1 })],
+    ['last review that is not a day', withState({ lastReviewDay: '2026-13-45' })],
+    ['old shape with an ISO instant and no day', oldShape()],
+    ['unknown state marker', withState({ fsrsState: 7 })],
+  ];
+
+  it.each(damaged)('treats %s as a new card without throwing', (_name, broken) => {
+    expect(scheduleReview(broken, 'good', seasonedNow, opts).state).toEqual(fresh.state);
+    expect(() => previewIntervals(broken, seasonedNow, opts)).not.toThrow();
+    expect(previewIntervals(broken, seasonedNow, opts)).toEqual(previewIntervals(null, seasonedNow, opts));
+  });
+
+  it('keeps the memory state and counts 0 days when the last review is in the future', () => {
+    const future = withState({ lastReviewDay: addDays(day(seasonedNow), 5) });
+    const sameDay = withState({ lastReviewDay: day(seasonedNow) });
+    const result = scheduleReview(future, 'good', seasonedNow, opts);
+    expect(result).toEqual(scheduleReview(sameDay, 'good', seasonedNow, opts));
+    expect(result.state.reps).toBe(Number(seasonedCard.state.reps) + 1);
+    expect(previewIntervals(future, seasonedNow, opts)).toEqual(previewIntervals(sameDay, seasonedNow, opts));
+  });
+});
+
+describe('options and placement', () => {
+  it.each([0.5, 0.69, 0.98, 1, Number.NaN])('rejects target retention %s', (targetRetention) => {
+    expect(() => scheduleFirstAttempt(1, 'good', T0, { ...opts, targetRetention })).toThrow(RangeError);
+    expect(() => previewIntervals(null, T0, { ...opts, targetRetention })).toThrow(RangeError);
+  });
+
+  it('accepts the ends of the range', () => {
+    for (const targetRetention of [0.7, 0.97]) {
+      expect(() => scheduleFirstAttempt(1, 'good', T0, { ...opts, targetRetention })).not.toThrow();
+    }
+  });
+});
+
+describe('elapsed time is measured in ParaLeet days, not UTC days or clock time', () => {
+  const zones = ['America/Los_Angeles', 'Asia/Tokyo'];
+
+  /** An instant at the given local clock time on the given calendar date in the zone. */
+  function localInstant(zone: string, date: string, hh: number, mm: number): Date {
+    const guess = new Date(`${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`);
+    for (let i = 0; i < 3; i++) {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: zone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).formatToParts(guess);
+      const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+      const shownMs = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+      const wantMs = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8)), hh, mm);
+      guess.setTime(guess.getTime() + (wantMs - shownMs));
+    }
+    return guess;
+  }
+
+  it.each(zones)('gives the same result on the due ParaLeet day at any clock time in %s', (zone) => {
+    const o = { ...opts, timeZone: zone };
+    const rated = localInstant(zone, '2026-11-25', 17, 0);
+    const first = scheduleFirstAttempt(1, 'again', rated, o);
+    const dueDay = paraDayOf(new Date(first.dueAt), zone, 4);
+    const nextDay = addDays(dueDay, 1);
+    const times = [
+      localInstant(zone, dueDay, 4, 1),
+      localInstant(zone, dueDay, 9, 0),
+      localInstant(zone, dueDay, 17, 0),
+      localInstant(zone, nextDay, 3, 59),
+    ];
+    for (const t of times) expect(paraDayOf(t, zone, 4)).toBe(dueDay);
+    const previews = times.map((t) => previewIntervals(first, t, o));
+    const results = times.map((t) => scheduleReview(first, 'good', t, o));
+    for (let i = 1; i < times.length; i++) {
+      expect(previews[i]).toEqual(previews[0]);
+      expect(results[i]!.state).toEqual(results[0]!.state);
+      expect(paraDayOf(new Date(results[i]!.dueAt), zone, 4)).toBe(paraDayOf(new Date(results[0]!.dueAt), zone, 4));
+    }
+  });
+
+  it('counts two attempts on the same ParaLeet day as 0 days apart', () => {
+    const morning = new Date('2026-11-25T18:00:00Z'); // 10:00 PST
+    const evening = new Date('2026-11-26T05:00:00Z'); // 21:00 PST, same ParaLeet day, next UTC day
+    expect(day(morning)).toBe(day(evening));
+    const first = scheduleFirstAttempt(1, 'good', morning, opts);
+    const sameDay = scheduleReview(first, 'good', evening, opts);
+    const stillMorning = scheduleReview(first, 'good', new Date('2026-11-25T19:00:00Z'), opts);
+    expect(sameDay.state).toEqual(stillMorning.state);
+  });
+
+  it('gives a different result for a review a ParaLeet day late than one on time', () => {
+    const first = scheduleFirstAttempt(1, 'good', T0, opts);
+    const onTime = new Date(first.dueAt);
+    const late = new Date(onTime.getTime() + 24 * 3_600_000);
+    expect(scheduleReview(first, 'good', late, opts).state).not.toEqual(scheduleReview(first, 'good', onTime, opts).state);
   });
 });
 
