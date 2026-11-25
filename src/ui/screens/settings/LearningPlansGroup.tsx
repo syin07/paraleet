@@ -14,8 +14,6 @@ const KEY_MIN_LENGTH = 10;
 /** The select's value for "type another model ID". Not a valid model ID, so it can never clash with one. */
 const OTHER = '__other__';
 
-type TestState = { kind: 'idle' } | { kind: 'running' } | { kind: 'done'; result: ApiKeyTest };
-
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -65,10 +63,17 @@ function LoadedGroup({ status, onStatus, model, saveModel, modelError, clearErro
   const [typedKey, setTypedKey] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
-  // A test result belongs to the key and model it ran with: once either changes it is not shown.
-  const [ran, setRan] = useState<{ model: string; hasKey: boolean; state: TestState }>();
-  const test: TestState = ran && ran.model === model && ran.hasKey === status.hasKey ? ran.state : { kind: 'idle' };
-  const setTest = (state: TestState): void => setRan({ model, hasKey: status.hasKey, state });
+  // A test result belongs to the model it ran with, and a saved or removed key drops it. The run
+  // number makes sure only the latest run's answer is kept; `testing` lasts until that answer arrives.
+  const [result, setResult] = useState<{ model: string; result: ApiKeyTest }>();
+  const [testing, setTesting] = useState(false);
+  const latestRun = useRef(0);
+  const shown = result && result.model === model ? result.result : null;
+  function forgetTest(): void {
+    latestRun.current += 1;
+    setResult(undefined);
+    setTesting(false);
+  }
   const keyRef = useRef<HTMLInputElement>(null);
   const testRef = useRef<HTMLButtonElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -90,11 +95,12 @@ function LoadedGroup({ status, onStatus, model, saveModel, modelError, clearErro
     setKeyError(null);
     try {
       onStatus(await api().saveApiKey({ apiKey: typedKey }));
-      // Gone from the page as soon as it is stored.
-      setTypedKey('');
+      forgetTest();
     } catch (error) {
       setKeyError(messageOf(error));
     } finally {
+      // Gone from the page whether or not it was stored; the user pastes it again to retry.
+      setTypedKey('');
       setKeyBusy(false);
     }
   }
@@ -104,6 +110,7 @@ function LoadedGroup({ status, onStatus, model, saveModel, modelError, clearErro
     setKeyError(null);
     try {
       onStatus(await api().removeApiKey());
+      forgetTest();
     } catch (error) {
       setKeyError(messageOf(error));
     } finally {
@@ -112,18 +119,24 @@ function LoadedGroup({ status, onStatus, model, saveModel, modelError, clearErro
   }
 
   async function runTest(): Promise<void> {
-    if (test.kind === 'running') return;
-    setTest({ kind: 'running' });
+    if (testing) return;
+    const run = ++latestRun.current;
+    const testedModel = model;
+    setTesting(true);
+    setResult(undefined);
+    let outcome: ApiKeyTest;
     try {
-      setTest({ kind: 'done', result: await api().testApiKey() });
+      outcome = await api().testApiKey();
     } catch (error) {
-      setTest({ kind: 'done', result: { ok: false, reason: messageOf(error) } });
+      outcome = { ok: false, reason: messageOf(error) };
     }
+    if (run !== latestRun.current) return;
+    setResult({ model: testedModel, result: outcome });
+    setTesting(false);
   }
 
-  const testing = test.kind === 'running';
-  const failure = test.kind === 'done' && !test.result.ok ? test.result.reason : null;
-  const worked = test.kind === 'done' && test.result.ok ? test.result : null;
+  const failure = shown && !shown.ok ? shown.reason : null;
+  const worked = shown && shown.ok ? shown : null;
   const notice = worked
     ? worked.modelAvailable
       ? 'The key works.'
@@ -154,7 +167,7 @@ function LoadedGroup({ status, onStatus, model, saveModel, modelError, clearErro
             </div>
           ) : status.hasKey ? (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 inline-flex items-center gap-1.5 text-base text-fg">
+              <span className="mr-1 inline-flex items-center gap-1.5 text-base text-fg-muted">
                 <Check className="h-3.5 w-3.5 text-easy" aria-hidden />
                 Saved, encrypted
               </span>
@@ -214,7 +227,7 @@ function KeyEntry({
         placeholder="Paste your key"
         autoComplete="off"
         spellCheck={false}
-        className="max-w-[320px] flex-1"
+        className="max-w-[280px] flex-1"
         disabled={disabled || busy}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -279,7 +292,11 @@ function ModelRow({
             onEdit={() => clearError('planModel')}
             onCommit={async (text) => {
               const id = text.trim();
-              if (id === model) return true;
+              if (id === model) {
+                // Nothing to save: show the saved model, closing the field when it is a suggested one.
+                setOtherChosen(false);
+                return true;
+              }
               const saved = await saveModel(id);
               if (!saved) setResets((count) => count + 1);
               // Back to the saved value: a suggested model closes the text field, a typed one stays.

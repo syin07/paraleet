@@ -554,7 +554,9 @@ test.describe('learning plans', () => {
     await failBridgeNext(page, 'saveApiKey', 'The key could not be saved right now.');
     await save.click();
     await expect(plansGroup(page).getByRole('alert')).toHaveText('The key could not be saved right now.');
-    await expect(keyField(page)).toBeVisible();
+    // The refused key does not stay in the page either.
+    await expect(keyField(page)).toHaveValue('');
+    expect(await page.content()).not.toContain('1234567890');
 
     await keyField(page).fill(SECRET_KEY);
     await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
@@ -598,6 +600,74 @@ test.describe('learning plans', () => {
     await expect(plansGroup(page).getByText('Saved, encrypted')).toHaveCount(0);
     await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
     await expect.poll(() => page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getPlanOverview()).llm.hasKey)).toBe(false);
+  });
+
+  test('a key typed and saved is not kept: after Remove the field is empty and the key is nowhere in the page', async ({ page }) => {
+    await openScreen(page, 'settings', 'plan-nokey');
+    await showPlans(page);
+    await keyField(page).fill(SECRET_KEY);
+    await keyField(page).press('Enter');
+    await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+    await plansGroup(page).getByRole('button', { name: 'Remove' }).click();
+    await expect(keyField(page)).toBeVisible();
+    await expect(keyField(page)).toHaveValue('');
+    expect(await page.content()).not.toContain(SECRET_KEY);
+  });
+
+  for (const [scenario, label] of [
+    ['default', 'a passing test'],
+    ['plan-badkey', 'a failing test'],
+  ] as const) {
+    test(`a new key starts with no test result, after ${label}, Remove and Save`, async ({ page }) => {
+      await openScreen(page, 'settings', scenario);
+      await showPlans(page);
+      await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+      await expect(plansGroup(page).getByText(scenario === 'default' ? 'The key works.' : /did not accept/)).toBeVisible();
+      await plansGroup(page).getByRole('button', { name: 'Remove' }).click();
+      await keyField(page).fill(SECRET_KEY);
+      await keyField(page).press('Enter');
+      await expect(plansGroup(page).getByText('Saved, encrypted')).toBeVisible();
+      await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
+      await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
+      await expect(plansGroup(page).getByRole('button', { name: 'Test' })).toBeEnabled();
+    });
+  }
+
+  test('a slow test that finishes after the model changed stays busy until it returns and is not shown for the new model', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet as unknown as AnyApi;
+      const original = api.testApiKey as (...args: unknown[]) => Promise<unknown>;
+      const counter = globalThis as unknown as { __tests: number };
+      counter.__tests = 0;
+      api.testApiKey = async (...args: unknown[]) => {
+        counter.__tests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        return original(...args);
+      };
+    });
+    await plansGroup(page).getByRole('button', { name: 'Test' }).click();
+    await plansGroup(page).getByRole('combobox', { name: 'Model' }).selectOption({ label: 'Claude Sonnet 5.5 (faster, cheaper)' });
+    await expect(toast(page)).toHaveText('Saved');
+    // Still busy, and cannot be started twice.
+    await expect(plansGroup(page).getByRole('button', { name: 'Testing…' })).toBeDisabled();
+    // Once the old answer arrives the button is free again, and the answer is not shown for the new model.
+    await expect(plansGroup(page).getByRole('button', { name: 'Test', exact: true })).toBeEnabled();
+    await expect(plansGroup(page).getByText('The key works.')).toHaveCount(0);
+    expect(await page.evaluate(() => (globalThis as unknown as { __tests: number }).__tests)).toBe(1);
+  });
+
+  test('typing the ID of the model that is already saved leaves the control showing that model', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await showPlans(page);
+    const select = plansGroup(page).getByRole('combobox', { name: 'Model' });
+    await select.selectOption({ label: 'Other…' });
+    await field(page, 'Model ID').fill('claude-opus-5-5');
+    await field(page, 'Model ID').press('Enter');
+    await expect(field(page, 'Model ID')).toHaveCount(0);
+    await expect(select).toHaveValue('claude-opus-5-5');
+    await expect(plansGroup(page).getByRole('alert')).toHaveCount(0);
   });
 
   test('a key Anthropic does not accept: Test says why in plain words', async ({ page }) => {
