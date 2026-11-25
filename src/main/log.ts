@@ -44,9 +44,20 @@ export function createLog(
   const oldPath = path.endsWith(LOG_FILE_NAME) ? `${path.slice(0, -LOG_FILE_NAME.length)}${OLD_LOG_FILE_NAME}` : `${path}.old`;
 
   function write(level: 'info' | 'warn' | 'error', message: string, error?: unknown): void {
-    const text = error === undefined ? message : `${message} ${describeError(error)}`;
-    const line = `${now().toISOString()} ${level.toUpperCase()} ${text}`;
-    options.echo?.(level, line);
+    // Nothing here may throw: this runs inside the handlers for errors nothing else caught.
+    let line: string;
+    try {
+      const text = error === undefined ? message : `${message} ${describeError(error)}`;
+      line = `${now().toISOString()} ${level.toUpperCase()} ${text}`;
+    } catch {
+      // A thrown value that fails when it is read (its message is a getter that throws).
+      line = `${level.toUpperCase()} ${message} (the error could not be read)`;
+    }
+    try {
+      options.echo?.(level, line);
+    } catch {
+      // The console is gone. The file may still work.
+    }
     try {
       let size = 0;
       try {
@@ -54,7 +65,13 @@ export function createLog(
       } catch {
         // No log yet.
       }
-      if (size >= maxBytes) renameSync(path, oldPath);
+      if (size >= maxBytes) {
+        try {
+          renameSync(path, oldPath);
+        } catch {
+          // It could not be set aside. Better a log that grows than one that falls silent.
+        }
+      }
       appendFileSync(path, `${line}\n`);
     } catch {
       // A full disk or a folder that went away: the app carries on without a log.

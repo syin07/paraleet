@@ -177,19 +177,9 @@ function start(): void {
     echo: (level, line) => (level === 'error' ? console.error(line) : level === 'warn' ? console.warn(line) : console.log(line)),
   });
   log.info(`ParaLeet ${app.getVersion()} started (${app.isPackaged ? 'installed' : 'development'}, ${process.arch}).`);
-  // A failure nothing caught: keep it, and keep running. Para should not vanish over one error.
-  // While the app is still starting it is different: carrying on could leave it running with
-  // no window, no Para and no menu bar icon, so it says so and quits.
-  let started = false;
-  process.on('uncaughtException', (error) => {
-    log.error('An error nothing caught:', error);
-    if (started) return;
-    dialog.showErrorBox(
-      'ParaLeet could not start',
-      `${error instanceof Error ? error.message : String(error)}\n\nYour data is in this folder, with a log of what went wrong (${LOG_FILE_NAME}):\n${userData}`,
-    );
-    app.exit(1);
-  });
+  // A failure nothing caught once the app runs: keep it, and keep running. Para should not vanish
+  // over one error. A failure of the start itself is another matter: see `startFailed`.
+  process.on('uncaughtException', (error) => log.error('An error nothing caught:', error));
   process.on('unhandledRejection', (reason) => log.error('A failed promise nothing caught:', reason));
 
   // An import chosen in Settings is put in place here, before the database is opened: the open
@@ -569,10 +559,32 @@ function start(): void {
     hatched: ensurePet(database, ctx.randomSeed(), clock.now().toISOString()).hatchedAt !== null,
   });
   // After an import the app comes back on Settings, where the Data group says what happened.
+  // End-to-end tests can ask for a start that fails late, with the timers and the tray already up.
+  if (isE2E && process.env.PARALEET_E2E_FAIL_START === '1') throw new Error('A test asked the start to fail.');
   if (lastImport) showMainWindow('/settings');
   else if (quiet) updateDock();
   else showMainWindow();
-  started = true;
+}
+
+/**
+ * The start threw. Carrying on could leave the app running with no window, no Para and no menu
+ * bar icon, so it says what happened, once, and quits. `start` runs in one go, so nothing else
+ * can fail in between: this is the only place a failed start is handled.
+ */
+function startFailed(error: unknown): void {
+  const userData = app.getPath('userData');
+  // Its own log: the failure may have come before `start` made one.
+  createLog(join(userData, LOG_FILE_NAME), () => new Date(), {
+    echo: (_level, line) => console.error(line),
+  }).error('ParaLeet could not start:', error);
+  // No dialog in end-to-end runs: nobody is there to close it.
+  if (!isE2E) {
+    dialog.showErrorBox(
+      'ParaLeet could not start',
+      `${error instanceof Error ? error.message : String(error)}\n\nYour data is in this folder, with a log of what went wrong (${LOG_FILE_NAME}):\n${userData}`,
+    );
+  }
+  app.exit(1);
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -592,5 +604,11 @@ if (!app.requestSingleInstanceLock()) {
     db?.close();
     db = null;
   });
-  void app.whenReady().then(start);
+  void app.whenReady().then(() => {
+    try {
+      start();
+    } catch (error) {
+      startFailed(error);
+    }
+  });
 }

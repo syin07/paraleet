@@ -1,6 +1,6 @@
 // The log file: lines are appended with a time and a level, the file is set aside when it grows
 // large, and a log that cannot be written never breaks the app.
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -60,6 +60,34 @@ describe('the log file', () => {
     const inside = createLog(join(blocked, LOG_FILE_NAME), at('2026-11-25T20:00:00.000Z'));
     expect(() => inside.info('still fine')).not.toThrow();
     expect(existsSync(join(dir, 'no-such-folder'))).toBe(false);
+  });
+
+  it('never throws on a thrown value that fails when it is read, or on an echo that fails', () => {
+    const path = join(dir, LOG_FILE_NAME);
+    const hostile = {
+      get message(): string {
+        throw new Error('no reading me');
+      },
+    };
+    const log = createLog(path, at('2026-11-25T20:00:00.000Z'), {
+      echo: () => {
+        throw new Error('no console');
+      },
+    });
+    expect(() => log.error('Could not do it:', hostile)).not.toThrow();
+    // The entry is still written, without the part that could not be read.
+    expect(readFileSync(path, 'utf8')).toBe('ERROR Could not do it: (the error could not be read)\n');
+  });
+
+  it('keeps writing when a full log cannot be set aside', () => {
+    const path = join(dir, LOG_FILE_NAME);
+    // A folder where the old log should go makes the rename fail.
+    mkdirSync(join(dir, OLD_LOG_FILE_NAME));
+    writeFileSync(join(dir, OLD_LOG_FILE_NAME, 'in-the-way'), '');
+    const log = createLog(path, at('2026-11-25T20:00:00.000Z'), { maxBytes: 10 });
+    log.info('the first line is longer than ten bytes');
+    log.info('second');
+    expect(readFileSync(path, 'utf8').split('\n').filter(Boolean)).toHaveLength(2);
   });
 
   it('echoes each line, for the console in development', () => {

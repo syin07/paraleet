@@ -73,15 +73,20 @@ async function main(): Promise<void> {
   const archs = output('lipo', ['-archs', join(BUILT_APP, 'Contents/MacOS/ParaLeet')]) ?? '';
   check('it runs on Apple silicon and on Intel', /\barm64\b/.test(archs) && /\bx86_64\b/.test(archs), archs.trim());
 
-  // `ditto` copies an app bundle the way Finder does, signature included.
-  execFileSync('ditto', [BUILT_APP, installed]);
-  // The copy gets its own identifier and is signed again, so its login item is its own.
-  execFileSync('plutil', ['-replace', 'CFBundleIdentifier', '-string', CHECK_BUNDLE_ID, join(installed, 'Contents/Info.plist')]);
-  execFileSync('codesign', ['--force', '--deep', '--sign', '-', installed], { stdio: 'ignore' });
-  const copySignature = printed('codesign', ['-dv', installed]);
-  if (!new RegExp(`^Identifier=${CHECK_BUNDLE_ID.replaceAll('.', '\\.')}$`, 'm').test(copySignature)) {
+  try {
+    // `ditto` copies an app bundle the way Finder does, signature included.
+    execFileSync('ditto', [BUILT_APP, installed]);
+    // The copy gets its own identifier and is signed again, so its login item is its own.
+    execFileSync('plutil', ['-replace', 'CFBundleIdentifier', '-string', CHECK_BUNDLE_ID, join(installed, 'Contents/Info.plist')]);
+    execFileSync('codesign', ['--force', '--deep', '--sign', '-', installed], { stdio: 'ignore' });
+    const copySignature = printed('codesign', ['-dv', installed]);
+    if (!new RegExp(`^Identifier=${CHECK_BUNDLE_ID.replaceAll('.', '\\.')}$`, 'm').test(copySignature)) {
+      throw new Error('The copy could not be given its own identifier, so the check did not start: it must never touch the real app.');
+    }
+  } catch (error) {
+    // Nothing was started. A copy that may still carry the real identifier is not left lying about.
     rmSync(root, { recursive: true, force: true });
-    throw new Error('The copy could not be given its own identifier, so the check did not start: it must never touch the real app.');
+    throw error;
   }
 
   // The data folder starts with "Launch at login" off, so starting the app registers nothing.
@@ -91,6 +96,19 @@ async function main(): Promise<void> {
     seeded.db.close();
   };
   seedLoginOff();
+  /** How many rows the pet table has: none until the app itself has started on this folder. */
+  const petRows = (): number => {
+    const opened = openDatabase(join(dataDir, DATABASE_FILE_NAME), new Date().toISOString());
+    try {
+      return opened.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM pet')?.n ?? 0;
+    } finally {
+      opened.db.close();
+    }
+  };
+  if (petRows() !== 0) {
+    rmSync(root, { recursive: true, force: true });
+    throw new Error('The seeded data folder already has a pet, so "the app wrote its data there" would prove nothing.');
+  }
 
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -164,7 +182,8 @@ async function main(): Promise<void> {
 
     await app.close();
     app = null;
-    check('the database is in the data folder', existsSync(join(dataDir, DATABASE_FILE_NAME)));
+    // Para's row is made by the app at launch, never by the seeding above.
+    check('the app wrote its data to the database in the data folder', petRows() === 1);
     const logPath = join(dataDir, 'paraleet.log');
     const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
     check('the log file says an installed copy started', /INFO ParaLeet \S+ started \(installed, /.test(log), log.split('\n')[0] ?? '');
@@ -185,16 +204,20 @@ async function main(): Promise<void> {
           stdio: 'ignore',
         });
         const gone = new Promise<void>((done) => child.once('exit', () => done()));
-        const readLog = (): string => (existsSync(intelLog) ? readFileSync(intelLog, 'utf8') : '');
-        // Translating the app the first time is slow: give it a minute.
-        const started = await until(async () => /INFO ParaLeet \S+ started \(installed, x64\)/.test(readLog()), 60_000);
-        check('the Intel half starts (under Rosetta)', started, readLog().split('\n')[0] ?? '');
-        // A little longer, so a failure right after the first line would be in the log.
-        await new Promise((done) => setTimeout(done, 3_000));
-        check('the Intel half logs no error', !/ ERROR /.test(readLog()), readLog().split('\n').find((line) => line.includes(' ERROR ')) ?? '');
-        child.kill('SIGTERM');
-        await Promise.race([gone, new Promise((done) => setTimeout(done, 10_000))]);
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        try {
+          const readLog = (): string => (existsSync(intelLog) ? readFileSync(intelLog, 'utf8') : '');
+          // Translating the app the first time is slow: give it a minute.
+          const started = await until(async () => /INFO ParaLeet \S+ started \(installed, x64\)/.test(readLog()), 60_000);
+          check('the Intel half starts (under Rosetta)', started, readLog().split('\n')[0] ?? '');
+          // A little longer, so a failure right after the first line would be in the log.
+          await new Promise((done) => setTimeout(done, 3_000));
+          check('the Intel half logs no error', !/ ERROR /.test(readLog()), readLog().split('\n').find((line) => line.includes(' ERROR ')) ?? '');
+        } finally {
+          // Whatever happened above, the Intel copy is not left running.
+          child.kill('SIGTERM');
+          await Promise.race([gone, new Promise((done) => setTimeout(done, 10_000))]);
+          if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        }
       }
     }
   } finally {
