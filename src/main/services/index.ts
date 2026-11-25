@@ -19,9 +19,10 @@ import {
 import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
-export { newSession, type AppContext, type SessionState, type WindowPort } from './context';
+export { newSession, type AppContext, type Notice, type SessionState, type WindowPort } from './context';
 export { createMoodWatcher, nextCelebrationStep, trayState } from './pet';
 export { reconcile, type ReconcileResult } from './reconcile';
+export { sendDueReminder } from './reminders';
 
 /**
  * The UI never hands main a URL to open. Main opens only links stored in the database, and only
@@ -72,6 +73,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     setEquippedAccessories: ({ accessories }) => setEquippedAccessories(ctx, accessories),
     acknowledgeGreeting: () => acknowledgeGreeting(ctx, getToday),
     showMainWindow: ({ screen }) => done(() => ctx.windows.showMain(screen)),
+    showSwap: () => done(() => ctx.windows.showSwap()),
     movePetWindowBy: ({ dx, dy }) => done(() => ctx.windows.movePetBy(dx, dy)),
     endPetDrag: () => done(() => ctx.windows.endPetDrag()),
     setPetInteractive: ({ interactive }) => done(() => ctx.windows.setPetInteractive(interactive)),

@@ -60,8 +60,13 @@ export interface RunningApp {
   blurCard(early?: boolean): Promise<void>;
   /** The compact card's page. Waits for it to open. */
   cardPage(): Promise<Page>;
-  /** The main window's page, waiting for it to open. For when it was closed and opened again. */
+  /** The main window's page, waiting for it to open. For runs that start without it, or after it was closed. */
   mainPage(): Promise<Page>;
+  /** Notifications the app has sent, in order. End-to-end runs record them and show none. */
+  notifications(): Promise<{ title: string; body: string }[]>;
+  clickNotification(index: number): Promise<void>;
+  /** What "Launch at login" asks of the system: true, false, or null before it was looked at. */
+  loginItemWanted(): Promise<boolean | null>;
   /** Moves the app's clock. The app re-checks the ParaLeet day at once. */
   setNow(iso: string): Promise<void>;
   setTimeZone(timeZone: string): Promise<void>;
@@ -85,6 +90,9 @@ interface TestHooks {
   clickTrayMenu(label: string): void;
   card(): CardFacts;
   blurCard(early: string): void;
+  notifications(): { title: string; body: string }[];
+  clickNotification(index: string): void;
+  loginItemWanted(): boolean | null;
 }
 
 type WindowKind = 'main' | 'pet' | 'card';
@@ -123,6 +131,11 @@ export async function launchApp(options: {
   timeZone?: string;
   /** False to start before the egg has hatched, for the first-launch flow. Default: hatched. */
   hatched?: boolean;
+  /**
+   * True to start the way the login item does: no main window. `page` is then the floating pet's
+   * page; use `mainPage()` once something has opened the main window.
+   */
+  atLogin?: boolean;
 }): Promise<RunningApp> {
   const app = await electron.launch({
     args: [ROOT],
@@ -134,9 +147,11 @@ export async function launchApp(options: {
       PARALEET_FAKE_NOW: options.now,
       PARALEET_FAKE_TZ: options.timeZone ?? TEST_ZONE,
       PARALEET_E2E_UNHATCHED: options.hatched === false ? '1' : '0',
+      PARALEET_E2E_AT_LOGIN: options.atLogin ? '1' : '0',
     },
   });
-  const page = await findWindow(app, 'main');
+  // A login launch has no main window, unless Para has not hatched yet: then it always shows.
+  const page = await findWindow(app, options.atLogin && options.hatched !== false ? 'pet' : 'main');
 
   const hooks = <T>(use: (hooks: TestHooks, arg: string) => T, arg = ''): Promise<T> =>
     app.evaluate(
@@ -171,6 +186,9 @@ export async function launchApp(options: {
     blurCard: (early = false) => hooks((h, value) => h.blurCard(value), early ? 'early' : ''),
     cardPage: () => findWindow(app, 'card'),
     mainPage: () => findWindow(app, 'main'),
+    notifications: () => hooks((h) => h.notifications()),
+    clickNotification: (index) => hooks((h, value) => h.clickNotification(value), String(index)),
+    loginItemWanted: () => hooks((h) => h.loginItemWanted()),
     close: () => app.close(),
   };
 }

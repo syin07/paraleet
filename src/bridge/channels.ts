@@ -29,6 +29,7 @@ export const BRIDGE_METHODS = [
   'setEquippedAccessories',
   'acknowledgeGreeting',
   'showMainWindow',
+  'showSwap',
   'movePetWindowBy',
   'endPetDrag',
   'setPetInteractive',

@@ -35,6 +35,8 @@ There are three windows, all loading the same renderer bundle, and a menu bar ic
 - **The compact card** (`windows/cardWindow.ts`, route `#/card`, UI in `src/ui/windows/card/`): a small popover with today's problem, opened from the floating pet or the menu bar icon. Created on open, destroyed on close; placed by `placePopover`. See decision 0013.
 - **The menu bar icon** (`tray.ts`, pixels from `trayIcon.ts`): Para's head cut from the sprite, the streak as its title. `TrayController.sync()` runs on every change and tick and redraws only when something would look different.
 
+**Reminders and login.** On every tick `sendDueReminder` (`services/reminders.ts`) sends the notification that is due, through `ctx.notify`, and records it on the pet first so it is never repeated. `loginItem.ts` keeps the system's login item in step with the setting (packaged app only) and decides whether a launch is the quiet login launch. See decision 0015.
+
 **Para's state.** `services/pet.ts` builds the pet summary every screen shows: stage, mood, line and accessories. Mood and line are computed on each read from the clock, the settings, the stored streak facts and `ctx.session` (what the app remembers only while running: the celebration after the last report). Main tells the windows to redraw when the mood changes: a short timer for each step of a celebration (`nextCelebrationStep`) and a comparison on the 30-second tick (`createMoodWatcher`). See decision 0012.
 
 Services never import Electron. When a use case needs a window to do something it calls `ctx.windows` (`WindowPort` in `services/context.ts`), which main implements and tests fake.

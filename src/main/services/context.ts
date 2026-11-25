@@ -13,6 +13,8 @@ import type { Clock } from '../clock';
 /** What the services ask of the windows. Implemented with Electron in main, faked in tests. */
 export interface WindowPort {
   showMain(screen: MainScreen | null): void;
+  /** Shows the main window on Today with the swap choices open. */
+  showSwap(): void;
   movePetBy(dx: number, dy: number): void;
   /** The drag ended: remember where the pet window is. */
   endPetDrag(): void;
@@ -22,6 +24,16 @@ export interface WindowPort {
   showCard(anchor: CardAnchor): void;
   hideCard(): void;
   setCardSize(width: number, height: number): void;
+  /** Opens the compact card and leaves it open: beside the pet when it is showing, else under the menu bar icon. */
+  openCard(): void;
+}
+
+/** A system notification. */
+export interface Notice {
+  title: string;
+  body: string;
+  /** Called when the user clicks the notification. */
+  onClick(): void;
 }
 
 /** What the app remembers only while it is running. */
@@ -41,6 +53,8 @@ export interface AppContext {
   session: SessionState;
   /** Tells every window that data changed, so they refetch. */
   notifyChanged(): void;
+  /** Shows a system notification. */
+  notify(notice: Notice): void;
   /** Opens a link in the default browser. */
   openExternal(url: string): Promise<void>;
   /** A random 31-bit integer, used once to give a new pet its seed. */

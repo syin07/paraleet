@@ -578,6 +578,10 @@ function createApi(state: MockState): ParaLeetApi {
       state.windowCalls.push(`showMainWindow:${screen ?? ''}`);
       return { ok: true };
     },
+    showSwap: async () => {
+      state.windowCalls.push('showSwap');
+      return { ok: true };
+    },
     movePetWindowBy: async ({ dx, dy }) => {
       state.windowCalls.push(`movePetWindowBy:${dx},${dy}`);
       return { ok: true };

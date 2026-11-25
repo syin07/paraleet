@@ -13,6 +13,7 @@ describe('window commands', () => {
     app = createTestApp();
     expect(app.handlers.showMainWindow({ screen: null })).toEqual({ ok: true });
     expect(app.handlers.showMainWindow({ screen: 'settings' })).toEqual({ ok: true });
+    expect(app.handlers.showSwap(undefined)).toEqual({ ok: true });
     expect(app.handlers.movePetWindowBy({ dx: 12, dy: -7 })).toEqual({ ok: true });
     expect(app.handlers.endPetDrag(undefined)).toEqual({ ok: true });
     expect(app.handlers.setPetInteractive({ interactive: true })).toEqual({ ok: true });
@@ -24,6 +25,7 @@ describe('window commands', () => {
     expect(app.windowCalls).toEqual([
       'showMain:',
       'showMain:settings',
+      'showSwap',
       'movePetBy:12,-7',
       'endPetDrag',
       'setPetInteractive:true',

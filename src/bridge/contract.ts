@@ -88,6 +88,8 @@ export const inputSchemas = {
   acknowledgeGreeting: z.undefined(),
   /** Shows and focuses the main window, optionally on a given screen. */
   showMainWindow: z.object({ screen: z.enum(MAIN_SCREENS).nullable() }),
+  /** Shows the main window on Today with the swap choices open. */
+  showSwap: z.undefined(),
   /** Pet window only: moves it while the user drags the bird. Whole screen points. */
   movePetWindowBy: z.object({
     dx: z.number().int().min(-4000).max(4000),
@@ -300,6 +302,7 @@ export interface BridgeOutputs {
   setEquippedAccessories: TodayView;
   acknowledgeGreeting: TodayView;
   showMainWindow: Done;
+  showSwap: Done;
   movePetWindowBy: Done;
   endPetDrag: Done;
   setPetInteractive: Done;
