@@ -1,6 +1,6 @@
 # ParaLeet status
 
-Last updated: 2026-11-25 (session 3 stopped at a usage limit, mid-run. NOT done. No agent is running; the In flight table is the truth)
+Last updated: 2026-11-25 (end of session 3, stopped at the owner's request. NOT done: four branches are unmerged. No agent and no test run is in flight; the In flight table is the truth)
 
 ## What works today
 
@@ -14,7 +14,9 @@ Last updated: 2026-11-25 (session 3 stopped at a usage limit, mid-run. NOT done.
 - Every reported problem gets a review card (FSRS). A problem rated Again is tomorrow's problem. Up to five other due reviews are listed, never a count. Today's problem can be swapped.
 - Any problem can be logged from Today by search or by pasting its link (LeetCode, CSES, Codeforces or another site). The Problems screen lists everything logged, with filters, attempt history, notes, retire and reset.
 - The streak holds across the 04:00 boundary, restarts, sleep and time-zone changes. All data is one SQLite file.
-- Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories). Plan and Stats are still placeholders: learning plans (M3) and stats, export, import and the installer (M4) are in progress.
+- Stats shows the current and longest streak, total solves, reviews done, a calendar of fed days, solves per week and topic coverage, for 12 weeks, 6 months or 1 year.
+- Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories), and now has "Learning plans": add, test and remove your Anthropic API key, and choose the model. The key is stored encrypted and never shown back.
+- Not in the app yet: the Plan screen is still a placeholder, although plans already work underneath (built and reviewed, waiting to merge). Export and import, the optional API key step of the first launch, and the installer are built on branches and not merged.
 
 ## Notes for the owner
 
@@ -26,24 +28,24 @@ Last updated: 2026-11-25 (session 3 stopped at a usage limit, mid-run. NOT done.
 
 ## Current milestone
 
-M3. Catalog and learning plans, with M4 work running beside it. (M2 closed with SAN-118, merge commit `ad369d2`.)
+M3 and M4, side by side. M3 lacks the Plan screen (SAN-130) and the first-launch API key step. M4 lacks export and import (SAN-132, then the "Data" group in Settings) and the installer (SAN-125). The PRD checklist for M3 and M4 is not ticked yet: tick each line when its last branch merges.
 
 ## In flight
 
-**Session 3 (2026-11-25) stopped at a usage limit.** Merged this session, all through the gate: the stats rules (`db6b465`), SAN-134 the lost "Settings…" request (`89c87ab`), the M3 core SAN-120 to SAN-123 (`ea88274`), the `getStats` bridge (`a03c90e`), SAN-131 "Learning plans" in Settings (`aa94c95`), the Stats screen (`f69fc27`) and SAN-135 plan polish (`ce82f0e`). So the app now has a working Stats screen and the API key and model rows in Settings. Main is pushed up to this file's commit.
+**Session 3 (2026-11-25) ended here, at the owner's request.** Merged this session, all through the gate: the stats rules (`db6b465`), SAN-134 the lost "Settings…" request (`89c87ab`), the M3 core SAN-120 to SAN-123 (`ea88274`), the `getStats` bridge (`a03c90e`), SAN-131 "Learning plans" in Settings (`aa94c95`), the Stats screen (`f69fc27`) and SAN-135 plan polish (`ce82f0e`). So the app now has a working Stats screen and the API key and model rows in Settings. Main is pushed up to this file's commit.
 
 Correction: the merge message of `f69fc27` gives wrong test counts. The real ones on that branch were 1075 unit, 222 UI and 22 end-to-end, all passing.
 
-No worker or reviewer is running. Every branch below is local, with its work committed.
+No worker, reviewer or test run is in flight, and every worktree is clean. Every branch below is local, with its work committed.
 
 | Issue | What | Branch (worktree) | State and what to do |
 | --- | --- | --- | --- |
 | SAN-130 | The Plan screen | `worker/san-130-plan-screen` at `5c1b457` (`.claude/worktrees/agent-a5a3d15bdbcd7d43f`), based on old M3 `f443f0e` | Review round 2 **passed** at `3cc7b40`; `5c1b457` then fixed the reviewer's four small notes (worker reports 1062 unit and 225 UI tests passing). To do: `git rebase --onto main f443f0e` inside its worktree, `npm ci`, check, UI and end-to-end suites, a fresh reviewer for `3cc7b40..5c1b457`, merge |
-| SAN-132 | Export and import, main-process side | `lead/san-132-export-import` at `863d7ff` (`.claude/worktrees/lead-m4`), on main `f69fc27` | Round 1 **blocked** (a file could pass the check, be swapped in and then not open). Fixed in `863d7ff` (`stageCheckedImport`, `openDataFolder`); 1113 unit tests pass. The round 2 reviewer was stopped before it answered, and a background run of check, UI and end-to-end was in progress when the session stopped (results, if it finished, are not recorded: run them again). To do: rebase on main, suites (the new third test in `tests/e2e/data.spec.ts` has never been run), fresh reviewer (round 2), merge. Then the "Data" group in Settings (mock scenarios `data-*` exist; tell the UI to say that an import replaces the earlier backup) |
+| SAN-132 | Export and import, main-process side | `lead/san-132-export-import` at `863d7ff` (`.claude/worktrees/lead-m4`), on main `f69fc27` | Round 1 **blocked** (a file could pass the check, be swapped in and then not open). Fixed in `863d7ff` (`stageCheckedImport`, `openDataFolder`). On `863d7ff`: type check, lint, 1124 unit, 222 UI and 25 end-to-end tests pass, the three in `tests/e2e/data.spec.ts` included. The round 2 reviewer was stopped before it answered. To do: rebase on main (main has gained only SAN-135 and this file since), rerun the suites, fresh reviewer (round 2), merge. Then the "Data" group in Settings (mock scenarios `data-*` exist; tell the UI to say that an import replaces the earlier backup) |
 | SAN-123 (rest) | Step 4 of the first-launch flow: the optional API key | `worker/san-123-onboarding-key` at `919690b` (`.claude/worktrees/agent-ac3dbc0838ba8d3b5`), on main `ea88274` | Worker reports 1057 unit and 198 UI tests passing. Its reviewer was stopped before it answered. Its edits to `tests/e2e/onboarding.spec.ts` have never been run. To do: rebase on main, suites, fresh reviewer, merge |
 | SAN-125 | The `.dmg`, the icon, `paraleet.log`, `npm run dist:check`, `docs/INSTALL.md`, decision 0018 | `lead/san-125-installer` at `23f0e2f` (`.claude/worktrees/agent-ab3ac71efafc0b677`), based on old M3 `e72f6de` | `npm run dist` builds `dist/ParaLeet-0.1.0.dmg` (universal, ad hoc signed, about 220 MB); `npm run dist:check` passed 14 of 14 on the packaged app. Not reviewed. To do: rebase on main (after SAN-132, then send `openDataFolder`'s problems to the log in `src/main/index.ts`); start the Intel half once under Rosetta with 40 seconds and no suite running (12 seconds was not enough to see it start); suites; reviewer; merge |
 
-After those: tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` (Plan, Stats, Settings, first-launch flow; tooltips use the raised surface, the topic column is 132px); screenshot sheets on Linear for SAN-130, SAN-131 (built at session end, not uploaded), SAN-132 and the onboarding step (SAN-124's is attached); mark SAN-131 and SAN-135 Done in Linear with their merge commits and comment SAN-124; a real-app walk through Plan, Stats and Settings by the lead; `npm ci` in the main checkout, then all suites on main; DONE.
+After those: tick M3 and M4 in `docs/PRD.md`; "as built" notes in `docs/design-references.md` (Plan, Stats, Settings, first-launch flow; tooltips use the raised surface, the topic column is 132px); screenshot sheets on Linear for SAN-130, the "Data" group and the onboarding step (SAN-124's and SAN-131's are attached); a real-app walk through Plan, Stats and Settings by the lead; `npm ci` in the main checkout, then all suites on main; DONE.
 
 Leftovers that are not work in flight: merged branches and `worktree-agent-*` branches can be deleted; `lead/m2-contract` after a look. The lead's shell ended inside `.claude/worktrees/lead-m3` (branch `lead/plan-polish`, merged).
 
@@ -103,14 +105,21 @@ Leftovers that are not work in flight: merged branches and `worktree-agent-*` br
 | SAN-118 (UI side) | The first-launch flow: hatch the egg, meet Para, pick reminder times; the floating pet waits for it. Closes M2 | `ad369d2` |
 | SAN-115 (UI side) | The compact card's page: today's problem, the report form in place, a confirmation; a click on Para opens the card; Swap opens the swap choices | `0015ba9` |
 | SAN-117 + SAN-118 (main-process side) | Two daily reminders that name the problem and are skipped once fed; launch at login; a quiet login start; `showSwap` | `76ab89a` |
+| SAN-124 (step 1) | The stats rules in core | `db6b465` |
+| SAN-134 | "Settings…" right after "Open ParaLeet" no longer leaves the window on Today | `89c87ab` |
+| SAN-120 to SAN-123 (M3 core) | Learning plans in the main process: generation with one retry, drafts, activation, the daily loop drawing from the plan; the API key sealed with the keychain; plain error messages across the bridge | `ea88274` |
+| SAN-124 (step 2) | The `getStats` bridge method | `a03c90e` |
+| SAN-131 | Settings, "Learning plans": add, test and remove the API key; choose the model | `aa94c95` |
+| SAN-124 (step 3) | The Stats screen | `f69fc27` |
+| SAN-135 | An empty model answer is said at once; clearer words for a request Anthropic does not accept | `ce82f0e` |
 
 ## Linear
 
-- Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4.
-- M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). M3: SAN-119 to SAN-123, SAN-130, SAN-131. M4: SAN-124 to SAN-126 (SAN-126 is the owner's one-week trial).
-- Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (group `Module`).
-- M2: all Done, with screenshot sheets attached where there is a screen.
-- M3: SAN-119 Done; SAN-120 to SAN-123 detailed and In Progress; SAN-130 (Plan screen) and SAN-131 (Settings: key and model) are the worker issues. M4: SAN-124 is now the Stats screen only; export and import gets its own issue; SAN-125 is the installer; SAN-126 is the owner's week.
+- Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4. Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (one per issue: they are one label group).
+- M1 and M2: all Done.
+- M3: SAN-119 to SAN-122, SAN-131 and SAN-135 Done. SAN-130 (Plan screen) In Review. SAN-123 In Progress: only the first-launch API key step is open.
+- M4: SAN-124 (Stats) and SAN-134 (the lost "Settings…" request) Done. SAN-132 (export and import) In Review. SAN-125 (installer) In Progress. SAN-126 is the owner's week.
+- Every open issue has a comment from the end of session 3 with its branch, its tip and what is left.
 
 ## How the loop is run in this repo
 
@@ -145,4 +154,6 @@ None. Nothing is waiting on the owner. The M4 line "a week of the owner's own da
 
 ## Decisions since last entry
 
-See `docs/decisions/0001` to `0015` (`0012`: wiring the living pet; `0013`: menu bar icon and card; `0014`: the catalog; `0015`: reminders and launch at login). `0016` (learning plans, the model, the API key, plain errors across the bridge) is written on `lead/m3-plan-core` and arrives with its merge. `0017` (stats, export and import) is still to write: its content is under Cold start. `0010` is the pet window; `0011` is the pet rules (egg stage, accessories, "first Hard", Again unlocks nothing, the night sleep window, how lines avoid repeating).
+In main: `docs/decisions/0001` to `0017`. `0016` is learning plans, the model, the API key and plain errors across the bridge (it gained: a finished plan stores the ID of the attempt that finished it; the plan records the model that answered). `0017` is stats; its export and import part is on `lead/san-132-export-import` and arrives with that merge. `0018` (the installer, the log file, the packaged-app check) is on `lead/san-125-installer`.
+
+Decided in session 3 and not in a decision file yet, to add to `docs/design-references.md` as "as built" notes when the screens merge: Stats tooltips use the raised surface and the topic column is 132px; on the Plan screen an active plan has no "Edit", reordering is up and down buttons, swap choices open as a list under the row, "Remove" does not ask, activating a draft over an active plan asks first, and "Create a plan" is offered while a plan is active.
