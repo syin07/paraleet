@@ -247,7 +247,7 @@ export function DataGroup() {
             <p role="status" className="min-w-0 text-base text-fg">
               {last.status === 'applied'
                 ? `Your import is done. Your earlier data is kept as ${info?.importBackupName ?? 'a backup file'}, next to the database.`
-                : `The import was not applied. ${last.reason} Your data was not changed.`}
+                : `The import was not applied. ${last.reason}`}
             </p>
           </div>
         )}

@@ -288,14 +288,37 @@ test.describe('Settings: Data group', () => {
     await captureGroup(page, 'after-import');
   });
 
-  test('after an import: a rejected import says so, gives the reason, and that nothing changed', async ({ page }) => {
+  test('after an import: a rejected import says so and gives the reason as main wrote it', async ({ page }) => {
     await open(page, 'data-import-refused');
     const notice = group(page).getByRole('status');
     await expect(notice).toContainText('The import was not applied.');
-    await expect(notice).toContainText('That file is damaged and cannot be imported.');
-    await expect(notice).toContainText('Your data was not changed.');
+    await expect(notice).toContainText('That file is damaged and cannot be imported. Your data was not changed.');
+    // Said once, by the reason itself.
+    expect(((await notice.textContent()) ?? '').match(/not changed/g)).toHaveLength(1);
     await expect(group(page).getByRole('alert')).toHaveCount(0);
     await captureGroup(page, 'after-rejected');
+  });
+
+  test('after an import: a reason that says the old copy was put back gets no "not changed" from the screen', async ({
+    page,
+  }) => {
+    await open(page);
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as Host).paraleet;
+      const original = api.getDataInfo.bind(api);
+      api.getDataInfo = async () => ({
+        ...(await original()),
+        lastImport: {
+          status: 'rejected',
+          reason: 'The data file was missing, so the copy kept from your last import was put back.',
+        },
+      });
+    });
+    // A change event makes the group read again.
+    await page.getByTestId('screen-settings').getByRole('switch').first().click();
+    const notice = group(page).getByRole('status');
+    await expect(notice).toContainText('The import was not applied. The data file was missing');
+    await expect(notice).not.toContainText('not changed');
   });
 
   test('no notice after a normal launch', async ({ page }) => {
