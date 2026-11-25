@@ -1,6 +1,11 @@
 import type { TopicId } from '../core/topics';
 import type { DifficultyNorm } from '../core/types';
+import { hostnameOf, lookupDifficulty } from './host';
+import { mapTagsWith } from './tags';
 import type { PlatformAdapter } from './types';
+
+/** LeetCode's own hosts; links there that are not problem pages are rejected, not treated as "Other". */
+export const LEETCODE_HOSTS: readonly string[] = ['leetcode.com', 'www.leetcode.com', 'leetcode.cn', 'www.leetcode.cn'];
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -53,12 +58,14 @@ export const leetcodeAdapter: PlatformAdapter = {
   label: 'LeetCode',
 
   parseUrl(url) {
-    if (!/^(www\.)?leetcode\.com$/.test(url.hostname)) return null;
-    const match = /^\/problems\/([^/]+)/.exec(url.pathname);
+    if (!LEETCODE_HOSTS.includes(hostnameOf(url))) return null;
+    // /problems/<slug>[/anything] or /contest/<contest>/problems/<slug>[/].
+    const match = /^\/(?:contest\/[^/]+\/)?problems\/([^/]+)/.exec(url.pathname);
     const slug = match?.[1]?.toLowerCase();
     return slug && SLUG.test(slug) ? slug : null;
   },
 
+  /** Call `isValidId` first: a malformed ID gives a meaningless link, not an error. */
   buildUrl(platformId) {
     return `https://leetcode.com/problems/${platformId}/`;
   },
@@ -68,15 +75,10 @@ export const leetcodeAdapter: PlatformAdapter = {
   },
 
   normalizeDifficulty(raw) {
-    return raw ? (DIFFICULTY[raw.trim().toLowerCase()] ?? null) : null;
+    return lookupDifficulty(DIFFICULTY, raw);
   },
 
   mapTags(sourceTags) {
-    const topics = new Set<TopicId>();
-    for (const tag of sourceTags) {
-      const topic = TAGS[tag.trim().toLowerCase()];
-      if (topic) topics.add(topic);
-    }
-    return [...topics];
+    return mapTagsWith(TAGS, sourceTags);
   },
 };
