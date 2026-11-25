@@ -268,14 +268,14 @@ Mobbin query: `app settings preferences page`, platform web.
 **Reproduce**
 - Single column, max width 640px. Page title "Settings".
 - Groups separated by 32px, each with a header `--text-xs` caps muted and a card `--surface`, radius 8px, 1px `--border`. Rows inside are 56px minimum, 16px horizontal padding, dividers `--border-subtle`. Each row: left column label `--text-base` `--text-primary` with an optional description `--text-sm` muted below; right column the control, right aligned.
-- Groups and rows:
-  - **Reminders**: First reminder (time input 96px, `--control-md`), Evening reminder (time input), Day starts at (select, 00:00 to 06:00, description "A solve at 01:00 counts for the previous day").
-  - **Pet**: Show pet on desktop (toggle), Launch at login (toggle).
-  - **Learning plans**: Anthropic API key (password input 280px with "Saved, encrypted" muted state and Remove ghost button once stored; a "Test" secondary sm button), Model (select).
-  - **Account handles**: LeetCode handle (text input 200px, description "Not used yet. Saved for future solve checking").
-  - **Data**: Export database (secondary md "Export…"), Import database (secondary md "Import…", confirm modal that warns it replaces current data), muted line with the database file location and a "Show in Finder" link.
-- Toggles: 32x18px track, radius 999px, off `--surface-raised`, on `--accent`, 14px white knob.
-- Changes save immediately; a small toast "Saved" bottom-center, 2s.
+- Groups and rows, as built in M2:
+  - **Reminders**: First reminder and Evening reminder (text inputs for a 24-hour time, 96px, `--control-md`, saved on blur or Enter; an invalid time shows "Use a 24-hour time like 16:00" under the row and is not saved), Day starts at (select, 00:00 to 08:00, description "A solve before this hour counts for the previous day."). One muted line under the card: "At most two a day. Skipped once Para is fed."
+  - **Review schedule**: Target retention (segmented control: 80%, 85%, 90%, 95%; a saved value that is none of these shows as a fifth segment). Description: "How sure Para wants you to be when a review comes up. Higher means more frequent reviews."
+  - **Para**: Show Para on the desktop (toggle), Launch at login (toggle, description "Para and the menu bar icon start with your Mac."), Accessories (stacked row: the four accessories as chips under the label; a worn one uses the accent-subtle style with a leading check; a locked one is disabled with a lock icon, and a line under the chips says what unlocks it).
+  - **Account handles**: LeetCode handle (text input 200px, description "Not used yet. Saved for checking solves automatically in a later version.").
+  - Still to come: **Learning plans** in M3 (Anthropic API key: password input 280px with "Saved, encrypted" muted state and a Remove ghost button once stored; Model select) and **Data** in M4 (Export database, Import database with a confirm modal that warns it replaces current data, a muted line with the database file location and "Show in Finder").
+- Toggles: 32x18px track, radius 999px, off `--surface-raised` with a 1px strong border, on `--accent`, 14px white knob. A real `role="switch"` button.
+- Changes save immediately; a small toast "Saved" bottom-center, 2s, one toast for several quick changes. A failed save shows the error in a `role="alert"` line under the row and the control goes back to its saved value.
 
 **ParaLeet adaptation**
 - Linear's theme/font rows become reminder, day boundary and pet rows.
