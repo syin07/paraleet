@@ -34,15 +34,18 @@ export function Card({
   large = false,
   padding = 'default',
   className,
+  testId,
   children,
 }: {
   large?: boolean;
   padding?: 'none' | 'compact' | 'default';
   className?: string;
+  testId?: string;
   children: ReactNode;
 }) {
   return (
     <div
+      data-testid={testId}
       className={cx(
         'border border-line bg-surface',
         large ? 'rounded-lg' : 'rounded-md',

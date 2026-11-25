@@ -714,17 +714,49 @@ test.describe('the living pet on Today', () => {
     expect(pet.line).not.toBeNull();
     await expect(page.getByTestId('pet-line')).toHaveText(pet.line ?? '');
     await expect(page.getByTestId('pet-mood')).toHaveText('Chick · peckish');
-    // The bubble stays inside the pet's card at both window sizes.
-    for (const size of [WINDOW_MIN, WINDOW_DEFAULT]) {
-      await page.setViewportSize(size);
-      const bubble = await page.getByTestId('pet-line').boundingBox();
-      const card = await page.getByTestId('pet-line').locator('xpath=ancestor::*[contains(@class,"h-60")]').boundingBox();
-      expect(bubble).not.toBeNull();
-      expect(card).not.toBeNull();
-      expect(bubble!.x + bubble!.width).toBeLessThanOrEqual(card!.x + card!.width);
-      expect(bubble!.y).toBeGreaterThanOrEqual(card!.y);
-    }
     await captureBothSizes(page, 'today-pet-line');
+  });
+
+  test('the bubble stays inside the pet card for every line Para can say, at both window sizes', async ({ page }) => {
+    await openScreen(page, 'today');
+    // The longest lines the app can produce are 80 characters. Try the worst shapes: long words,
+    // short words, and one unbroken run.
+    const lines = [
+      'Longest Substring Without Repeating Characters on LeetCode would hit the spot….',
+      'I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I I',
+      'W'.repeat(80),
+      'Hi!',
+    ];
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(80);
+      await page.evaluate(async (text) => {
+        const host = globalThis as unknown as {
+          paraleet: { getToday(): Promise<{ pet: { line: string | null } }>; updateSettings(patch: object): Promise<unknown> };
+          __realGetToday?: () => Promise<{ pet: { line: string | null } }>;
+        };
+        host.__realGetToday ??= host.paraleet.getToday.bind(host.paraleet);
+        const real = host.__realGetToday;
+        host.paraleet.getToday = async () => {
+          const today = await real();
+          return { ...today, pet: { ...today.pet, line: text } };
+        };
+        // Any saved change makes the screen ask again.
+        await host.paraleet.updateSettings({});
+      }, line);
+      await expect(page.getByTestId('pet-line')).toHaveText(line);
+      for (const size of [WINDOW_MIN, WINDOW_DEFAULT, { width: 1500, height: 900 }]) {
+        await page.setViewportSize(size);
+        const bubble = await page.getByTestId('pet-line').boundingBox();
+        const card = await page.getByTestId('pet-stage').boundingBox();
+        expect(bubble).not.toBeNull();
+        expect(card).not.toBeNull();
+        expect(bubble!.x).toBeGreaterThanOrEqual(card!.x);
+        expect(bubble!.y).toBeGreaterThanOrEqual(card!.y);
+        expect(bubble!.x + bubble!.width).toBeLessThanOrEqual(card!.x + card!.width);
+        expect(bubble!.y + bubble!.height).toBeLessThanOrEqual(card!.y + card!.height);
+      }
+      if (line.startsWith('Longest')) await captureBothSizes(page, 'today-pet-line-long');
+    }
   });
 
   test('after a report Para checks it, eats, and settles', async ({ page }) => {

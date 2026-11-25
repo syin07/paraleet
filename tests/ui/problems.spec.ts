@@ -641,6 +641,20 @@ test.describe('add a problem and report it', () => {
     await expect(drawer(page).getByRole('heading', { level: 2 })).toHaveText('A Brand New Problem');
   });
 
+  test('a solve reported from this screen is announced when it unlocks an accessory', async ({ page }) => {
+    // Six days in a row through yesterday: today's solve, of any problem, earns the bow tie.
+    await openScreen(page, 'problems', 'milestone');
+    await startAdding(page, 'https://leetcode.com/problems/a-brand-new-problem/');
+    await dialog(page).getByLabel('Title').fill('A Brand New Problem');
+    await box(page).check();
+    await dialog(page).getByRole('button', { name: 'Add and report' }).click();
+    await report(page).getByRole('radio', { name: /^Good/ }).click();
+    await report(page).getByRole('button', { name: 'Feed Para' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'New for Para' })).toHaveText(
+      'New for Para: Bow tie. Put it on in Settings.',
+    );
+  });
+
   test('a known link with the box ticked goes to the report form for that problem', async ({ page }) => {
     await openScreen(page, 'problems');
     await startAdding(page, 'https://leetcode.com/problems/two-sum/');

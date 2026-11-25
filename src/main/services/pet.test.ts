@@ -167,6 +167,20 @@ describe('the "missed you" greeting', () => {
     expect(getPet(app.db).greetedDay).toBeNull();
   });
 
+  it('greets again when the last greeting was recorded under a clock that was ahead', async () => {
+    app = createTestApp({ now: la('2026-12-01', '17:00') });
+    await report('good');
+    // The clock jumps a year ahead; the greeting is seen and recorded with that date.
+    app.clock.set(la('2027-12-05', '17:00'));
+    expect(await mood()).toBe('missed_you');
+    await app.handlers.acknowledgeGreeting(undefined);
+    // The clock is corrected. Days later the user comes back: the old record must not hide the greeting.
+    app.clock.set(la('2026-12-06', '17:00'));
+    expect(await mood()).toBe('missed_you');
+    await app.handlers.acknowledgeGreeting(undefined);
+    expect(await mood()).toBe('peckish');
+  });
+
   it('never greets a brand-new install', async () => {
     app = createTestApp({ now: la('2026-12-01', '17:00') });
     expect(await mood()).toBe('peckish');
@@ -291,6 +305,20 @@ describe('accessories unlocked by reporting', () => {
     const good = await report('good');
     expect(good.unlocked).toEqual(['bow_tie']);
     expect(getPet(app.db).unlockedAccessories).toEqual(['bow_tie']);
+  });
+
+  it('unlocks the crown on the thirtieth day in a row', async () => {
+    app = createTestApp({ now: la('2026-12-01', '17:00') });
+    for (let day = 1; day <= 29; day += 1) {
+      app.clock.set(la(`2026-12-${String(day).padStart(2, '0')}`, '17:00'));
+      const result = await report('good');
+      expect(result.unlocked).toEqual(day === 7 ? ['bow_tie'] : []);
+    }
+    app.clock.set(la('2026-12-30', '17:00'));
+    const result = await report('easy');
+    expect(result.streak.current).toBe(30);
+    expect(result.unlocked).toEqual(['crown']);
+    expect(getPet(app.db).unlockedAccessories).toEqual(['bow_tie', 'crown']);
   });
 
   it('keeps unlocks when the streak is lost, and can wear them', async () => {

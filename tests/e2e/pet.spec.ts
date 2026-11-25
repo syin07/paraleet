@@ -83,6 +83,15 @@ test('the pet window floats, stays out of the way, and remembers where it was pu
     await expect(pet.getByTestId('pet-bubble')).toContainText('Two Sum');
     await expect(pet.getByTestId('pet-bubble')).toContainText('LeetCode');
     await expect.poll(async () => (await running?.pet())?.clickThrough).toBe(false);
+
+    // The first reminder time passes (16:00 in the test's zone): Para wakes up peckish and the
+    // window redraws by itself, with no reload.
+    await expect(pet.getByTestId('pet-bubble')).toHaveAttribute('data-mood', 'sleeping');
+    await running.setNow('2026-11-26T00:05:00.000Z');
+    await expect(pet.getByTestId('pet-bubble')).toHaveAttribute('data-mood', 'peckish');
+    await running.setNow('2026-11-25T20:01:00.000Z');
+    await expect(pet.getByTestId('pet-bubble')).toHaveAttribute('data-mood', 'sleeping');
+
     await pet.mouse.move(4, 4);
     await expect.poll(async () => (await running?.pet())?.clickThrough).toBe(true);
     await expect(pet.getByTestId('pet-bubble')).toHaveCount(0);

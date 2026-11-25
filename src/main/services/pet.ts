@@ -5,7 +5,7 @@ import { CHECKING_MS, celebrationEndsAt, deriveMood } from '../../core/pet';
 import { stageFor } from '../../core/petFacts';
 import { pickLine } from '../../core/petLines';
 import { displayedStreak, isFedOn, missedDays, type StreakState } from '../../core/streak';
-import { ACCESSORY_IDS, type AccessoryId, type Mood, type Problem } from '../../core/types';
+import { ACCESSORY_IDS, type AccessoryId, type Mood, type ParaDay, type Problem } from '../../core/types';
 import { getAssignment } from '../../data/repos/assignments';
 import { saveGreetedDay, type PetRecord } from '../../data/repos/pet';
 import { getProblem } from '../../data/repos/problems';
@@ -25,8 +25,9 @@ function streakState(pet: PetRecord): StreakState {
  * True once the "missed you" greeting has been seen since Para was last fed. The greeting is for
  * coming back after an absence, so it shows once per absence, not once per day.
  */
-function greetedSinceLastFed(pet: PetRecord): boolean {
-  if (pet.greetedDay === null) return false;
+function greetedSinceLastFed(pet: PetRecord, today: ParaDay): boolean {
+  // A greeting dated after today was recorded under a wrong clock: it does not count.
+  if (pet.greetedDay === null || pet.greetedDay > today) return false;
   return pet.lastFedDay === null || pet.greetedDay > pet.lastFedDay;
 }
 
@@ -42,7 +43,7 @@ export function moodAt(ctx: AppContext, moment: Moment): Mood {
     eveningReminderTime: settings.eveningReminderTime,
     fedToday: isFedOn(state, today),
     missedDays: missedDays(state, today),
-    greetedToday: greetedSinceLastFed(pet),
+    greetedToday: greetedSinceLastFed(pet, today),
     celebration: ctx.session.celebration,
   });
 }

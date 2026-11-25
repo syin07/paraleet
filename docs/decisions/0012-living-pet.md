@@ -19,7 +19,7 @@ The rules for Para's mood, lines, unlocks and reminders are pure functions in `s
 
 4. **"Missed you" shows once per absence.** `pet.greeted_day` records the ParaLeet day the greeting was seen. Para has been greeted when that day is after the last fed day, so someone who opens the app every day without solving is greeted once, not daily. Feeding Para ends the greeting by itself.
 
-5. **Seeing the greeting means a person was there.** It counts as seen when the pointer has been on the floating bird or the bird was clicked, or when Today has been open and in front for five seconds. A timer alone would "acknowledge" it on a Mac nobody is sitting at.
+5. **Seeing the greeting means a person was there.** It counts as seen when the pointer has been on the floating bird or the bird was clicked, or when Today has been open and in front for five seconds in a row (counted again from zero when the window is hidden or loses focus). A greeting recorded with a date after today (a wrong clock) does not count. A timer alone would "acknowledge" it on a Mac nobody is sitting at.
 
 6. **Accessory unlocks are decided inside the report's transaction** with `unlockedAfterAttempt`, after the attempt is recorded, so the Hard-problem check sees it. The report's answer lists what was newly unlocked so the screen can say so.
 
@@ -29,7 +29,7 @@ The rules for Para's mood, lines, unlocks and reminders are pure functions in `s
 
 9. **The bubble says two things.** Para's line is in its own voice and does not always name the problem. The PRD asks for the problem and platform when not fed and the streak when fed, so the floating pet's bubble shows the line and, under it, that plain fact, unless the line already says it. During the short shows (checking, eating, nibbling, the greeting) only the line is shown.
 
-10. **Growth and unlocks are announced on Today** with a toast after the report ("Para grew into a chick!", "New for Para: Bow tie. Put it on in Settings."). The stage and mood are also written under the bird.
+10. **Growth and unlocks are announced** with a toast after a report from Today or the Problems screen ("Para grew into a chick!", "New for Para: Bow tie. Put it on in Settings."). The stage and mood are also written under the bird.
 
 ## Alternatives rejected
 
