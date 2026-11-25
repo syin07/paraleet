@@ -1,13 +1,17 @@
 import { expect, test } from '@playwright/test';
 import { launchApp, makeUserDataDir, type RunningApp } from './launch';
 
-// PRD section 11, "First launch": hatch the egg, meet Para, pick reminder times. The floating pet
-// waits until it is done, then shows up by itself.
+// PRD section 11, "First launch": hatch the egg, meet Para, pick reminder times, optionally add an
+// API key. The floating pet waits until it is done, then shows up by itself.
 test('the first launch walks through the flow, then the pet appears and it never shows again', async () => {
   const data = makeUserDataDir();
   let running: RunningApp | null = null;
   try {
-    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:00:00.000Z', hatched: false });
+    running = await launchApp({
+      userDataDir: data.dir,
+      now: '2026-11-25T20:00:00.000Z',
+      hatched: false,
+    });
     let page = running.page;
     await expect(page.getByTestId('onboarding')).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
@@ -25,6 +29,11 @@ test('the first launch walks through the flow, then the pet appears and it never
     await page.getByLabel('First reminder').fill('15:30');
     await page.getByRole('button', { name: 'Continue' }).click();
 
+    // The real app has no key yet and can store one, so the optional fourth step comes next.
+    await expect(page.getByRole('heading', { name: 'Want learning plans?' })).toBeVisible();
+    expect((await running.pet()).exists).toBe(false);
+    await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+
     await expect(page.getByTestId('screen-today')).toBeVisible();
     await expect(page.getByTestId('onboarding')).toHaveCount(0);
     const pet = await running.petPage();
@@ -38,7 +47,11 @@ test('the first launch walks through the flow, then the pet appears and it never
     running = null;
 
     // Another launch (still told not to hatch): the flow is gone for good and the pet is there.
-    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:00:00.000Z', hatched: false });
+    running = await launchApp({
+      userDataDir: data.dir,
+      now: '2026-11-25T20:00:00.000Z',
+      hatched: false,
+    });
     page = running.page;
     await expect(page.getByTestId('screen-today')).toBeVisible();
     await expect(page.getByTestId('onboarding')).toHaveCount(0);
@@ -50,11 +63,49 @@ test('the first launch walks through the flow, then the pet appears and it never
   }
 });
 
+test('a key typed on the last step is saved and never shown in the page', async () => {
+  const data = makeUserDataDir();
+  let running: RunningApp | null = null;
+  const secret = 'sk-ant-e2e-0123456789-secret';
+  try {
+    running = await launchApp({
+      userDataDir: data.dir,
+      now: '2026-11-25T20:00:00.000Z',
+      hatched: false,
+    });
+    const page = running.page;
+    await expect(page.getByTestId('onboarding')).toBeVisible();
+    await page.getByRole('button', { name: 'Hatch', exact: true }).click();
+    await expect(page.getByText("Hi! I'm Para. Feed me one problem a day.")).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Nice to meet you' }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Want learning plans?' })).toBeVisible();
+    await page.getByLabel('Anthropic API key', { exact: true }).fill(secret);
+    await page.getByRole('button', { name: 'Save key', exact: true }).click();
+
+    await expect(page.getByTestId('screen-today')).toBeVisible();
+    await expect(page.getByTestId('onboarding')).toHaveCount(0);
+    expect(await page.content()).not.toContain(secret);
+    // Written as text: the tests are type-checked without the browser's own types.
+    const hasKey = await page.evaluate<boolean>(
+      `globalThis.paraleet.getPlanOverview().then((overview) => overview.llm.hasKey)`,
+    );
+    expect(hasKey).toBe(true);
+  } finally {
+    await running?.close().catch(() => undefined);
+    data.remove();
+  }
+});
+
 test('someone who has already hatched never sees the flow', async () => {
   const data = makeUserDataDir();
   let running: RunningApp | null = null;
   try {
-    running = await launchApp({ userDataDir: data.dir, now: '2026-11-25T20:00:00.000Z' });
+    running = await launchApp({
+      userDataDir: data.dir,
+      now: '2026-11-25T20:00:00.000Z',
+    });
     await expect(running.page.getByTestId('screen-today')).toBeVisible();
     await expect(running.page.getByTestId('onboarding')).toHaveCount(0);
     await running.petPage();

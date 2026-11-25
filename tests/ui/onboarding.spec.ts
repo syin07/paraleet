@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { captureBothSizes, WINDOW_MIN } from './screenshots';
 
-type Host = { paraleet: { completeOnboarding: (input: unknown) => Promise<unknown> } };
+type Host = {
+  paraleet: { completeOnboarding: (input: unknown) => Promise<unknown> };
+};
 
 const flow = (page: Page) => page.getByTestId('onboarding');
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Main' });
@@ -202,8 +204,13 @@ test('reminder times already in Settings are the starting point, and Skip keeps 
   await expect(flow(page)).toBeVisible();
   await page.evaluate(() =>
     (
-      globalThis as unknown as { paraleet: { updateSettings(patch: object): Promise<unknown> } }
-    ).paraleet.updateSettings({ firstReminderTime: '09:15', eveningReminderTime: '19:45' }),
+      globalThis as unknown as {
+        paraleet: { updateSettings(patch: object): Promise<unknown> };
+      }
+    ).paraleet.updateSettings({
+      firstReminderTime: '09:15',
+      eveningReminderTime: '19:45',
+    }),
   );
   await spyOnComplete(page);
   await toReminders(page);
@@ -305,4 +312,276 @@ test('every step fits the minimum window without scrolling', async ({ page }) =>
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('alert')).toHaveCount(2);
   await fits();
+});
+
+// The optional fourth step: an Anthropic API key for learning plans (PRD section 11).
+const SECRET = 'sk-ant-test-0123456789-secret';
+const keyField = (page: Page) => page.getByLabel('Anthropic API key', { exact: true });
+const skipTop = (page: Page) => page.getByRole('button', { name: 'Skip', exact: true });
+
+async function openKeyFlow(page: Page, scenario = 'hatching-nokey'): Promise<void> {
+  await page.goto(`/?scenario=${scenario}#/today`);
+  await expect(flow(page)).toBeVisible();
+}
+
+/**
+ * Records calls of the named bridge methods on `window.__calls` as `{ method, input }`. A method
+ * named in `failing` throws that message instead of running.
+ */
+async function spyOn(page: Page, methods: string[], failing: Record<string, string> = {}): Promise<void> {
+  await page.evaluate(
+    ({ methods: names, failing: fails }) => {
+      const host = globalThis as unknown as {
+        paraleet: Record<string, (input: unknown) => Promise<unknown>>;
+        __calls: { method: string; input: unknown }[];
+      };
+      host.__calls = [];
+      for (const method of names) {
+        const original = host.paraleet[method]!;
+        host.paraleet[method] = async (input: unknown) => {
+          host.__calls.push({ method, input });
+          const message = fails[method];
+          if (message) throw new Error(message);
+          return original(input);
+        };
+      }
+    },
+    { methods, failing },
+  );
+}
+
+const calls = (page: Page): Promise<{ method: string; input: unknown }[]> =>
+  page.evaluate(
+    () =>
+      (
+        globalThis as unknown as {
+          __calls: { method: string; input: unknown }[];
+        }
+      ).__calls,
+  );
+
+async function toKey(page: Page): Promise<void> {
+  await toReminders(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'Want learning plans?' })).toBeVisible();
+}
+
+const hasKey = (page: Page): Promise<boolean> =>
+  page.evaluate(`globalThis.paraleet.getPlanOverview().then((overview) => overview.llm.hasKey)`);
+
+test('with no key saved and a Mac that can store one, every step counts of 4', async ({ page }) => {
+  await openKeyFlow(page);
+  await expect(page.getByTestId('onboarding-dots').locator('span')).toHaveCount(4);
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 1 of 4');
+  await toMeet(page);
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 2 of 4');
+  await page.getByRole('button', { name: 'Nice to meet you' }).click();
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 4');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 4 of 4');
+  await expect(page.getByTestId('onboarding-dots').locator('span')).toHaveCount(4);
+});
+
+for (const scenario of ['hatching', 'hatching-nostore']) {
+  test(`${scenario}: the flow keeps three steps and Continue completes directly`, async ({ page }) => {
+    await openKeyFlow(page, scenario);
+    await expect(page.getByTestId('onboarding-dots').locator('span')).toHaveCount(3);
+    await spyOn(page, ['completeOnboarding', 'updateSettings']);
+    await toReminders(page);
+    await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 3');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByTestId('screen-today')).toBeVisible();
+    expect((await calls(page)).map((c) => c.method)).toEqual(['completeOnboarding']);
+  });
+}
+
+test('a failed getPlanOverview leaves three steps and never blocks them', async ({ page }) => {
+  await page.addInitScript(`
+    const timer = setInterval(() => {
+      if (!globalThis.paraleet) return;
+      clearInterval(timer);
+      globalThis.paraleet.getPlanOverview = async () => { throw new Error('no'); };
+    }, 0);
+  `);
+  await openKeyFlow(page);
+  await toReminders(page);
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 3');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+});
+
+test('step 4 shows the title, the paragraph, a password field and both buttons', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await expect(
+    page.getByText(
+      'Pick topics and Para asks Claude for a staged list of real problems. That needs your own Anthropic API key. Everything else works without one, and you can add it later in Settings.',
+    ),
+  ).toBeVisible();
+  await expect(keyField(page)).toHaveAttribute('type', 'password');
+  await expect(page.getByRole('button', { name: 'Save key', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Skip for now', exact: true })).toBeEnabled();
+  await expect(skipTop(page)).toBeVisible();
+  await captureBothSizes(page, 'onboarding-4-key');
+});
+
+test('Save key needs 10 characters, saves the key and opens Today', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey', 'completeOnboarding']);
+  const save = page.getByRole('button', { name: 'Save key', exact: true });
+  await keyField(page).fill('123456789');
+  await expect(save).toBeDisabled();
+  await keyField(page).fill(SECRET);
+  await expect(save).toBeEnabled();
+  await captureBothSizes(page, 'onboarding-4-key-typed');
+  await save.click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await calls(page)).toEqual([
+    { method: 'saveApiKey', input: { apiKey: SECRET } },
+    {
+      method: 'completeOnboarding',
+      input: { firstReminderTime: '16:00', eveningReminderTime: '21:00' },
+    },
+  ]);
+  expect(await page.content()).not.toContain(SECRET);
+  expect(await hasKey(page)).toBe(true);
+});
+
+test('while the key is saving the button is busy and a second press does nothing', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await page.evaluate(`(() => {
+    const original = globalThis.paraleet.saveApiKey;
+    globalThis.__saves = 0;
+    globalThis.paraleet.saveApiKey = async (input) => {
+      globalThis.__saves += 1;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return original(input);
+    };
+  })()`);
+  await keyField(page).fill(SECRET);
+  await keyField(page).press('Enter');
+  await expect(page.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  await page.keyboard.press('Enter');
+  await expect(skipTop(page)).toBeDisabled();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await page.evaluate(`globalThis.__saves`)).toBe(1);
+});
+
+test('a refused key shows the message, clears the field and stays on step 4', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey', 'completeOnboarding'], {
+    saveApiKey: 'That does not look like an API key.',
+  });
+  await keyField(page).fill(SECRET);
+  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('That does not look like an API key.');
+  await expect(keyField(page)).toHaveValue('');
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 4 of 4');
+  expect(await page.content()).not.toContain(SECRET);
+  expect((await calls(page)).map((c) => c.method)).toEqual(['saveApiKey']);
+  await captureBothSizes(page, 'onboarding-4-key-refused');
+
+  // The user can type again, or skip.
+  await expect(page.getByRole('button', { name: 'Save key', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+});
+
+test('Skip for now finishes with no key saved', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey', 'completeOnboarding']);
+  await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await calls(page)).toEqual([
+    {
+      method: 'completeOnboarding',
+      input: { firstReminderTime: '16:00', eveningReminderTime: '21:00' },
+    },
+  ]);
+  expect(await hasKey(page)).toBe(false);
+});
+
+test('the small Skip at the top right also finishes from step 4', async ({ page }) => {
+  await openKeyFlow(page);
+  await toKey(page);
+  await spyOn(page, ['saveApiKey', 'completeOnboarding']);
+  await skipTop(page).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect((await calls(page)).map((c) => c.method)).toEqual(['completeOnboarding']);
+});
+
+test('in four steps Continue saves the times first and the flow ends with the same times', async ({ page }) => {
+  await openKeyFlow(page);
+  await spyOn(page, ['updateSettings', 'completeOnboarding']);
+  await toReminders(page);
+  await field(page, 'First reminder').fill('15:30');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await calls(page)).toEqual([
+    {
+      method: 'updateSettings',
+      input: { firstReminderTime: '15:30', eveningReminderTime: '21:00' },
+    },
+    {
+      method: 'completeOnboarding',
+      input: { firstReminderTime: '15:30', eveningReminderTime: '21:00' },
+    },
+  ]);
+});
+
+test('in four steps a refused time stays on step 3 with its message', async ({ page }) => {
+  await openKeyFlow(page);
+  await spyOn(page, ['updateSettings', 'completeOnboarding'], {
+    updateSettings: 'Nope, not that time',
+  });
+  await toReminders(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Nope, not that time');
+  await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 4');
+  await expect(page.getByRole('heading', { name: 'Want learning plans?' })).toHaveCount(0);
+});
+
+test('in four steps Skip on step 3 finishes the whole flow', async ({ page }) => {
+  await openKeyFlow(page);
+  await spyOn(page, ['updateSettings', 'completeOnboarding']);
+  await toReminders(page);
+  await skipTop(page).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect((await calls(page)).map((c) => c.method)).toEqual(['completeOnboarding']);
+});
+
+test('step 4 fits the minimum window without scrolling', async ({ page }) => {
+  await page.setViewportSize(WINDOW_MIN);
+  await openKeyFlow(page);
+  await toKey(page);
+  await keyField(page).fill(SECRET);
+  await page.evaluate(
+    `globalThis.paraleet.saveApiKey = async () => { throw new Error('Anthropic did not accept that key. Check it and try again.'); }`,
+  );
+  await page.getByRole('button', { name: 'Save key', exact: true }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  const sizes = await page.evaluate<{
+    sh: number;
+    ih: number;
+    sw: number;
+    iw: number;
+    top: number;
+    bottom: number;
+  }>(`({
+    sh: document.documentElement.scrollHeight,
+    ih: window.innerHeight,
+    sw: document.documentElement.scrollWidth,
+    iw: window.innerWidth,
+    top: Math.min(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, h1, p)')].map((el) => el.getBoundingClientRect().top)),
+    bottom: Math.max(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, h1, p)')].map((el) => el.getBoundingClientRect().bottom)),
+  })`);
+  expect(sizes.sh).toBeLessThanOrEqual(sizes.ih);
+  expect(sizes.sw).toBeLessThanOrEqual(sizes.iw);
+  expect(sizes.top).toBeGreaterThanOrEqual(0);
+  expect(sizes.bottom).toBeLessThanOrEqual(sizes.ih);
 });

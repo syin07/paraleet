@@ -897,6 +897,19 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     state.hatched = false;
     assignToday(state);
   },
+  /** The very first launch on a Mac with no API key yet: the flow offers its optional fourth step. */
+  'hatching-nokey': (state) => {
+    state.hatched = false;
+    assignToday(state);
+    state.plans.hasKey = false;
+  },
+  /** The very first launch on a Mac that cannot store a key: the flow keeps three steps. */
+  'hatching-nostore': (state) => {
+    state.hatched = false;
+    assignToday(state);
+    state.plans.hasKey = false;
+    state.plans.canStoreKey = false;
+  },
   /** Today's problem already reported. */
   fed: (state) => {
     midway(state);
