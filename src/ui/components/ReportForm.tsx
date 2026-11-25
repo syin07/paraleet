@@ -2,7 +2,7 @@
 // else is optional. `ReportForm` is the body alone so the compact card can embed it in M2;
 // `ReportDialog` is the same body inside the shared Modal.
 import { Check } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReportContext, ReportResult } from '../../bridge/contract';
 import { RATING_LABELS, RATING_MEANINGS, RATINGS, type Rating } from '../../core/types';
 import { api } from '../bridge';
@@ -52,7 +52,17 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{ result: ReportResult; insight: string } | null>(null);
   const radios = useRef<(HTMLButtonElement | null)[]>([]);
-  const doneRow = useRef<HTMLDivElement>(null);
+  const doneButton = useRef<HTMLButtonElement>(null);
+  const insightInput = useRef<HTMLInputElement>(null);
+  const notesInput = useRef<HTMLTextAreaElement>(null);
+  // False once the form is gone, so a report that finishes late reports to nobody.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -79,8 +89,16 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
     if (loaded) radios.current[0]?.focus();
   }, [loaded]);
 
+  // The button that was pressed is replaced by its field; keep focus from falling to the page.
   useEffect(() => {
-    if (confirmation) doneRow.current?.querySelector('button')?.focus();
+    if (revealed) insightInput.current?.focus();
+  }, [revealed]);
+  useEffect(() => {
+    if (notesOpen) notesInput.current?.focus();
+  }, [notesOpen]);
+
+  useEffect(() => {
+    if (confirmation) doneButton.current?.focus();
   }, [confirmation]);
 
   const firstSolve = context?.kind === 'first_solve';
@@ -88,13 +106,10 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
   const minutesError = minutesProblem(minutes);
   const canSubmit = rating !== null && minutesError === null && !busy && context !== null && !confirmation;
 
-  const pick = useCallback(
-    (next: Rating) => {
-      if (revealed && CAPPED.has(next)) return;
-      setRating(next);
-    },
-    [revealed],
-  );
+  function pick(next: Rating): void {
+    if (revealed && CAPPED.has(next)) return;
+    setRating(next);
+  }
 
   async function reveal(): Promise<void> {
     setError(null);
@@ -133,50 +148,40 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
             (value) => value.keyInsight,
             () => null,
           );
+        if (!mounted.current) return;
         if (saved) {
           setConfirmation({ result, insight: saved });
           setBusy(false);
           return;
         }
       }
-      onDone(result);
+      if (mounted.current) onDone(result);
     } catch (cause) {
+      if (!mounted.current) return;
       setError(messageOf(cause));
       setBusy(false);
     }
   }
 
-  // Number keys and Enter work wherever focus is inside the dialog, including on the dialog itself.
-  const submitRef = useRef(submit);
-  const pickRef = useRef(pick);
-  const canSubmitRef = useRef(canSubmit);
-  useEffect(() => {
-    submitRef.current = submit;
-    pickRef.current = pick;
-    canSubmitRef.current = canSubmit;
-  });
-  useEffect(() => {
-    function onKey(event: KeyboardEvent): void {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
-      const index = ['1', '2', '3', '4'].indexOf(event.key);
-      if (index >= 0 && !typing) {
-        const next = RATINGS[index];
-        if (next) pickRef.current(next);
-        return;
-      }
-      if (event.key === 'Enter' && target?.tagName !== 'TEXTAREA') {
-        // A focused link or footer button keeps its own Enter.
-        if (target?.tagName === 'BUTTON' && target.getAttribute('role') !== 'radio') return;
-        if (!canSubmitRef.current) return;
-        event.preventDefault();
-        void submitRef.current();
-      }
+  // Number keys and Enter act only while focus is inside the form, and never mid-composition.
+  function onFormKeyDown(event: React.KeyboardEvent): void {
+    if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target as HTMLElement;
+    const typing = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+    const index = ['1', '2', '3', '4'].indexOf(event.key);
+    if (index >= 0 && !typing) {
+      const next = RATINGS[index];
+      if (next) pick(next);
+      return;
     }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
+    if (event.key === 'Enter' && target.tagName !== 'TEXTAREA') {
+      // A focused link or footer button keeps its own Enter.
+      if (target.tagName === 'BUTTON' && target.getAttribute('role') !== 'radio') return;
+      if (!canSubmit) return;
+      event.preventDefault();
+      void submit();
+    }
+  }
 
   function onRadioKeyDown(event: React.KeyboardEvent, index: number): void {
     const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
@@ -207,8 +212,8 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
       <div data-testid="report-confirmation">
         <div className="section-label">Your key insight</div>
         <p className="mt-2 text-md text-fg">{confirmation.insight}</p>
-        <div ref={doneRow} className="mt-6 flex justify-end">
-          <Button variant="primary" onClick={() => onDone(confirmation.result)}>
+        <div className="mt-6 flex justify-end">
+          <Button ref={doneButton} variant="primary" onClick={() => onDone(confirmation.result)}>
             Done
           </Button>
         </div>
@@ -226,7 +231,7 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
   const selectedStop = rating ?? RATINGS.find((candidate) => !(revealed && CAPPED.has(candidate)));
 
   return (
-    <div>
+    <div onKeyDown={onFormKeyDown}>
       <div role="radiogroup" aria-label="Rating" className="grid grid-cols-4 gap-2">
         {RATINGS.map((value, index) => {
           const selected = rating === value;
@@ -288,6 +293,7 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
           ) : (
             <Field label={<>Key insight {firstSolve && <StatusBadge>New</StatusBadge>}</>}>
               <Input
+                ref={insightInput}
                 value={insight}
                 maxLength={MAX_INSIGHT}
                 placeholder="The trick in one sentence"
@@ -304,7 +310,7 @@ export function ReportForm({ problemId, onDone, onCancel, compact = false, onLoa
       <div className="mt-3">
         {notesOpen ? (
           <Field label="Notes">
-            <Textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Textarea ref={notesInput} rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </Field>
         ) : (
           <Button variant="ghost" size="sm" onClick={() => setNotesOpen(true)}>

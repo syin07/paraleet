@@ -2,6 +2,7 @@
 // reviews, the streak and a quick way to log any other problem.
 import { useRef, useState } from 'react';
 import { api } from '../../bridge';
+import { AddProblemDialog } from '../../components/AddProblemDialog';
 import { Button } from '../../components/Button';
 import { Card, EmptyState, Page, QueryNotice } from '../../components/Layout';
 import { ReportDialog } from '../../components/ReportForm';
@@ -19,7 +20,9 @@ export function TodayScreen() {
   const query = useBridgeQuery(() => api().getToday());
   const [reportFor, setReportFor] = useState<number | null>(null);
   const [swapping, setSwapping] = useState(false);
-  const quickLogInput = useRef<HTMLDivElement>(null);
+  // The pasted link of the add dialog, or null while it is closed.
+  const [addingUrl, setAddingUrl] = useState<string | null>(null);
+  const quickLogInput = useRef<HTMLInputElement>(null);
   const today = query.data;
 
   if (!today) {
@@ -31,7 +34,7 @@ export function TodayScreen() {
   }
 
   const assignment = today.assignment;
-  const focusQuickLog = (): void => quickLogInput.current?.querySelector('input')?.focus();
+  const focusQuickLog = (): void => quickLogInput.current?.focus();
 
   return (
     <Page title="Today" actions={<span className="text-sm text-fg-muted">{formatDay(today.today)}</span>}>
@@ -65,10 +68,27 @@ export function TodayScreen() {
         </div>
         <div className="flex flex-col gap-4">
           <StreakCard streak={today.streak} />
-          <QuickLog inputRef={quickLogInput} onPick={setReportFor} />
+          <QuickLog inputRef={quickLogInput} onPick={setReportFor} onAddUnknown={setAddingUrl} />
         </div>
       </div>
-      {reportFor !== null && <ReportDialog problemId={reportFor} onClose={() => setReportFor(null)} />}
+      {addingUrl !== null && (
+        <AddProblemDialog
+          initialUrl={addingUrl}
+          solvedToday
+          onClose={() => setAddingUrl(null)}
+          onAdded={(problem, _created, report) => {
+            setAddingUrl(null);
+            if (report) setReportFor(problem.id);
+          }}
+        />
+      )}
+      {reportFor !== null && (
+        <ReportDialog
+          problemId={reportFor}
+          // A late close from this dialog must not close one opened for another problem since.
+          onClose={() => setReportFor((current) => (current === reportFor ? null : current))}
+        />
+      )}
       {swapping && <SwapDialog currentId={assignment?.problem.id ?? null} onClose={() => setSwapping(false)} />}
     </Page>
   );

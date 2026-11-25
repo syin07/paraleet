@@ -27,4 +27,14 @@ describe('formatInterval', () => {
     expect(formatInterval(773)).toBe('in about 2 years');
     expect(formatInterval(2859)).toBe('in about 8 years');
   });
+  it('treats anything that is not a number of at least 1 as 1', () => {
+    for (const bad of [0, -3, 0.4, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(formatInterval(bad)).toBe('tomorrow');
+    }
+  });
+  it('rounds fractions', () => {
+    expect(formatInterval(2.4)).toBe('in 2 days');
+    expect(formatInterval(2.6)).toBe('in 3 days');
+    expect(formatInterval(1.2)).toBe('tomorrow');
+  });
 });

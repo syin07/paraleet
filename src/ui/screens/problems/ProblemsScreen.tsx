@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from 'react';
 import { TOPICS, topicLabel, type TopicId } from '../../../core/topics';
 import { api } from '../../bridge';
 import { AddProblemDialog } from '../../components/AddProblemDialog';
+import { ReportDialog } from '../../components/ReportForm';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Field';
 import { EmptyState, QueryNotice } from '../../components/Layout';
@@ -54,8 +55,10 @@ export function ProblemsScreen() {
   const lastFailure = useRef<FailedSave | null>(null);
 
   function select(problemId: number | null): void {
-    // A drawer the user opens themselves starts a clean slate for failed saves.
+    // A drawer the user opens or closes themselves starts a clean slate for failed saves. A save
+    // that fails afterwards (as the old drawer unmounts) sets the restore state again.
     if (problemId !== null) lastFailure.current = null;
+    setRestore(null);
     if (problemId === null) setSelection(null);
     else setSelection((current) => (current?.id === problemId ? current : { id: problemId, nonce: ++nonce.current }));
   }
@@ -72,6 +75,22 @@ export function ProblemsScreen() {
     setSelection({ id: failed.problemId, nonce: ++nonce.current });
   }
   const [adding, setAdding] = useState(false);
+  // The problem whose report dialog is open; the ref lets a late close tell it is out of date.
+  const [reportFor, setReportFor] = useState<number | null>(null);
+  const reportRef = useRef<number | null>(null);
+
+  function openReport(problemId: number): void {
+    reportRef.current = problemId;
+    setReportFor(problemId);
+  }
+
+  /** Closing the report shows the problem's drawer, but only if this dialog is still the open one. */
+  function closeReport(problemId: number): void {
+    if (reportRef.current !== problemId) return;
+    reportRef.current = null;
+    setReportFor(null);
+    select(problemId);
+  }
 
   const rows = logged.data;
   const today = todayView.data?.today;
@@ -231,12 +250,14 @@ export function ProblemsScreen() {
       {adding && (
         <AddProblemDialog
           onClose={() => setAdding(false)}
-          onAdded={(problem) => {
+          onAdded={(problem, _created, report) => {
             setAdding(false);
-            select(problem.id);
+            if (report) openReport(problem.id);
+            else select(problem.id);
           }}
         />
       )}
+      {reportFor !== null && <ReportDialog problemId={reportFor} onClose={() => closeReport(reportFor)} />}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { DueReviewItem } from '../../../bridge/contract';
 import { api } from '../../bridge';
 import { DifficultyDot, PlatformBadge } from '../../components/Badges';
@@ -19,6 +20,22 @@ export function DueReviews({
   canMakeToday: boolean;
   onReport: (problemId: number) => void;
 }) {
+  const [swapping, setSwapping] = useState(false);
+  const [swapError, setSwapError] = useState<string | null>(null);
+
+  async function makeToday(problemId: number): Promise<void> {
+    if (swapping) return;
+    setSwapping(true);
+    setSwapError(null);
+    try {
+      await api().swapToday({ problemId });
+    } catch (cause) {
+      setSwapError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSwapping(false);
+    }
+  }
+
   return (
     <section aria-label="Due for review">
       <h2 className="section-label mb-2">Due for review</h2>
@@ -45,7 +62,7 @@ export function DueReviews({
                     Report
                   </Button>
                   {canMakeToday && (
-                    <Button variant="ghost" size="sm" onClick={() => void api().swapToday({ problemId: item.problem.id })}>
+                    <Button variant="ghost" size="sm" disabled={swapping} onClick={() => void makeToday(item.problem.id)}>
                       Make today's
                     </Button>
                   )}
@@ -55,6 +72,11 @@ export function DueReviews({
           </ul>
         )}
       </Card>
+      {swapError && (
+        <div role="alert" className="mt-2 text-sm text-hard-text">
+          Could not change today's problem: {swapError}
+        </div>
+      )}
     </section>
   );
 }
