@@ -28,6 +28,7 @@ export function listLoggedProblems(ctx: AppContext): LoggedProblemRow[] {
     problem: toSummary(row.problem),
     attemptCount: row.attemptCount,
     lastAttemptAt: row.lastAttemptAt,
+    lastAttemptDay: row.lastAttemptDay,
     lastRating: row.lastRating,
     card: row.card ? toCardSummary({ problemId: row.problem.id, state: {}, ...row.card }, moment) : null,
   }));

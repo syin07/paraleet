@@ -83,6 +83,7 @@ describe('the thin path: assign, report, persist', () => {
 
     const logged = await app.handlers.listLoggedProblems(undefined);
     expect(logged.map((row) => row.problem.title)).toEqual(['Two Sum']);
+    expect(logged[0]?.lastAttemptDay).toBe('2026-11-25');
   });
 
   it('gives a crumb for Again: fed and streak kept, but no growth', async () => {

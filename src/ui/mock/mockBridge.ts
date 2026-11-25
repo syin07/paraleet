@@ -375,6 +375,7 @@ function createApi(state: MockState): ParaLeetApi {
           problem,
           attemptCount: attempts.length,
           lastAttemptAt: last.attemptedAt,
+          lastAttemptDay: last.paraDay,
           lastRating: last.rating,
           card: cardSummary(state, problem.id),
         });

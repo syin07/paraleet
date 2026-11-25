@@ -3,6 +3,7 @@ import type {
   CardStatus,
   DifficultyNorm,
   IsoInstant,
+  ParaDay,
   Platform,
   Problem,
   ProblemOrigin,
@@ -171,6 +172,7 @@ export interface LoggedProblem {
   problem: Problem;
   attemptCount: number;
   lastAttemptAt: IsoInstant;
+  lastAttemptDay: ParaDay;
   lastRating: Rating;
   card: { status: CardStatus; dueAt: IsoInstant } | null;
 }
@@ -180,6 +182,7 @@ export function listLoggedProblems(db: Db): LoggedProblem[] {
   type Row = ProblemRow & {
     attempt_count: number;
     last_attempt_at: string;
+    last_attempt_day: ParaDay;
     last_rating: Rating;
     card_status: CardStatus | null;
     card_due_at: string | null;
@@ -189,6 +192,7 @@ export function listLoggedProblems(db: Db): LoggedProblem[] {
       `SELECT ${prefixed('p')},
          stats.attempt_count,
          last.attempted_at AS last_attempt_at,
+         last.para_day AS last_attempt_day,
          last.rating AS last_rating,
          c.status AS card_status,
          c.due_at AS card_due_at
@@ -203,6 +207,7 @@ export function listLoggedProblems(db: Db): LoggedProblem[] {
       problem: toProblem(row),
       attemptCount: row.attempt_count,
       lastAttemptAt: row.last_attempt_at,
+      lastAttemptDay: row.last_attempt_day,
       lastRating: row.last_rating,
       card: row.card_status && row.card_due_at ? { status: row.card_status, dueAt: row.card_due_at } : null,
     }));
