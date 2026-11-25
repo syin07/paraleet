@@ -1,0 +1,21 @@
+{
+  "topics": [
+    {
+      "topic": "binary-search",
+      "foundations": [101, 102, 103],
+      "groups": [
+        {
+          "name": "Binary search on the answer",
+          "description": "Guess a value and check whether it is feasible, then narrow the range.",
+          "problems": [104, 105, 106]
+        },
+        {
+          "name": "Rotated and shifted arrays",
+          "description": "Work out which half is still sorted before choosing a side.",
+          "problems": [107, 108, 109]
+        }
+      ],
+      "challenge": [110, 111]
+    }
+  ]
+}
