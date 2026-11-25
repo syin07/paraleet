@@ -12,7 +12,6 @@ import {
 } from '../../data/repos/attempts';
 import { saveCard } from '../../data/repos/cards';
 import { savePetFacts, saveUnlockedAccessories } from '../../data/repos/pet';
-import { countFinishedPlans } from '../../data/repos/plans';
 import { currentMoment, type AppContext } from './context';
 import { knownAccessories } from './pet';
 import { reconcileActivePlan } from './plans';
@@ -72,7 +71,7 @@ export function reconcile(ctx: AppContext): ReconcileResult {
     // The active plan's progress first: finishing a plan is what earns the graduation cap.
     const planItemsCorrected = reconcileActivePlan(ctx, moment.now.toISOString());
 
-    const earned = replayUnlocks(listUnlockAttempts(ctx.db), countFinishedPlans(ctx.db));
+    const earned = replayUnlocks(listUnlockAttempts(ctx.db));
     const accessoriesRestored = newlyUnlocked(stored, earned);
     if (accessoriesRestored.length > 0) {
       saveUnlockedAccessories(ctx.db, ACCESSORY_IDS.filter((id) => stored.includes(id) || earned.includes(id)));

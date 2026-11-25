@@ -175,9 +175,20 @@ describe('replayUnlocks', () => {
   });
 
   it('unlocks the graduation cap once a plan is finished and an attempt that is not Again follows', () => {
-    expect(replayUnlocks(run(1, 'again'), 1)).toEqual([]);
-    expect(replayUnlocks(run(1, 'good'), 1)).toEqual(['grad_cap']);
-    expect(replayUnlocks([], 1)).toEqual([]);
+    const at = (index: number, rating: UnlockAttempt['rating'], plansFinished: number): UnlockAttempt => ({
+      paraDay: day(index),
+      rating,
+      hardProblem: false,
+      plansFinished,
+    });
+    expect(replayUnlocks([at(0, 'again', 1)])).toEqual([]);
+    expect(replayUnlocks([at(0, 'good', 1)])).toEqual(['grad_cap']);
+    expect(replayUnlocks([])).toEqual([]);
+    // A plan finished by an attempt rated Again: solves from before the finish do not earn the cap.
+    expect(replayUnlocks([at(0, 'good', 0), at(1, 'again', 1)])).toEqual([]);
+    expect(replayUnlocks([at(0, 'good', 0), at(1, 'again', 1), at(2, 'hard', 1)])).toEqual(['grad_cap']);
+    // An attempt that says nothing about plans counts none.
+    expect(replayUnlocks(run(3, 'good'))).toEqual([]);
   });
 
   it('gives the same answer as reporting the attempts one at a time', () => {

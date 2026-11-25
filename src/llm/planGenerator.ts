@@ -18,8 +18,12 @@ export interface LlmTurn {
 
 /** What came back from one request. */
 export type LlmAnswer =
-  /** The model's answer, parsed as JSON. `text` is the answer as sent, for a retry. */
-  | { kind: 'json'; value: unknown; text: string }
+  /**
+   * The model's answer, parsed as JSON. `text` is the answer as sent, for a retry. `model` is the
+   * model that wrote it when the client knows: it differs from the one asked for when the API
+   * served the request with a fallback model.
+   */
+  | { kind: 'json'; value: unknown; text: string; model?: string }
   /** The answer was not valid JSON at all. */
   | { kind: 'unparseable'; text: string }
   /** The model declined to answer. */
@@ -64,6 +68,8 @@ export interface GeneratedPlan {
   items: PlanItemDraft[];
   /** 1 when the first answer passed, 2 when the retry did. */
   attempts: number;
+  /** The model that wrote the accepted answer. */
+  model: string;
 }
 
 const MAX_ATTEMPTS = 2;
@@ -93,7 +99,7 @@ export async function generatePlan(
       problems = ['The answer was not valid JSON in the required shape.'];
     } else {
       const checked = validatePlanResponse(answer.value, request, candidates);
-      if (checked.ok) return { items: checked.items, attempts: attempt };
+      if (checked.ok) return { items: checked.items, attempts: attempt, model: answer.model ?? model };
       problems = checked.errors;
     }
     turns.push({ role: 'assistant', text: answer.text }, { role: 'user', text: buildRetryMessage(problems) });

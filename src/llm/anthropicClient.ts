@@ -29,11 +29,11 @@ const MAX_TOKENS = 16000;
 
 type StopReason = string | null;
 
-function toAnswer(stopReason: StopReason, text: string, explanation: string | null): LlmAnswer {
+function toAnswer(stopReason: StopReason, text: string, explanation: string | null, model: string): LlmAnswer {
   if (stopReason === 'refusal') return { kind: 'refused', explanation };
   if (stopReason === 'max_tokens') return { kind: 'truncated' };
   try {
-    return { kind: 'json', value: JSON.parse(text) as unknown, text };
+    return { kind: 'json', value: JSON.parse(text) as unknown, text, model };
   } catch {
     return { kind: 'unparseable', text };
   }
@@ -112,7 +112,7 @@ export function createAnthropicClient(apiKey: string, options: AnthropicClientOp
             messages: messages(turns),
             output_config: { format: betaZodOutputFormat(wireSchema) },
           });
-          return toAnswer(response.stop_reason, textOf(response.content), response.stop_details?.explanation ?? null);
+          return toAnswer(response.stop_reason, textOf(response.content), response.stop_details?.explanation ?? null, response.model);
         } catch (error) {
           // The fallback option is a dated beta. If the API no longer accepts it, or this model
           // does not take it, ask again the plain way rather than fail a request that would work.
@@ -125,7 +125,7 @@ export function createAnthropicClient(apiKey: string, options: AnthropicClientOp
           messages: messages(turns),
           output_config: { format: zodOutputFormat(wireSchema) },
         });
-        return toAnswer(response.stop_reason, textOf(response.content), response.stop_details?.explanation ?? null);
+        return toAnswer(response.stop_reason, textOf(response.content), response.stop_details?.explanation ?? null, response.model);
       } catch (error) {
         throw toLlmError(error);
       }

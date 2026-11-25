@@ -97,7 +97,7 @@ One file, `paraleet.sqlite3`, opened with a rollback journal (not WAL) so the da
 | `catalog_sources` | Which catalog file is loaded for each platform, so a newer file loads once (used from M3) |
 | `settings` | Key-value settings as JSON, plus `meta.*` keys for internal state |
 
-| `plans` | Learning plans: what was asked for, the model that wrote it, status (draft, active, done, archived). At most one is active (a partial unique index) |
+| `plans` | Learning plans: what was asked for, the model that wrote it, status (draft, active, done, archived). At most one is active (a partial unique index). A finished plan keeps the ID of the attempt that finished it |
 | `plan_items` | A plan's problems in order: topic, stage, pattern group name and description, state (pending, done, skipped). Each points at a row in `problems` |
 
 Migration 2 added the pet's greeting and reminder days and the catalog bookkeeping. Migration 3 added the plan tables.

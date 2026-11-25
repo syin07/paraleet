@@ -107,7 +107,7 @@ describe('what is sent', () => {
 
   it('asks again the plain way when the API refuses the request as sent', async () => {
     const network = fakeNetwork([apiError(400, 'invalid_request_error'), message(JSON.stringify(plan))]);
-    expect(await ask(network)).toEqual({ kind: 'json', value: plan, text: JSON.stringify(plan) });
+    expect(await ask(network)).toEqual({ kind: 'json', value: plan, text: JSON.stringify(plan), model: 'claude-opus-5-5' });
     expect(network.seen).toHaveLength(2);
     const second = network.seen[1]!;
     expect(second.headers['anthropic-beta'] ?? '').not.toContain('server-side-fallback');
@@ -119,7 +119,12 @@ describe('what is sent', () => {
 describe('answers', () => {
   it('returns the JSON the model wrote', async () => {
     const network = fakeNetwork([message(JSON.stringify(plan))]);
-    expect(await ask(network)).toEqual({ kind: 'json', value: plan, text: JSON.stringify(plan) });
+    expect(await ask(network)).toEqual({ kind: 'json', value: plan, text: JSON.stringify(plan), model: 'claude-opus-5-5' });
+  });
+
+  it('says which model answered when the API served the request with a fallback model', async () => {
+    const network = fakeNetwork([message(JSON.stringify(plan), 'end_turn', { model: 'claude-opus-4-8' })]);
+    expect(await ask(network)).toMatchObject({ kind: 'json', model: 'claude-opus-4-8' });
   });
 
   it('reads past blocks that are not text', async () => {

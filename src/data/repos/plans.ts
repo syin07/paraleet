@@ -168,15 +168,28 @@ export function listPlanItems(db: Db, planId: number): PlanItemRecord[] {
 export function setPlanStatus(
   db: Db,
   id: number,
-  status: PlanStatus,
-  stamps: { activatedAt?: IsoInstant; finishedAt?: IsoInstant } = {},
+  status: Exclude<PlanStatus, 'done'>,
+  stamps: { activatedAt?: IsoInstant } = {},
 ): void {
   db.run(
-    `UPDATE plans SET status = :status,
-       activated_at = COALESCE(:activatedAt, activated_at),
-       finished_at = COALESCE(:finishedAt, finished_at)
+    `UPDATE plans SET status = :status, activated_at = COALESCE(:activatedAt, activated_at) WHERE id = :id`,
+    { id, status, activatedAt: stamps.activatedAt ?? null },
+  );
+}
+
+/**
+ * Marks a plan finished. Call inside the transaction that records the finishing attempt, before
+ * the attempt is inserted: the plan then counts as finished for that attempt and every later one,
+ * and for none recorded before it. At launch, with no attempt being recorded, it counts from the
+ * next attempt on.
+ */
+export function finishPlan(db: Db, id: number, now: IsoInstant): void {
+  db.run(
+    `UPDATE plans SET status = 'done',
+       finished_at = COALESCE(finished_at, :now),
+       finished_from_attempt = COALESCE(finished_from_attempt, (SELECT COALESCE(MAX(id), 0) + 1 FROM attempts))
      WHERE id = :id`,
-    { id, status, activatedAt: stamps.activatedAt ?? null, finishedAt: stamps.finishedAt ?? null },
+    { id, now },
   );
 }
 
@@ -201,14 +214,4 @@ export function reorderPlanItems(db: Db, itemIds: readonly number[]): void {
 /** Deletes a plan and its items. */
 export function deletePlan(db: Db, id: number): void {
   db.run('DELETE FROM plans WHERE id = ?', [id]);
-}
-
-/** The pending items of the active plan that hold `problemId`, with the plan's activation time. */
-export function findActiveItemForProblem(db: Db, problemId: number): PlanItemRecord | null {
-  const row = db.get<ItemRow>(
-    `SELECT i.* FROM plan_items i JOIN plans p ON p.id = i.plan_id
-     WHERE p.status = 'active' AND i.problem_id = ?`,
-    [problemId],
-  );
-  return row ? toItem(row) : null;
 }

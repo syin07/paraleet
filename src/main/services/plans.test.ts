@@ -140,6 +140,15 @@ describe('generating a plan', () => {
     expect(listPlans(app.db)).toEqual([]);
   });
 
+  it('records the model that wrote the plan when a fallback model answered', async () => {
+    app = start();
+    const answer = goodAnswer();
+    app.modelAnswers.push({ ...json({ topics: answer.topics }), model: 'claude-opus-4-8' } as LlmAnswer);
+    const plan = await app.handlers.generatePlan({ ...request, topics: ['binary-search'], platforms: ['leetcode'] });
+    expect(app.modelCalls[0]?.model).toBe('claude-opus-5-5');
+    expect(plan.model).toBe('claude-opus-4-8');
+  });
+
   it('needs an API key, and says so without calling the model', async () => {
     app = start();
     app.secrets.key = null;
@@ -269,6 +278,11 @@ describe('an active plan', () => {
     expect(active.progress).toEqual({ total: 10, done: 0, skipped: 2, pending: 8 });
     expect(active.sections[0]?.items[0]?.state).toBe('skipped');
     expect(active.sections[0]?.items[1]?.isNext).toBe(true);
+    // The skipped problems come back as reviews: when their cards are due, one takes the daily slot.
+    app.clock.set(noonLA('2026-12-05'));
+    const due = await app.handlers.getToday(undefined);
+    expect(due.assignment?.reason).toBe('review');
+    expect([answer.ids[0], answer.ids[4]]).toContain(due.assignment?.problem.id);
 
     // A second plan made only of solved problems cannot be activated.
     for (const id of answer.ids) await report(id);
@@ -334,7 +348,44 @@ describe('an active plan', () => {
     const again = await report(ids[9]!, 'again');
     expect(again.finishedPlan).toBe('Binary search');
     expect(again.unlocked).toEqual([]);
+    // A restart before the next attempt changes nothing: the launch check replays the attempts,
+    // and the solves from before the finish do not earn the cap.
+    expect(reconcile(app.ctx).accessoriesRestored).toEqual([]);
+    expect(getPet(app.db).unlockedAccessories).not.toContain('grad_cap');
     expect((await report(ids[9]!, 'good')).unlocked).toContain('grad_cap');
+    expect(reconcile(app.ctx).accessoriesRestored).toEqual([]);
+    expect(getPet(app.db).unlockedAccessories).toContain('grad_cap');
+  });
+
+  it('knows which attempt finished the plan, so the launch check restores a lost cap', async () => {
+    app = start();
+    const { plan, ids } = await draft();
+    await app.handlers.activatePlan({ planId: plan.id });
+    for (const id of ids.slice(0, 9)) await report(id);
+    const last = await report(ids[9]!, 'good');
+    const finishedFrom = (): number | null =>
+      app.db.get<{ n: number | null }>('SELECT finished_from_attempt AS n FROM plans WHERE id = ?', [plan.id])?.n ?? null;
+    expect(finishedFrom()).toBe(last.attemptId);
+    // The stored unlocks are lost, as in a database from before accessories: the attempts earn the cap back.
+    app.db.run("UPDATE pet SET unlocked_accessories = '[]'");
+    expect(reconcile(app.ctx).accessoriesRestored).toContain('grad_cap');
+    expect(getPet(app.db).unlockedAccessories).toContain('grad_cap');
+  });
+
+  it('a plan found finished at launch earns the cap with the next solve, not with an earlier one', async () => {
+    app = start();
+    const { plan, ids } = await draft();
+    await app.handlers.activatePlan({ planId: plan.id });
+    for (const id of ids) await report(id);
+    // The write that finished the plan and the unlock are lost; every item is still done.
+    app.db.run("UPDATE plans SET status = 'active', finished_at = NULL, finished_from_attempt = NULL WHERE id = ?", [plan.id]);
+    app.db.run("UPDATE pet SET unlocked_accessories = '[]'");
+    const result = reconcile(app.ctx);
+    expect((await app.handlers.getPlanOverview(undefined)).past[0]).toMatchObject({ id: plan.id, status: 'done' });
+    expect(result.accessoriesRestored).not.toContain('grad_cap');
+    expect((await report(ids[0]!, 'again')).unlocked).toEqual([]);
+    expect((await report(ids[0]!, 'good')).unlocked).toContain('grad_cap');
+    expect(reconcile(app.ctx).accessoriesRestored).toEqual([]);
   });
 
   it('can be archived, and then deleted', async () => {

@@ -5,6 +5,9 @@ import type { Migration } from './types';
 // - plans: what was asked for (topics, platforms, level, size), which model wrote it, and where it
 //   is in its life: draft (being reviewed), active (the daily loop draws from it), done, archived.
 //   At most one plan is active, enforced by a partial unique index.
+//   `finished_from_attempt` is the ID of the first attempt that counts the plan as finished: the
+//   attempt that finished it. Attempt IDs only grow, so this orders a plan's finish among the
+//   attempts without trusting the clock, which is what the accessory replay needs.
 // - plan_items: the plan's problems in order. Every item points at a row in `problems`, so a plan
 //   cannot hold a problem the catalog does not have. A problem appears at most once in a plan.
 //   Group name and description are the model's words for a pattern group; null outside it.
@@ -23,7 +26,8 @@ export const m003Plans: Migration = {
       model         TEXT NOT NULL,
       created_at    TEXT NOT NULL,
       activated_at  TEXT,
-      finished_at   TEXT
+      finished_at   TEXT,
+      finished_from_attempt INTEGER
     );
     CREATE UNIQUE INDEX plans_one_active ON plans (status) WHERE status = 'active';
 

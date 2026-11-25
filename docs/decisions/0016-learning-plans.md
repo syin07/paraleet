@@ -20,7 +20,7 @@ The user picks topics, platforms, a level and a size, and gets a staged list of 
 
 5. **Already-attempted problems are skipped on activation,** and come back as reviews through their cards. A plan made only of attempted problems cannot be activated.
 
-6. **Progress follows the attempts.** Reporting a plan's problem marks its item done, inside the report's transaction. At launch `reconcileActivePlan` recomputes the active plan's item states from the attempts, like the streak (decision 0008). An attempt rated Again counts as done for the plan (the problem then returns as tomorrow's review), but the graduation cap needs a growth solve, as every accessory does (decision 0011).
+6. **Progress follows the attempts.** Reporting a plan's problem marks its item done, inside the report's transaction. At launch `reconcileActivePlan` recomputes the active plan's item states from the attempts, like the streak (decision 0008). An attempt rated Again counts as done for the plan (the problem then returns as tomorrow's review), but the graduation cap needs a growth solve, as every accessory does (decision 0011). A finished plan stores the ID of the attempt that finished it (`finished_from_attempt`). The launch check replays the attempts to restore lost accessories, and with that ID it gives the cap only to a growth solve at or after the finish, never to one from before it. Attempt IDs are used and not times, because IDs only grow and the clock can be wrong.
 
 7. **A finished plan is kept.** Its status becomes done; it cannot be deleted, because it is what earned the cap. Drafts and archived plans can be deleted.
 
@@ -32,7 +32,7 @@ The user picks topics, platforms, a level and a size, and gets a staged list of 
 
 10. **Structured output, then our own reading of it.** The request carries a JSON schema (`output_config.format`). The client calls `messages.create` and reads the answer itself instead of using the SDK's `parse` helper: `parse` throws on an answer that was cut off or is not JSON, and those are answers the app has its own words for ("came back cut off", ask again).
 
-11. **The request opts into the server-side refusal fallback** (`betas: ['server-side-fallback-2026-07-01']`, `fallbacks: 'default'`), so a refusal by the chosen model can be served by another model in the same call. If the API answers 400 to that request, the client asks once more without the fallback, so a retired beta flag cannot break plan generation. A plan made by a fallback model is still checked the same way.
+11. **The request opts into the server-side refusal fallback** (`betas: ['server-side-fallback-2026-07-01']`, `fallbacks: 'default'`), so a refusal by the chosen model can be served by another model in the same call. If the API answers 400 to that request, the client asks once more without the fallback, so a retired beta flag cannot break plan generation. A plan made by a fallback model is still checked the same way, and the plan records the model that answered, not the one that was asked.
 
 12. **Nothing optional is sent:** no `thinking`, no sampling parameters, no `tool_choice`, no tools. Newer models refuse some of these, and the defaults are right for one structured answer.
 

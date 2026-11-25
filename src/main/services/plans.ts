@@ -29,6 +29,7 @@ import {
   reorderPlanItems,
   setItemProblem,
   setItemState,
+  finishPlan,
   setPlanStatus,
   type PlanItemRecord,
   type PlanRecord,
@@ -221,7 +222,8 @@ export async function generatePlan(ctx: AppContext, input: BridgeParsedInput<'ge
         platforms: request.platforms,
         level: request.level,
         targetSize: request.targetSize,
-        model,
+        // The model that wrote the plan: a fallback model when the API used one.
+        model: generated.model,
       },
       generated.items,
       now,
@@ -407,7 +409,7 @@ export function recordPlanAttempt(
     item.state = 'done';
   }
   if (isPlanFinished(toProgressItems(items))) {
-    setPlanStatus(ctx.db, plan.id, 'done', { finishedAt: now });
+    finishPlan(ctx.db, plan.id, now);
     return { groupName: item.groupName, finishedPlan: plan.title };
   }
   return { groupName: item.groupName, finishedPlan: null };
@@ -436,7 +438,7 @@ export function reconcileActivePlan(ctx: AppContext, now: string): number {
       corrected += 1;
     }
   });
-  if (isPlanFinished(toProgressItems(items))) setPlanStatus(ctx.db, plan.id, 'done', { finishedAt: now });
+  if (isPlanFinished(toProgressItems(items))) finishPlan(ctx.db, plan.id, now);
   return corrected;
 }
 
