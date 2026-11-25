@@ -8,6 +8,7 @@ import {
   PLAN_PLATFORMS,
   planProgress,
   planQueue,
+  progressOf,
   recomputeItemStates,
   selectCandidates,
   SUGGESTED_PLAN_MODELS,
@@ -104,11 +105,7 @@ function toPlanView(ctx: AppContext, plan: PlanRecord): PlanView {
       });
     }
   }
-  for (const section of sections) {
-    const done = section.items.filter((item) => item.state === 'done').length;
-    const skipped = section.items.filter((item) => item.state === 'skipped').length;
-    section.progress = { total: section.items.length, done, skipped, pending: section.items.length - done - skipped };
-  }
+  for (const section of sections) section.progress = progressOf(section.items);
   return { ...toPlanSummary(plan, items), targetSize: plan.targetSize, sections };
 }
 
