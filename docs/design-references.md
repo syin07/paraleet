@@ -318,6 +318,7 @@ Mobbin query: `virtual pet app onboarding`, platform ios; `onboarding set remind
   3. **Reminders**: title `--text-lg` "When should Para remind you?", two rows (First reminder 16:00, Evening reminder 21:00) as label left, time input right, inside a `--surface` card; description muted "At most two a day. Skipped once Para is fed." Primary lg "Continue" (requests notification permission here).
   4. **API key (optional)**: title "Want learning plans?", one paragraph, password input full width, primary lg "Save key", secondary lg "Skip for now". Both lead to the Today screen, where the pet window also appears.
 - Each step fits without scrolling at the 860x580 minimum window size. Total time under one minute: no reading-heavy screens, every step has one primary button.
+- As built in M2: three steps (hatch, meet Para, reminders), so three dots. The hatching animation is the sprite's own six frames, about 1.5s; with reduced motion it is skipped. "Meet Para" shows Para as it really is at zero solves: still half in the shell. The reminder step starts from the times already in Settings and "Skip" keeps them. A failed save shows its message under the card and "Continue" can be pressed again. The floating pet appears when the flow is finished. The sprite gallery (`#/gallery`) is never covered by the flow. Step 4 (API key) arrives with M3.
 
 **ParaLeet adaptation**
 - Finch's naming step is removed (Para is always Para, PRD section 6).

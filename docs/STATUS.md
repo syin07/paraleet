@@ -4,15 +4,17 @@ Last updated: 2026-11-25 (session 2, lead)
 
 ## What works today
 
-**Milestone M1 is complete and merged, and most of M2.** Run `npm install`, then `npm run dev`.
+**Milestones M1 and M2 are complete and merged.** Run `npm install`, then `npm run dev`.
 
+- First launch: an egg hatches, Para says hello, you pick two reminder times. Under a minute.
 - Para is a pixel-art parakeet drawn by code. It floats on the desktop in its own see-through window, follows the day (asleep, peckish, hungry, content), says a different line each day, checks and eats when you report a solve, greets you after days away, grows (egg, chick, fledgling, adult) and earns accessories you can put on in Settings.
-
+- Click Para, or the bird in the menu bar, for a small card: today's problem, "Open problem", "I solved it" (the report form opens right in the card), and the streak. The menu bar shows Para's mood and the streak.
 - Para picks one problem a day: a due review first, otherwise the next starter problem. "Open problem" opens the browser; "I solved it" records a rating in two clicks.
+- Two reminders a day at most (16:00 and 21:00 unless you change them), each naming the problem, none once Para is fed. A click on one opens the card.
 - Every reported problem gets a review card (FSRS). A problem rated Again is tomorrow's problem. Up to five other due reviews are listed, never a count. Today's problem can be swapped.
 - Any problem can be logged from Today by search or by pasting its link (LeetCode, CSES, Codeforces or another site). The Problems screen lists everything logged, with filters, attempt history, notes, retire and reset.
 - The streak holds across the 04:00 boundary, restarts, sleep and time-zone changes. All data is one SQLite file.
-- Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories). Plan and Stats are still placeholders (M3 and M4). The menu bar icon, the compact card, notifications and the first-launch flow are in progress.
+- Settings works (reminder times, day start, review schedule, Para on the desktop, launch at login, accessories). Plan and Stats are still placeholders: learning plans (M3) and stats, export, import and the installer (M4) are in progress.
 
 ## Notes for the owner
 
@@ -24,24 +26,24 @@ Last updated: 2026-11-25 (session 2, lead)
 
 ## Current milestone
 
-M2. The pet is alive. (M1 closed with SAN-111, merge commit `2b2b8b5`.)
+M3. Catalog and learning plans, with M4 work running beside it. (M2 closed with SAN-118, merge commit `ad369d2`.)
 
 ## In flight
 
-Session 2 (2026-11-25) picked up after the usage limit. Reminders and launch at login are merged (`76ab89a`), and the compact card's page (`0015ba9`).
+Session 2 (2026-11-25). Nothing below is merged yet.
 
 | Issue | What | Branch | State |
 | --- | --- | --- | --- |
-| SAN-118 (UI side) | First-launch screens (hatch, meet Para, reminder times) | `worker/san-118-onboarding` (worktree `.claude/worktrees/agent-aeeaa52179a1ba71c`) | **Review passed.** The reviewer's notes are fixed on the branch. Rebased on main; the three suites are running. Then merge, and M2 is complete |
-| SAN-120 to SAN-123 (M3) | Lead: plan rules in core, migration 003, plans repository, the `llm` module, plan services, API key in a sealed file, bridge methods, mock plans | `lead/m3-plan-core` (worktree `.claude/worktrees/lead-m3`), based on old main `b803954` | Rebased on main at `76ab89a`; type check, lint and 1026 unit tests pass (`b59ead4`). Done on the branch: the model client reads answers itself and is tested against a fake network; plain error messages across the bridge (`dispatch`, `unwrapReply`); an end-to-end test with a scripted model (`tests/e2e/plans.spec.ts`, **written but not run yet**); decision 0016; architecture and README. To do, in order: rebase on main once the first-launch screens are merged; run the UI and end-to-end suites; fresh reviewer; merge. Then workers: SAN-130 (the Plan screen) and SAN-131 ("Learning plans" in Settings); the lead adds the optional API key step to the first-launch flow |
+| SAN-120 to SAN-123 (M3 core) | Lead: plan rules in core, migration 003, plans repository, the `llm` module, plan services, the API key in a sealed file, bridge methods, plain error messages across the bridge, mock plans, decision 0016 | `lead/m3-plan-core` (worktree `.claude/worktrees/lead-m3`) | Type check, lint and 1026 unit tests pass (`b59ead4`). `tests/e2e/plans.spec.ts` is **written but not run yet**. To do, in order: rebase on main; run the UI and end-to-end suites; fresh reviewer; merge. Then workers: SAN-130 (the Plan screen) and SAN-131 ("Learning plans" in Settings); the lead adds the optional API key step to the first-launch flow |
+| SAN-124 (M4) | Worker: stats rules in core (`src/core/stats.ts`, `buildStats`), 28 tests | `worker/san-124-stats` at `ecc5ae6` (worktree `.claude/worktrees/agent-ab3ac71efafc0b677`) | Worker done; a fresh reviewer is reading it. Then merge; the lead adds `getStats` (bridge, service, mock); then the same worker builds the Stats screen (step 2) |
+| Export and import (M4, issue to create) | Lead: the data layer is done (`src/data/transfer.ts`: `exportDatabase` with `VACUUM INTO`, `inspectDatabaseFile`, an import staged next to the database and swapped in at the next launch, the replaced database kept as `paraleet.sqlite3.before-import`), 18 tests | `lead/san-132-export-import` at `266fcad` (worktree `.claude/worktrees/lead-m4`), stacked on `lead/m3-plan-core` | Still to do: file-dialog and restart ports on the service context, services, bridge methods (`getDataInfo`, `exportData`, `chooseImport`, `applyImport`, `cancelImport`, `showDataInFinder`), apply the staged import at launch in `src/main/index.ts`, mock, end-to-end test, decision 0017. Then a worker adds the "Data" group to Settings |
 
 ## Next
 
-1. Merge the first-launch screens (rebase on main, run all three suites). Never run two end-to-end suites at once on this Mac: test apps take focus from each other.
-2. Then M2 is complete: tick the M2 checklist in `docs/PRD.md` section 12, set SAN-115, SAN-117 and SAN-118 to Done in Linear with merge commits and screenshot sheets (card states; first-launch steps), remove the merged worktrees.
-3. Finish M3 on `lead/m3-plan-core` as described in the table. Model notes from the `claude-api` skill (loaded 2026-11-25): default model `claude-opus-5-5`; structured output through `client.beta.messages.parse` with `betaZodOutputFormat`; the request opts into the server-side refusal fallback (`betas: ['server-side-fallback-2026-07-01']`, `fallbacks: 'default'`) and retries the plain way on a 400, so a retired beta flag cannot break plan generation; no `thinking`, `temperature` or `tool_choice` is sent. Tell the owner in the final report that the fallback is on. Still to build for M3: the Plan screen, the key and model in Settings, the daily loop already draws from the active plan (`activePlanQueue`), the graduation cap (`countFinishedPlans`), an optional in-app Codeforces refresh. Tick the M3 checklist when merged.
-4. M4: Stats screen (solves per week, topic coverage, a heatmap of fed days, longest streak; needs a `getStats` bridge method), export and import of the database file from Settings, a `.dmg` with electron-builder and a one-page install note for the unsigned-app warning, a log file for launch self-check failures, and in the packaged app confirm `isRendererUrl`, the login item and the quiet login start.
-5. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install.
+1. Merge M3 core (see the table). Never run two end-to-end suites at once on this Mac: test apps take focus from each other.
+2. Fan out the M3 screens to workers (SAN-130, SAN-131); the lead adds the API key step to the first-launch flow. Tick the M3 checklist in `docs/PRD.md` when merged. Tell the owner in the final report that the server-side refusal fallback is on (decision 0016, item 11), and that no live call to Anthropic was made by the build.
+3. M4: the Stats screen (SAN-124); export and import in Settings; a `.dmg` with electron-builder (this Mac is arm64; build a universal app if the Electron download for x64 works, and sign ad hoc, because an unsigned arm64 app does not start) and a one-page install note for the unsigned-app warning; a log file for failures (`paraleet.log` in the data folder: the launch self-check, bridge failures, tick failures); and in the packaged app confirm `isRendererUrl` (also from a path with unusual characters), the login item and the quiet login start.
+4. When everything is merged and the suites pass on main, write DONE at the top of this file with how to run and install.
 
 ## Done
 
@@ -63,15 +65,17 @@ Session 2 (2026-11-25) picked up after the usage limit. Reminders and launch at 
 | SAN-116 | Para comes alive: moods through the day, lines, checking and eating on report, the greeting, accessory unlocks, migration 002 | `63ec870` |
 | SAN-119 | The problem catalog: 3,332 LeetCode, 400 CSES and 3,905 Codeforces problems, built by scripts, loaded at launch, found by quick log | `848c2da` |
 | SAN-115 (main-process side) | Menu bar icon with mood and streak; the compact card window, its placement and bridge methods | `b803954` |
+| SAN-118 (UI side) | The first-launch flow: hatch the egg, meet Para, pick reminder times; the floating pet waits for it. Closes M2 | `ad369d2` |
 | SAN-115 (UI side) | The compact card's page: today's problem, the report form in place, a confirmation; a click on Para opens the card; Swap opens the swap choices | `0015ba9` |
 | SAN-117 + SAN-118 (main-process side) | Two daily reminders that name the problem and are skipped once fed; launch at login; a quiet login start; `showSwap` | `76ab89a` |
 
 ## Linear
 
 - Project: ParaLeet (`P-SAN-2`), team `SAN`. Milestones M1 to M4.
-- M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). SAN-112, 113, 128 and 129 are detailed; SAN-114 to SAN-118 are coarse. M3: SAN-119 to SAN-123 (coarse). M4: SAN-124 to SAN-126 (coarse; SAN-126 is the owner's one-week trial).
+- M1: SAN-104 to SAN-111 and SAN-127, all Done. M2: SAN-112 to SAN-118 plus SAN-128 (pet rules) and SAN-129 (Settings). M3: SAN-119 to SAN-123, SAN-130, SAN-131. M4: SAN-124 to SAN-126 (SAN-126 is the owner's one-week trial).
 - Module labels: `core`, `data`, `platforms`, `llm`, `main`, `ui` (group `Module`).
-- M2 so far: SAN-112, SAN-113, SAN-114, SAN-116, SAN-128 and SAN-129 are Done with screenshots attached where there is a screen. SAN-115, SAN-117 and SAN-118 remain.
+- M2: all Done, with screenshot sheets attached where there is a screen.
+- M3: SAN-119 Done; SAN-120 to SAN-123 detailed and In Progress; SAN-130 (Plan screen) and SAN-131 (Settings: key and model) are the worker issues. M4: SAN-124 is now the Stats screen only; export and import gets its own issue; SAN-125 is the installer; SAN-126 is the owner's week.
 
 ## How the loop is run in this repo
 
@@ -87,6 +91,7 @@ Session 2 (2026-11-25) picked up after the usage limit. Reminders and launch at 
 ## Watch list (not blocking)
 
 - A failed launch self-check (`reconcile`) is only written to the console. A packaged app's user cannot see that. Add a log file in M4.
+- `lead/m2-contract` is a leftover work-in-progress branch from session 1 (two commits, not in main, superseded by the SAN-114 merge). It can be deleted once someone has looked at it.
 - `scripts/contact-sheet.ts` builds the screenshot sheet for a UI issue; run it from the main checkout now that it is merged.
 
 - The end-to-end smoke test failed once under heavy load before its timeouts were raised in SAN-111. Treat a lone e2e failure under load as a rerun.

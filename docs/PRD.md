@@ -349,17 +349,17 @@ Build in vertical slices. Each milestone ends with something the owner can use, 
 
 **M2. The pet is alive**
 
-- [ ] Procedural parakeet renders for all four stages and every mood; sprite gallery exists
-- [ ] Two different seeds give visibly different birds
-- [ ] Floating pet window: transparent, always on top, draggable, position remembered
-- [ ] Menu bar icon with mood and streak; compact card from both entry points
-- [ ] Checking and eating animations play on report; growth stage advances at thresholds
-- [ ] Two daily notifications fire at the set times and are skipped once fed
-- [ ] Launch at login works; first-launch hatching flow works
+- [x] Procedural parakeet renders for all four stages and every mood; sprite gallery exists
+- [x] Two different seeds give visibly different birds
+- [x] Floating pet window: transparent, always on top, draggable, position remembered
+- [x] Menu bar icon with mood and streak; compact card from both entry points
+- [x] Checking and eating animations play on report; growth stage advances at thresholds
+- [x] Two daily notifications fire at the set times and are skipped once fed
+- [x] Launch at login works; first-launch hatching flow works
 
 **M3. Catalog and learning plans**
 
-- [ ] Catalog seeded for all three platforms by scripts in the repo, with validation
+- [x] Catalog seeded for all three platforms by scripts in the repo, with validation
 - [ ] Topic picker, plan generation and schema validation with one retry
 - [ ] No plan ever contains a problem that is not in the catalog (tested with a faked bad model response)
 - [ ] Plan review, edit and activate; daily loop draws from the active plan
