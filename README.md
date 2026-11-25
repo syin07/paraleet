@@ -67,7 +67,7 @@ All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (se
 
 ## Learning plans and the API key
 
-Everything works without a key except generating a learning plan. A plan needs your own Anthropic API key (from console.anthropic.com), added in Settings. The key is encrypted with the macOS keychain and kept in `anthropic-api-key.bin` next to the database, never inside it. A copy of the database does not carry the key; on another Mac you add the key again.
+Everything works without a key except generating a learning plan. A plan needs your own Anthropic API key (from the Claude Console, platform.claude.com), added in Settings. The key is encrypted with the macOS keychain and kept in `anthropic-api-key.bin` next to the database, never inside it. A copy of the database does not carry the key; on another Mac you add the key again.
 
 When you generate a plan, the app sends Anthropic one request: the topics, level and size you chose, and titles, platforms, difficulties and tags of catalog problems to choose from. Nothing else leaves your Mac.
 
