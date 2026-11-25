@@ -1,0 +1,87 @@
+# ParaLeet
+
+A Mac desktop app that makes daily algorithm practice stick. A pixel-art parakeet named Para gets hungry once a day and is fed only when you solve the problem it picked for you, on LeetCode, CSES or Codeforces.
+
+Everything runs on your Mac. There is no account and no server, and your data is one file you can copy.
+
+The full product spec is in [`docs/PRD.md`](docs/PRD.md). Build progress is in [`docs/STATUS.md`](docs/STATUS.md).
+
+## Run it
+
+You need macOS and Node.js 22.12 or newer.
+
+```sh
+npm install
+npm run dev
+```
+
+`npm run dev` opens the app with hot reload. Development runs keep their data in `~/Library/Application Support/ParaLeet-dev/`, apart from an installed copy's data in `~/Library/Application Support/ParaLeet/`.
+
+## Test it
+
+```sh
+npm run check      # type check, lint and unit tests
+npm run test:ui    # the screens in a browser against a mock of the app; saves screenshots
+npm run test:e2e   # builds the app, then drives the real thing end to end
+```
+
+- Unit tests live next to the code as `*.test.ts`. Narrow a run with a path: `npm run test:unit -- src/core`.
+- UI tests are in `tests/ui/`. They write `artifacts/screenshots/<name>-default.png` (1100×720) and `<name>-min.png` (860×580).
+- End-to-end tests are in `tests/e2e/`. Each one starts the app with its own temporary data folder and a fake clock, and never opens your browser.
+
+The first `npm run test:ui` on a machine needs Playwright's browser once: `npx playwright install chromium`.
+
+## Work on the UI without Electron
+
+```sh
+npm run dev:ui     # http://localhost:5199
+```
+
+This serves the screens in a normal browser against an in-memory mock (`src/ui/mock/mockBridge.ts`). Choose a starting state with `?scenario=` before the `#`:
+
+| URL | State |
+| --- | --- |
+| `/?scenario=default#/today` | A few weeks in: 4-day streak, not fed, reviews due |
+| `/?scenario=fresh#/today` | First launch, nothing logged |
+| `/?scenario=fed#/today` | Today's problem already reported |
+| `/?scenario=backlog#/today` | More than five reviews due |
+| `/?scenario=nothing#/today` | Nothing left to assign |
+| `/?scenario=many#/problems` | A long problem history |
+
+The mock's clock is frozen at noon on 2026-11-25 so screenshots are stable.
+
+## Build it
+
+```sh
+npm run build      # production bundle in out/
+npm run start      # run that bundle
+```
+
+Packaging a `.dmg` arrives with milestone M4.
+
+## Your data
+
+All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (see "Run it"). Copy that file to back it up. The app stores problem titles, links, tags and your attempts and notes. It never stores problem statements.
+
+## Environment switches (for tests and debugging)
+
+| Variable | Effect |
+| --- | --- |
+| `PARALEET_USER_DATA_DIR` | Use this folder for all app data |
+| `PARALEET_FAKE_NOW` | Freeze the app's clock at this ISO time, for example `2026-11-25T20:00:00Z` |
+| `PARALEET_FAKE_TZ` | With `PARALEET_FAKE_NOW`: the time zone to pretend, for example `Asia/Tokyo` |
+| `PARALEET_E2E=1` | Record links instead of opening the browser, and expose test hooks |
+
+A packaged app ignores every switch except `PARALEET_USER_DATA_DIR`.
+
+## Regenerate the starter list
+
+```sh
+npm run seed:starter
+```
+
+This fetches metadata for the picks in `scripts/seed/starter-picks.ts` from LeetCode and rewrites `seed/starter.json`. It is a build-time script; the app itself never calls LeetCode.
+
+## Where things are
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map and data flow, [`docs/decisions/`](docs/decisions/) for the reasons behind technical choices, and [`CLAUDE.md`](CLAUDE.md) for the rules agents follow in this repo.

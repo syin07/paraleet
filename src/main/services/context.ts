@@ -1,0 +1,39 @@
+// What the use-case layer needs from the outside world. Nothing in src/main/services imports
+// Electron, so every service runs under the unit-test runner with a real SQLite database.
+import { effectiveToday, paraDayOf } from '../../core/day';
+import type { Settings } from '../../core/settings';
+import type { ParaDay } from '../../core/types';
+import type { Db } from '../../data/db';
+import { ensurePet, type PetRecord } from '../../data/repos/pet';
+import { getSettings } from '../../data/repos/settings';
+import type { Clock } from '../clock';
+
+export interface AppContext {
+  db: Db;
+  clock: Clock;
+  /** Tells every window that data changed, so they refetch. */
+  notifyChanged(): void;
+  /** Opens a link in the default browser. */
+  openExternal(url: string): Promise<void>;
+  /** A random 31-bit integer, used once to give a new pet its seed. */
+  randomSeed(): number;
+}
+
+export interface Moment {
+  now: Date;
+  timeZone: string;
+  settings: Settings;
+  pet: PetRecord;
+  /** The ParaLeet day the app treats as today. */
+  today: ParaDay;
+}
+
+/** Reads the clock, the settings and the pet once, so one request sees one consistent "now". */
+export function currentMoment(ctx: AppContext): Moment {
+  const now = ctx.clock.now();
+  const timeZone = ctx.clock.timeZone();
+  const settings = getSettings(ctx.db);
+  const pet = ensurePet(ctx.db, ctx.randomSeed(), now.toISOString());
+  const today = effectiveToday(paraDayOf(now, timeZone, settings.dayBoundaryHour), pet.lastFedDay);
+  return { now, timeZone, settings, pet, today };
+}
