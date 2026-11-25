@@ -22,6 +22,9 @@ export class Db {
     // A rollback journal (not WAL) keeps the database as one file the user can copy to back up.
     this.raw.exec('PRAGMA journal_mode = DELETE');
     this.raw.exec('PRAGMA synchronous = FULL');
+    // If another program has the file open (a database browser, a backup tool), wait for it
+    // instead of failing a write at once.
+    this.raw.exec('PRAGMA busy_timeout = 5000');
   }
 
   /** Runs one or more statements with no parameters. */
@@ -42,20 +45,45 @@ export class Db {
     return this.bind(sql, params, (statement, args) => statement.all(...args)) as T[];
   }
 
-  /** Runs `work` atomically. Nested calls join the outer transaction through a savepoint. */
+  /**
+   * Runs `work` atomically. Nested calls join the outer transaction through a savepoint.
+   * `work` must be synchronous: the transaction ends when it returns.
+   */
   transaction<T>(work: () => T): T {
+    const outermost = this.depth === 0;
     const name = `sp_${this.depth}`;
-    this.raw.exec(this.depth === 0 ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${name}`);
+    this.raw.exec(outermost ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${name}`);
     this.depth += 1;
+
+    let result: T;
     try {
-      const result = work();
-      this.depth -= 1;
-      this.raw.exec(this.depth === 0 ? 'COMMIT' : `RELEASE ${name}`);
-      return result;
+      result = work();
+      if (typeof (result as { then?: unknown } | null)?.then === 'function') {
+        throw new Error('Db.transaction: work must be synchronous, but it returned a promise');
+      }
     } catch (error) {
       this.depth -= 1;
-      this.raw.exec(this.depth === 0 ? 'ROLLBACK' : `ROLLBACK TO ${name}; RELEASE ${name}`);
+      this.rollback(outermost, name);
       throw error;
+    }
+
+    // The depth is restored exactly once, before the commit, so a failed commit cannot corrupt it.
+    this.depth -= 1;
+    try {
+      this.raw.exec(outermost ? 'COMMIT' : `RELEASE ${name}`);
+    } catch (error) {
+      this.rollback(outermost, name);
+      throw error;
+    }
+    return result;
+  }
+
+  private rollback(outermost: boolean, name: string): void {
+    try {
+      this.raw.exec(outermost ? 'ROLLBACK' : `ROLLBACK TO ${name}; RELEASE ${name}`);
+    } catch {
+      // SQLite has already rolled back on its own (a full disk, an I/O error). The caller's
+      // original error is the one that matters, so this one is dropped.
     }
   }
 

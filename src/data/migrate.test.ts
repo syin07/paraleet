@@ -153,4 +153,60 @@ describe('schema rules', () => {
     expect(db.all<{ key: string }>('SELECT key FROM settings').map((row) => row.key)).toEqual(['a']);
     db.close();
   });
+
+  it('survives a commit that fails: the real error surfaces, nothing is saved, and the next transaction works', () => {
+    const db = new Db(':memory:');
+    migrate(db);
+    // A deferred foreign-key violation is only detected at COMMIT.
+    expect(() =>
+      db.transaction(() => {
+        db.exec('PRAGMA defer_foreign_keys = ON');
+        db.run("INSERT INTO settings (key, value) VALUES ('kept', '1')");
+        db.run(
+          "INSERT INTO attempts (problem_id, attempted_at, para_day, rating, kind) VALUES (999, 'now', '2026-11-03', 'good', 'review')",
+        );
+      }),
+    ).toThrow(/FOREIGN KEY/i);
+    expect(db.all('SELECT * FROM settings')).toEqual([]);
+    expect(db.all('SELECT * FROM attempts')).toEqual([]);
+
+    db.transaction(() => {
+      db.run("INSERT INTO settings (key, value) VALUES ('after', '1')");
+    });
+    expect(db.all<{ key: string }>('SELECT key FROM settings').map((row) => row.key)).toEqual(['after']);
+    db.close();
+  });
+
+  it('stays usable when both the release and the commit fail', () => {
+    const db = new Db(':memory:');
+    migrate(db);
+    // Ending the transaction from inside makes the inner release and the outer commit both fail.
+    expect(() =>
+      db.transaction(() => {
+        db.transaction(() => {
+          db.exec('ROLLBACK');
+        });
+      }),
+    ).toThrow();
+
+    db.transaction(() => {
+      db.transaction(() => {
+        db.run("INSERT INTO settings (key, value) VALUES ('after', '1')");
+      });
+    });
+    expect(db.all<{ key: string }>('SELECT key FROM settings').map((row) => row.key)).toEqual(['after']);
+    db.close();
+  });
+
+  it('refuses asynchronous work, which would commit before the work finished', () => {
+    const db = new Db(':memory:');
+    migrate(db);
+    expect(() =>
+      db.transaction(async () => {
+        db.run("INSERT INTO settings (key, value) VALUES ('a', '1')");
+      }),
+    ).toThrow(/synchronous/);
+    expect(db.all('SELECT * FROM settings')).toEqual([]);
+    db.close();
+  });
 });

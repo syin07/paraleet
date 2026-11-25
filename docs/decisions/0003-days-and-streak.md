@@ -21,6 +21,10 @@ The streak must be right across the 04:00 boundary, missed days, sleep and time-
 - Every attempt creates or updates the problem's review card, including one rated Again. A problem the user could not solve is exactly the one that should come back soon.
 - Days the app was not open get no assignment row. Assignments are never backfilled.
 
+## Known limit: a clock that was wrong in the future
+
+If an attempt is logged while the system clock is far ahead, `last_fed_day` lands in the future. After the clock is corrected the pet would look fed, and new attempts would not move the streak, until real time caught up. SAN-105 adds the guard: a last fed day more than 2 days ahead of today is treated as a clock error, so the pet is not fed and the next attempt starts a streak of 1 on the real day.
+
 ## Alternatives rejected
 
 - **Storing days in UTC or as offsets from install time**: wrong at the boundary for anyone who travels.

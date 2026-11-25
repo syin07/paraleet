@@ -49,6 +49,20 @@ describe('the thin path: assign, report, persist', () => {
     expect(await app.handlers.openProblem({ problemId: 99999 })).toEqual({ opened: false });
   });
 
+  it('opens the saved solution link only when it is a web link', async () => {
+    app = createTestApp();
+    const id = (await app.handlers.getToday(undefined)).assignment?.problem.id ?? 0;
+    expect(await app.handlers.openSolutionLink({ problemId: id })).toEqual({ opened: false });
+
+    const notes = { problemId: id, keyInsight: null, patternTags: [], notes: null };
+    await app.handlers.saveProblemNotes({ ...notes, solutionUrl: 'file:///etc/passwd' });
+    expect(await app.handlers.openSolutionLink({ problemId: id })).toEqual({ opened: false });
+
+    await app.handlers.saveProblemNotes({ ...notes, solutionUrl: 'https://github.com/me/solutions/two-sum.py' });
+    expect(await app.handlers.openSolutionLink({ problemId: id })).toEqual({ opened: true });
+    expect(app.openedUrls).toEqual(['https://github.com/me/solutions/two-sum.py']);
+  });
+
   it('records an attempt, feeds the pet and starts the streak', async () => {
     app = createTestApp();
     const today = await app.handlers.getToday(undefined);

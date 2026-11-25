@@ -32,6 +32,7 @@ export const inputSchemas = {
   swapToday: problemRef,
   getSwapCandidates: z.undefined(),
   openProblem: problemRef,
+  openSolutionLink: problemRef,
   getReportContext: problemRef,
   revealKeyInsight: problemRef,
   submitReport: z.object({
@@ -209,7 +210,10 @@ export interface BridgeOutputs {
   getToday: TodayView;
   swapToday: TodayView;
   getSwapCandidates: SwapCandidatesView;
+  /** Opens the problem's page on its platform in the default browser. */
   openProblem: { opened: boolean };
+  /** Opens the user's saved link to their own solution. False when none is saved. */
+  openSolutionLink: { opened: boolean };
   getReportContext: ReportContext;
   revealKeyInsight: { keyInsight: string | null };
   submitReport: ReportResult;

@@ -83,7 +83,9 @@ Plan tables arrive with M3 as migration 2.
 
 - Renderer: `sandbox: true`, `contextIsolation: true`, no Node integration, a strict Content-Security-Policy in production builds, navigation and new windows blocked.
 - The renderer never touches the database, the file system or the network.
-- Only `http` and `https` links stored in the database are ever opened externally.
+- Only `http` and `https` links stored in the database are ever opened externally, and only by ID (`openProblem`, `openSolutionLink`). The renderer cannot open a window or pass a URL to open.
+- The bridge answers only the main frame of the app's own windows while it shows the app's own page.
+- Test switches are ignored by a packaged app (see decision 0004).
 
 ## Build and packaging
 
@@ -95,6 +97,6 @@ Plan tables arrive with M3 as migration 2.
 
 | Kind | Where | What |
 | --- | --- | --- |
-| Unit | `src/**/*.test.ts` (vitest) | core rules with injected time; migrations from every earlier version; seed validity; services against in-memory SQLite |
+| Unit | `src/**/*.test.ts`, `scripts/**/*.test.ts` (vitest) | core rules with injected time; migrations from every earlier version; seed validity; services against in-memory SQLite; the lint boundary rules themselves (`scripts/lint-boundaries.test.ts`) |
 | UI | `tests/ui/*.spec.ts` (Playwright, Chromium) | Screens against the mock bridge; screenshots at default and minimum window sizes |
 | End to end | `tests/e2e/*.spec.ts` (Playwright, Electron) | The built app with a temp data folder and a fake clock |

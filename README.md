@@ -72,6 +72,8 @@ All data is in one SQLite file, `paraleet.sqlite3`, in the app's data folder (se
 | `PARALEET_FAKE_TZ` | With `PARALEET_FAKE_NOW`: the time zone to pretend, for example `Asia/Tokyo` |
 | `PARALEET_E2E=1` | Record links instead of opening the browser, and expose test hooks |
 
+A packaged app ignores every switch except `PARALEET_USER_DATA_DIR`.
+
 ## Regenerate the starter list
 
 ```sh

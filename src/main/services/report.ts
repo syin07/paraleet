@@ -8,7 +8,7 @@ import { verifyAttempt } from '../../core/verify';
 import { getAssignment, markAssignmentCompleted } from '../../data/repos/assignments';
 import { countAttemptsForProblem, insertAttempt } from '../../data/repos/attempts';
 import { getNotes, saveNotes } from '../../data/repos/notes';
-import { savePetFacts } from '../../data/repos/pet';
+import { getPet, savePetFacts } from '../../data/repos/pet';
 import { currentMoment, type AppContext } from './context';
 import { buildTodayView } from './today';
 import { requireProblem, toSummary } from './views';
@@ -44,8 +44,10 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
   });
   if (!verification.accepted) throw new Error(verification.reason ?? 'This attempt could not be verified');
 
-  const before: PetFacts = moment.pet;
   const outcome = ctx.db.transaction(() => {
+    // Read inside the transaction, never from before the verification step: once that step does
+    // real work, two reports can be in flight, and each must build on the other's result.
+    const before: PetFacts = getPet(ctx.db);
     const kind = countAttemptsForProblem(ctx.db, problem.id) === 0 ? 'first_solve' : 'review';
 
     let notes = getNotes(ctx.db, problem.id);
@@ -72,12 +74,12 @@ export async function submitReport(ctx: AppContext, input: BridgeParsedInput<'su
     const assignment = getAssignment(ctx.db, moment.today);
     if (assignment && assignment.problemId === problem.id) markAssignmentCompleted(ctx.db, moment.today);
 
-    return { attempt, after };
+    return { attempt, before, after };
   });
 
   ctx.notifyChanged();
 
-  const { after } = outcome;
+  const { before, after } = outcome;
   const afterMoment = currentMoment(ctx);
   const streakNow = displayedStreak(
     { current: after.currentStreak, longest: after.longestStreak, lastFedDay: after.lastFedDay },

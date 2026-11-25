@@ -1,6 +1,7 @@
 // The use-case layer: one handler per bridge method. Electron-free, so it is unit-tested directly.
 import type { BridgeHandlers } from '../../bridge/contract';
 import { paraDayOf } from '../../core/day';
+import { getNotes } from '../../data/repos/notes';
 import { getProblem } from '../../data/repos/problems';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { AppContext } from './context';
@@ -19,6 +20,19 @@ import { getSwapCandidates, getToday, swapToday } from './today';
 
 export type { AppContext } from './context';
 
+/**
+ * The UI never hands main a URL to open. Main opens only links stored in the database, and only
+ * http and https ones.
+ */
+function isWebLink(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function createHandlers(ctx: AppContext): BridgeHandlers {
   return {
     getToday: () => getToday(ctx),
@@ -26,9 +40,14 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     getSwapCandidates: () => getSwapCandidates(ctx),
     openProblem: async ({ problemId }) => {
       const problem = getProblem(ctx.db, problemId);
-      // Only links stored in the database are opened, and only web links.
-      if (!problem || !/^https?:\/\//i.test(problem.url)) return { opened: false };
+      if (!problem || !isWebLink(problem.url)) return { opened: false };
       await ctx.openExternal(problem.url);
+      return { opened: true };
+    },
+    openSolutionLink: async ({ problemId }) => {
+      const url = getNotes(ctx.db, problemId).solutionUrl;
+      if (!url || !isWebLink(url)) return { opened: false };
+      await ctx.openExternal(url);
       return { opened: true };
     },
     getReportContext: ({ problemId }) => getReportContext(ctx, problemId),

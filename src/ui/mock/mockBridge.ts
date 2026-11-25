@@ -316,6 +316,13 @@ function createApi(state: MockState): ParaLeetApi {
       return { opened: true };
     },
 
+    openSolutionLink: async ({ problemId }) => {
+      const url = state.notes.get(problemId)?.solutionUrl;
+      if (!url) return { opened: false };
+      state.opened.push(url);
+      return { opened: true };
+    },
+
     getReportContext: async ({ problemId }) => ({
       problem: requireProblem(state, problemId),
       kind: state.attempts.some((attempt) => attempt.problemId === problemId) ? 'review' : 'first_solve',

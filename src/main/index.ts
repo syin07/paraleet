@@ -8,12 +8,13 @@ import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { registerBridge } from './bridge';
 import { FakeClock, systemClock, type Clock } from './clock';
 import { createDayWatcher, createHandlers, type AppContext } from './services';
-import { createMainWindow } from './windows/mainWindow';
+import { createMainWindow, isRendererUrl } from './windows/mainWindow';
 
 const TICK_MS = 30_000;
 
 // End-to-end tests run the real app with its own data folder, a fake clock and no browser.
-const isE2E = process.env.PARALEET_E2E === '1';
+// The test switches work only in an unpackaged app, so an installed copy cannot be put in test mode.
+const isE2E = !app.isPackaged && process.env.PARALEET_E2E === '1';
 
 app.setName('ParaLeet');
 if (process.env.PARALEET_USER_DATA_DIR) {
@@ -40,7 +41,7 @@ function showMainWindow(): void {
 }
 
 function createClock(): Clock {
-  const fakeNow = process.env.PARALEET_FAKE_NOW;
+  const fakeNow = app.isPackaged ? undefined : process.env.PARALEET_FAKE_NOW;
   if (!fakeNow) return systemClock;
   return new FakeClock(fakeNow, process.env.PARALEET_FAKE_TZ ?? systemClock.timeZone());
 }
@@ -81,9 +82,15 @@ function start(): void {
     randomSeed: () => randomInt(0, 2 ** 31 - 1),
   };
 
+  // The bridge answers only the main frame of the app's own windows, showing the app's own page.
   registerBridge(createHandlers(ctx), (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-    return window !== null && event.senderFrame === event.sender.mainFrame;
+    const frame = event.senderFrame;
+    return (
+      BrowserWindow.fromWebContents(event.sender) !== null &&
+      frame !== null &&
+      frame === event.sender.mainFrame &&
+      isRendererUrl(frame.url)
+    );
   });
 
   const dayWatcher = createDayWatcher(ctx);

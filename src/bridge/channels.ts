@@ -11,6 +11,7 @@ export const BRIDGE_METHODS = [
   'swapToday',
   'getSwapCandidates',
   'openProblem',
+  'openSolutionLink',
   'getReportContext',
   'revealKeyInsight',
   'submitReport',
