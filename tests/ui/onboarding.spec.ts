@@ -175,6 +175,51 @@ test('a failed save shows the error and stays on step 3', async ({ page }) => {
   await expect(page.getByTestId('onboarding-step')).toHaveText('Step 3 of 3');
 });
 
+test('after a failed save, trying again finishes the flow', async ({ page }) => {
+  await openFlow(page);
+  await toReminders(page);
+  // Fails once, then works.
+  await page.evaluate(() => {
+    const host = globalThis as unknown as Host & { __completed: unknown[] };
+    const original = host.paraleet.completeOnboarding;
+    host.__completed = [];
+    host.paraleet.completeOnboarding = async (input: unknown) => {
+      host.__completed.push(input);
+      if (host.__completed.length === 1) throw new Error('The database is locked');
+      return original(input);
+    };
+  });
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('alert')).toHaveText('The database is locked');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  await expect(flow(page)).toHaveCount(0);
+  expect(await completed(page)).toHaveLength(2);
+});
+
+test('reminder times already in Settings are the starting point, and Skip keeps them', async ({ page }) => {
+  await page.goto('/?scenario=hatching#/today');
+  await expect(flow(page)).toBeVisible();
+  await page.evaluate(() =>
+    (
+      globalThis as unknown as { paraleet: { updateSettings(patch: object): Promise<unknown> } }
+    ).paraleet.updateSettings({ firstReminderTime: '09:15', eveningReminderTime: '19:45' }),
+  );
+  await spyOnComplete(page);
+  await toReminders(page);
+  await expect(field(page, 'First reminder')).toHaveValue('09:15');
+  await expect(field(page, 'Evening reminder')).toHaveValue('19:45');
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.getByTestId('screen-today')).toBeVisible();
+  expect(await completed(page)).toEqual([{ firstReminderTime: '09:15', eveningReminderTime: '19:45' }]);
+});
+
+test('the sprite gallery shows even before Para has hatched', async ({ page }) => {
+  await page.goto('/?scenario=hatching#/gallery');
+  await expect(page.getByTestId('screen-gallery')).toBeVisible();
+  await expect(flow(page)).toHaveCount(0);
+});
+
 test('someone who has already hatched never sees the flow', async ({ page }) => {
   // Written as text because the test runs in Node, which has no DOM types.
   await page.addInitScript(`
@@ -218,16 +263,20 @@ test('every step fits the minimum window without scrolling', async ({ page }) =>
       innerHeight: number;
       scrollWidth: number;
       innerWidth: number;
+      top: number;
       bottom: number;
     }>(`({
       scrollHeight: document.documentElement.scrollHeight,
       innerHeight: window.innerHeight,
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
-      bottom: document.querySelector('[data-testid="onboarding"] button:last-of-type')?.getBoundingClientRect().bottom ?? 0,
+      top: Math.min(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, canvas, h1, p)')].map((el) => el.getBoundingClientRect().top)),
+      bottom: Math.max(...[...document.querySelectorAll('[data-testid="onboarding"] :is(button, input, canvas, h1, p)')].map((el) => el.getBoundingClientRect().bottom)),
     })`);
     expect(sizes.scrollHeight).toBeLessThanOrEqual(sizes.innerHeight);
     expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.innerWidth);
+    // Everything in the step is inside the window: nothing pushed off the top or the bottom.
+    expect(sizes.top).toBeGreaterThanOrEqual(0);
     expect(sizes.bottom).toBeLessThanOrEqual(sizes.innerHeight);
   };
   await fits();

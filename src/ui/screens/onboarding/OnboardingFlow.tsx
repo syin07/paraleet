@@ -10,6 +10,7 @@ import { Card } from '../../components/Layout';
 import { PixelCanvas, Sprite } from '../../components/Sprite';
 import { SpeechBubble } from '../../components/SpeechBubble';
 import { cx } from '../../lib/format';
+import { useBridgeQuery } from '../../lib/useBridgeQuery';
 import { Row } from '../settings/SettingsParts';
 
 const STEPS = 3;
@@ -130,18 +131,17 @@ function MeetStep({ seed, onNext }: { seed: number; onNext: () => void }) {
 type TimeKey = 'first' | 'evening';
 
 function RemindersStep({
+  initial,
   onFinish,
   saving,
   saveError,
 }: {
+  initial: { first: string; evening: string };
   onFinish: (times: { first: string; evening: string }) => void;
   saving: boolean;
   saveError: string | null;
 }) {
-  const [times, setTimes] = useState({
-    first: DEFAULT_SETTINGS.firstReminderTime,
-    evening: DEFAULT_SETTINGS.eveningReminderTime,
-  });
+  const [times, setTimes] = useState(initial);
   const [errors, setErrors] = useState<Record<TimeKey, string | null>>({
     first: null,
     evening: null,
@@ -210,6 +210,7 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
   const [step, setStep] = useState<Step>('egg');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const settings = useBridgeQuery(() => api().getSettings());
 
   async function finish(times: { first: string; evening: string }): Promise<void> {
     setSaving(true);
@@ -226,13 +227,15 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
     }
   }
 
-  const defaults = {
-    first: DEFAULT_SETTINGS.firstReminderTime,
-    evening: DEFAULT_SETTINGS.eveningReminderTime,
+  // The times already in Settings are the starting point and what "Skip" keeps. On a new install
+  // they are the defaults; someone who set their own times before hatching keeps them.
+  const saved = {
+    first: settings.data?.firstReminderTime ?? DEFAULT_SETTINGS.firstReminderTime,
+    evening: settings.data?.eveningReminderTime ?? DEFAULT_SETTINGS.eveningReminderTime,
   };
 
   return (
-    <div className="flex h-full flex-col bg-base" data-testid="onboarding">
+    <div className="flex h-full flex-col bg-canvas" data-testid="onboarding">
       <div className="app-drag h-[52px] shrink-0" />
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center pb-8">
         <div className="relative flex w-[440px] max-w-full flex-col items-center text-center">
@@ -244,7 +247,7 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
                 size="sm"
                 className="absolute right-0"
                 disabled={saving}
-                onClick={() => void finish(defaults)}
+                onClick={() => void finish(saved)}
               >
                 Skip
               </Button>
@@ -258,7 +261,7 @@ export function OnboardingFlow({ seed, onFinished }: { seed: number; onFinished:
             {step === 'egg' && <EggStep seed={seed} onNext={() => setStep('meet')} />}
             {step === 'meet' && <MeetStep seed={seed} onNext={() => setStep('reminders')} />}
             {step === 'reminders' && (
-              <RemindersStep onFinish={(t) => void finish(t)} saving={saving} saveError={saveError} />
+              <RemindersStep initial={saved} onFinish={(t) => void finish(t)} saving={saving} saveError={saveError} />
             )}
           </div>
         </div>

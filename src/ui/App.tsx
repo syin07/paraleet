@@ -117,9 +117,12 @@ function Shell() {
 export function App() {
   const today = useBridgeQuery(() => api().getToday());
   const [finished, setFinished] = useState(false);
+  const screen = useScreen();
 
+  // The sprite gallery is a tool for checking the art; it shows whether or not Para has hatched.
+  if (screen === 'gallery') return <Shell />;
   // Until the first load ends, only the canvas: no flash of the shell or of the flow.
-  if (today.loading && today.data === undefined) return <div className="h-full bg-base" />;
+  if (today.loading && today.data === undefined) return <div className="h-full bg-canvas" />;
   // A failed load falls through to the shell, whose screens show their own errors.
   if (today.data && !today.data.pet.hatched && !finished) {
     return (
