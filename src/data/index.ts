@@ -10,8 +10,22 @@ import { loadCatalogSeed, loadStarterSeed } from './seed';
 export { Db } from './db';
 export { migrate, NewerDatabaseError } from './migrate';
 export { LATEST_SCHEMA_VERSION, MIGRATIONS } from './migrations';
+export {
+  applyStagedImport,
+  DATABASE_FILE_NAME,
+  dataDirOf,
+  discardStagedImport,
+  exportDatabase,
+  hasStagedImport,
+  IMPORT_BACKUP_FILE_NAME,
+  inspectDatabaseFile,
+  STAGED_IMPORT_FILE_NAME,
+  stageImport,
+  type DatabaseCheck,
+  type DatabaseSummary,
+  type StagedImportResult,
+} from './transfer';
 
-export const DATABASE_FILE_NAME = 'paraleet.sqlite3';
 
 export interface OpenResult {
   db: Db;
