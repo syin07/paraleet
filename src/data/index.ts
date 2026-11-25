@@ -205,10 +205,16 @@ export function openDataFolder(
     if (!applied) throw error;
     // It passed every check and still will not open. The data it replaced comes back.
     problems.push(`The imported database could not be opened: ${describe(error)}`);
-    revertAppliedImport(dataDir);
+    const putBack = revertAppliedImport(dataDir);
     return {
       ...open(),
-      lastImport: { status: 'rejected', reason: 'The imported file could not be opened, so your earlier data was put back.' },
+      lastImport: {
+        status: 'rejected',
+        reason: putBack
+          ? 'The imported file could not be opened, so your earlier data was put back.'
+          : // There was no database before the import, so there is nothing to put back.
+            'The imported file could not be opened, so ParaLeet started without it.',
+      },
       problems,
     };
   }

@@ -198,7 +198,8 @@ function start(): void {
     log.error('The database could not be opened:', error);
     dialog.showErrorBox(
       'ParaLeet could not open its database',
-      `${error instanceof Error ? error.message : String(error)}\n\nYour data file was not changed:\n${join(userData, DATABASE_FILE_NAME)}`,
+      // The folder, not the file: when an import stopped half way the data is under its backup name.
+      `${error instanceof Error ? error.message : String(error)}\n\nYour data was not changed. It is in this folder:\n${userData}`,
     );
     app.exit(1);
     return;
