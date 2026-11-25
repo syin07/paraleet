@@ -173,10 +173,11 @@ function ImportDialog({
     );
     footer = (
       <>
-        <Button onClick={cancel} disabled={busy}>
+        {/* Focus starts on Cancel: a stray Return after the file dialog must not replace the data. */}
+        <Button data-autofocus onClick={cancel} disabled={busy}>
           Cancel
         </Button>
-        <Button variant="danger" data-autofocus loading={busy} onClick={() => void apply()}>
+        <Button variant="danger" loading={busy} onClick={() => void apply()}>
           Replace my data
         </Button>
       </>

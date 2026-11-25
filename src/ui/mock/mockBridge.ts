@@ -1056,7 +1056,7 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
     assignToday(state);
     state.data.importFile = 'empty';
   },
-  /** Data: applying the chosen import fails. An earlier backup exists. */
+  /** Data: applying the chosen import fails. */
   'data-apply-fails': (state) => {
     midway(state);
     assignToday(state);

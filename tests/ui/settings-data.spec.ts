@@ -190,6 +190,8 @@ test.describe('Settings: Data group', () => {
     await expect(box).not.toContainText('earlier import');
     await expect(box.getByRole('button', { name: 'Cancel' })).toBeVisible();
     await expect(box.getByRole('button', { name: 'Replace my data' })).toBeVisible();
+    // Focus starts on Cancel, so a stray Return closes the dialog and replaces nothing.
+    await expect(box.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await captureBothSizes(page, 'settings-data-confirm');
   });
 
