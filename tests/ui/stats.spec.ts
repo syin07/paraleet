@@ -51,6 +51,32 @@ async function tooltipCoversTitle(page: Page, card: Locator, heading: string): P
   return tip.x < title.x + title.width && tip.x + tip.width > title.x && tip.y < title.y + title.height && tip.y + tip.height > title.y;
 }
 
+/** "Week of Nov 23 · 4 solves", built from the week's own date parts. */
+function weekLabel(start: string, solves: number): string {
+  const [year, month, day] = start.split('-').map(Number);
+  const date = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  return `Week of ${date} · ${solves === 1 ? '1 solve' : `${solves} solves`}`;
+}
+
+/** Moves keyboard focus into a chart with the Tab key, from the selected range radio: the calendar is one stop, the bars the next. */
+async function tabInto(page: Page, chart: 'heatmap' | 'weekly'): Promise<void> {
+  await page.getByRole('radio', { checked: true }).focus();
+  await page.keyboard.press('Tab');
+  if (chart === 'weekly') await page.keyboard.press('Tab');
+}
+
+/** From a chart, Shift+Tab back to the range control and pick the next shorter (-1) or longer (+1) range with an arrow key. */
+async function changeRangeByKeyboard(page: Page, chart: 'heatmap' | 'weekly', direction: -1 | 1, bars: number): Promise<void> {
+  await page.keyboard.press('Shift+Tab');
+  if (chart === 'weekly') await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press(direction === 1 ? 'ArrowRight' : 'ArrowLeft');
+  await expect(page.getByTestId('stats-weekly').getByRole('img')).toHaveCount(bars);
+}
+
 const heatmap = (page: Page) => page.getByTestId('stats-heatmap');
 const range = (page: Page, name: string) => page.getByRole('radio', { name, exact: true });
 const tile = (page: Page, name: string) => page.getByRole('group', { name, exact: true });
@@ -220,13 +246,26 @@ test.describe('Stats screen', () => {
       await first.hover();
       await expect(page.getByRole('tooltip')).toBeVisible();
       expect(await tooltipCoversTitle(page, weekly, 'Solves per week')).toBe(false);
+
+      // The tallest bar reaches the top of the plot: there is no room above it, so the tooltip is
+      // tucked inside the plot rather than above it (and so never over the title).
+      const data = await page.evaluate(() => (globalThis as unknown as Host).paraleet.getStats({ range: '6m' }));
+      const tallest = data.weeks.find((week) => week.solves === data.maxWeekSolves);
+      const tall = weekly.getByRole('img', { name: weekLabel(tallest?.start ?? '', tallest?.solves ?? 0), exact: true });
+      await tall.scrollIntoViewIfNeeded();
+      await tall.hover();
+      await expect(page.getByRole('tooltip')).toBeVisible();
+      const plotBox = await weekly.getByRole('group').boundingBox();
+      const tallTip = await page.getByRole('tooltip').boundingBox();
+      expect(plotBox && tallTip && tallTip.y >= plotBox.y - 1).toBe(true);
+      expect(await tooltipCoversTitle(page, weekly, 'Solves per week')).toBe(false);
     }
   });
 
   test('the heatmap is one tab stop and the arrow keys move between days showing the tooltip', async ({ page }) => {
     await openScreen(page, 'stats', 'stats-year');
     const grid = heatmap(page);
-    await grid.focus();
+    await tabInto(page, 'heatmap');
     // Starts on today (Wed Nov 25).
     await expect(page.getByRole('tooltip')).toHaveText(/^Nov 25/);
     await page.keyboard.press('ArrowUp');
@@ -247,8 +286,7 @@ test.describe('Stats screen', () => {
 
   test('the weekly bars are one tab stop and the arrow keys move between weeks', async ({ page }) => {
     await openScreen(page, 'stats', 'stats-year');
-    const plot = page.getByTestId('stats-weekly').getByRole('group');
-    await plot.focus();
+    await tabInto(page, 'weekly');
     await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 23 · /);
     await page.keyboard.press('ArrowLeft');
     await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 16 · /);
@@ -257,6 +295,73 @@ test.describe('Stats screen', () => {
     await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 23 · /);
     await page.keyboard.press('Tab');
     await expect(page.getByTestId('stats-weekly').getByRole('tooltip')).toHaveCount(0);
+  });
+
+  test('the calendar starts on today again after the range changes, shorter or longer', async ({ page }) => {
+    await openScreen(page, 'stats', 'stats-year');
+    const grid = heatmap(page);
+    await tabInto(page, 'heatmap');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 25/);
+    // Move away from today so a stale position would show.
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Nov 18/);
+
+    for (const [direction, bars] of [
+      [-1, 12],
+      [1, 26],
+      [1, 53],
+    ] as const) {
+      await changeRangeByKeyboard(page, 'heatmap', direction, bars);
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('tooltip')).toHaveText(/^Nov 25/);
+      await expect(grid).toHaveAttribute('aria-activedescendant', 'heat-2026-11-25');
+      await expect(grid.locator('#heat-2026-11-25')).toHaveCSS('outline-style', 'solid');
+      // An arrow key then moves.
+      await page.keyboard.press('ArrowLeft');
+      await expect(page.getByRole('tooltip')).toHaveText(/^Nov 18/);
+      await expect(grid).toHaveAttribute('aria-activedescendant', 'heat-2026-11-18');
+    }
+  });
+
+  test('the bars start on the current week again after the range changes, shorter or longer', async ({ page }) => {
+    await openScreen(page, 'stats', 'stats-year');
+    const plot = page.getByTestId('stats-weekly').getByRole('group');
+    await tabInto(page, 'weekly');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 23 · /);
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 16 · /);
+
+    for (const [direction, bars] of [
+      [-1, 12],
+      [1, 26],
+      [1, 53],
+    ] as const) {
+      await changeRangeByKeyboard(page, 'weekly', direction, bars);
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 23 · /);
+      await expect(plot).toHaveAttribute('aria-activedescendant', 'week-2026-11-23');
+      await page.keyboard.press('ArrowLeft');
+      await expect(page.getByRole('tooltip')).toHaveText(/^Week of Nov 16 · /);
+      await expect(plot).toHaveAttribute('aria-activedescendant', 'week-2026-11-16');
+    }
+  });
+
+  test('clicking a mark leaves its tooltip alone and does not jump to the keyboard position', async ({ page }) => {
+    await openScreen(page, 'stats', 'stats-year');
+    const cell = heatmap(page).getByRole('img', { name: /^Nov 17/ });
+    const label = (await cell.getAttribute('aria-label')) ?? '';
+    await cell.hover();
+    await cell.click();
+    await expect(page.getByRole('tooltip')).toHaveText(label);
+    await expect(heatmap(page)).not.toHaveAttribute('aria-activedescendant', /.+/);
+
+    const bar = page.getByTestId('stats-weekly').getByRole('img', { name: /^Week of Nov 9 · / });
+    const barLabel = (await bar.getAttribute('aria-label')) ?? '';
+    await bar.hover();
+    await bar.click();
+    await expect(page.getByTestId('stats-weekly').getByRole('tooltip')).toHaveText(barLabel);
+    await expect(page.getByTestId('stats-weekly').getByRole('group')).not.toHaveAttribute('aria-activedescendant', /.+/);
   });
 
   test('topic coverage lists the most solved first, zeros muted last, and folds after 8 rows', async ({ page }) => {

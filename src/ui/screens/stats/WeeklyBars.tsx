@@ -9,10 +9,14 @@ const PLOT_HEIGHT = 180;
 /** Solves per week: one bar per week, the current week drawn as a dashed outline. */
 export function WeeklyBars({ weeks, maxWeekSolves, empty }: { weeks: StatsWeek[]; maxWeekSolves: number; empty: boolean }) {
   const { container, show, showElement, hide, tip } = useTooltip();
-  const [active, setActive] = useState<number | null>(null);
+  // The keyboard position is a week start, so a new range falls back to the current week instead of a stale index.
+  const [activeStart, setActiveStart] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
   const ticks = axisTicks(maxWeekSolves);
   const top = ticks[0];
+
+  const found = weeks.findIndex((week) => week.start === activeStart);
+  const current = found >= 0 ? found : weeks.length - 1;
 
   function reveal(plot: HTMLElement, index: number): void {
     const slot = plot.querySelector<HTMLElement>(`[data-mark="${index}"]`);
@@ -43,24 +47,29 @@ export function WeeklyBars({ weeks, maxWeekSolves, empty }: { weeks: StatsWeek[]
               tabIndex={0}
               className="focus-ring relative min-w-0 flex-1"
               style={{ height: PLOT_HEIGHT }}
+              aria-activedescendant={focused && weeks[current] ? `week-${weeks[current].start}` : undefined}
               onMouseLeave={hide}
               onFocus={(event) => {
                 if (event.target !== event.currentTarget) return;
-                const index = active ?? weeks.length - 1;
-                setActive(index);
+                // A click also focuses the plot; only keyboard focus shows the position.
+                if (!event.currentTarget.matches(':focus-visible')) return;
+                setActiveStart(weeks[current]?.start ?? null);
                 setFocused(true);
-                reveal(event.currentTarget, index);
+                reveal(event.currentTarget, current);
               }}
               onBlur={() => {
                 setFocused(false);
                 hide();
+                // Each visit starts from today (or this week) again, so a position never outlives the data it pointed at.
+                setActiveStart(null);
               }}
               onKeyDown={(event) => {
                 const move = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
                 if (move === 0) return;
                 event.preventDefault();
-                const next = Math.min(Math.max((active ?? weeks.length - 1) + move, 0), weeks.length - 1);
-                setActive(next);
+                const next = Math.min(Math.max(current + move, 0), weeks.length - 1);
+                setActiveStart(weeks[next]?.start ?? null);
+                setFocused(true);
                 reveal(event.currentTarget, next);
               }}
             >
@@ -79,10 +88,11 @@ export function WeeklyBars({ weeks, maxWeekSolves, empty }: { weeks: StatsWeek[]
                     <div
                       key={week.start}
                       role="img"
+                      id={`week-${week.start}`}
                       aria-label={text}
                       data-current={week.current ? 'true' : undefined}
                       data-mark={index}
-                      className={cx('flex min-w-0 flex-1 items-end justify-center', focused && active === index && 'bg-raised')}
+                      className={cx('flex min-w-0 flex-1 items-end justify-center', focused && current === index && 'bg-raised')}
                       onMouseEnter={(event) => show(event, text, event.currentTarget.firstElementChild as HTMLElement)}
                     >
                       <div

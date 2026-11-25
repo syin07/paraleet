@@ -30,23 +30,37 @@ interface Position {
  */
 export function Heatmap({ weeks }: { weeks: StatsWeek[] }) {
   const { container, show, showElement, hide, tip } = useTooltip();
-  const [active, setActive] = useState<Position | null>(null);
+  // The keyboard position is a day, not a column and row, so a new range can never leave it
+  // pointing past the data: a day that is not in the current weeks falls back to today.
+  const [activeDay, setActiveDay] = useState<string | null>(null);
+  // True while the position is shown: only for keyboard focus, so a click leaves the hovered tooltip alone.
   const [focused, setFocused] = useState(false);
   const marks = monthMarks(weeks);
   const maxWidth = LABEL_COLUMN + weeks.length * (MAX_CELL + GAP);
 
   const isReal = (position: Position): boolean => weeks[position.column]?.days[position.row]?.future === false;
 
-  function reveal(grid: HTMLElement, position: Position): void {
-    const cell = grid.querySelector<HTMLElement>(`[data-mark="${position.column}-${position.row}"]`);
-    if (cell) showElement(cell, cell.getAttribute('aria-label') ?? '');
-  }
-
   /** Today's cell: the last day that is not in the future. */
   function startPosition(): Position {
     const column = weeks.length - 1;
     const row = (weeks[column]?.days ?? []).reduce((last, day, index) => (day.future ? last : index), 0);
     return { column, row };
+  }
+
+  function locate(day: string | null): Position {
+    for (const [column, week] of weeks.entries()) {
+      const row = week.days.findIndex((candidate) => candidate.day === day);
+      if (row >= 0 && isReal({ column, row })) return { column, row };
+    }
+    return startPosition();
+  }
+
+  const current = locate(activeDay);
+  const currentDay = weeks[current.column]?.days[current.row]?.day;
+
+  function reveal(grid: HTMLElement, position: Position): void {
+    const cell = grid.querySelector<HTMLElement>(`[data-mark="${position.column}-${position.row}"]`);
+    if (cell) showElement(cell, cell.getAttribute('aria-label') ?? '');
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -59,10 +73,10 @@ export function Heatmap({ weeks }: { weeks: StatsWeek[] }) {
     const delta = step[event.key];
     if (!delta) return;
     event.preventDefault();
-    const from = active ?? startPosition();
-    const next = { column: from.column + delta.column, row: from.row + delta.row };
+    const next = { column: current.column + delta.column, row: current.row + delta.row };
     if (!isReal(next)) return;
-    setActive(next);
+    setActiveDay(weeks[next.column]?.days[next.row]?.day ?? null);
+    setFocused(true);
     reveal(event.currentTarget, next);
   }
 
@@ -85,16 +99,20 @@ export function Heatmap({ weeks }: { weeks: StatsWeek[] }) {
           onMouseLeave={hide}
           onFocus={(event) => {
             if (event.target !== event.currentTarget) return;
-            const position = active ?? startPosition();
-            setActive(position);
+            // A click also focuses the grid; only keyboard focus shows the position.
+            if (!event.currentTarget.matches(':focus-visible')) return;
+            setActiveDay(currentDay ?? null);
             setFocused(true);
-            reveal(event.currentTarget, position);
+            reveal(event.currentTarget, current);
           }}
           onBlur={() => {
             setFocused(false);
             hide();
+            // Each visit starts from today (or this week) again, so a position never outlives the data it pointed at.
+            setActiveDay(null);
           }}
           onKeyDown={onKeyDown}
+          aria-activedescendant={focused && currentDay ? `heat-${currentDay}` : undefined}
         >
           {marks.map((mark) => (
             <div key={`m${mark.column}`} className="relative" style={{ gridRow: 1, gridColumn: mark.column + 2 }} aria-hidden="true">
@@ -112,11 +130,12 @@ export function Heatmap({ weeks }: { weeks: StatsWeek[] }) {
               // Days after today stay blank: no color, no tooltip.
               if (day.future) return <div key={day.day} style={place} className="aspect-square w-full" aria-hidden="true" />;
               const text = dayTooltip(day.day, day.count);
-              const isActive = focused && active?.column === column && active.row === row;
+              const isActive = focused && day.day === currentDay;
               return (
                 <div
                   key={day.day}
                   role="img"
+                  id={`heat-${day.day}`}
                   aria-label={text}
                   data-mark={`${column}-${row}`}
                   style={place}
