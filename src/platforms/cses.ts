@@ -11,9 +11,9 @@ const PATH = /^\/problemset\/(?:task|stats|submit|hack|model|view)\/(\d+)\/?$/;
 // CSES's own section names (lower case), read from https://cses.fi/problemset/. "General",
 // "Advanced Techniques", "Interactive Problems" and the two "Additional Problems" sections have no
 // single topic, so they map to nothing.
-export const CSES_TAGS: Record<string, TopicId> = {
+export const CSES_TAGS: Record<string, TopicId | readonly TopicId[]> = {
   'introductory problems': 'implementation',
-  'sorting and searching': 'sorting',
+  'sorting and searching': ['sorting', 'binary-search'],
   'dynamic programming': 'dynamic-programming',
   'graph algorithms': 'graphs',
   'range queries': 'range-queries',

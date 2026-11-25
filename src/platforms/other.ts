@@ -15,7 +15,7 @@ function isTrackingParam(pair: string): boolean {
  */
 export function cleanUrl(url: URL): string | null {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  const host = url.host.replace(/^www\./, '');
+  const host = url.host;
   if (!host) return null;
   const path = url.pathname.replace(/\/+$/, '');
   const pairs = url.search

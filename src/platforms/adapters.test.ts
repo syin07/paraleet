@@ -118,7 +118,8 @@ describe('Codeforces URLs', () => {
 describe('Other URL cleaning', () => {
   const cases: [string, string][] = [
     ['HTTPS://Example.COM/Problem/7', 'https://example.com/Problem/7'],
-    ['https://www.example.com/p/1', 'https://example.com/p/1'],
+    ['https://www.Example.com/p?id=7#x', 'https://www.example.com/p?id=7'],
+    ['https://www.example.com/p/1', 'https://www.example.com/p/1'],
     ['https://example.com/p/1/', 'https://example.com/p/1'],
     ['https://example.com/', 'https://example.com'],
     ['https://example.com/p/1#solution', 'https://example.com/p/1'],
@@ -132,6 +133,17 @@ describe('Other URL cleaning', () => {
   ];
   it.each(cases)('%s', (url, expected) => {
     expect(parse(otherAdapter, url)).toBe(expected);
+  });
+
+  it('keeps www, so the same URL with and without it gives two IDs', () => {
+    expect(parse(otherAdapter, 'https://www.example.com/p')).not.toBe(parse(otherAdapter, 'https://example.com/p'));
+  });
+
+  it('the canonical link has the host the user pasted, lower-cased', () => {
+    for (const host of ['Example.com', 'WWW.Example.com', 'www.judge.org:8080', 'sub.Site.io']) {
+      const id = parse(otherAdapter, `https://${host}/p/1/?utm_source=a`);
+      expect(new URL(otherAdapter.buildUrl(id!)).host).toBe(host.toLowerCase());
+    }
   });
 
   it('does not accept non-http schemes', () => {
@@ -229,8 +241,10 @@ describe('difficulty', () => {
 describe('tags', () => {
   it('every mapped value in every tag map is a real topic', () => {
     for (const map of [CODEFORCES_TAGS, CSES_TAGS]) {
-      for (const [tag, topic] of Object.entries(map)) {
-        expect(isTopicId(topic), `${tag} -> ${topic}`).toBe(true);
+      for (const [tag, mapped] of Object.entries(map)) {
+        for (const topic of typeof mapped === 'string' ? [mapped] : mapped) {
+          expect(isTopicId(topic), `${tag} -> ${topic}`).toBe(true);
+        }
       }
     }
     // LeetCode's map is private, so check it through its adapter on a sample of its tags.
@@ -247,7 +261,7 @@ describe('tags', () => {
       'bit-manipulation',
       'graphs',
     ]);
-    expect(csesAdapter.mapTags(['Sorting and Searching', 'Range Queries'])).toEqual(['sorting', 'range-queries']);
+    expect(csesAdapter.mapTags(['Sorting and Searching', 'Range Queries'])).toEqual(['sorting', 'binary-search', 'range-queries']);
     expect(leetcodeAdapter.mapTags(['Hash Table', 'Binary Search'])).toEqual(['arrays-hashing', 'binary-search']);
   });
 

@@ -85,7 +85,7 @@ describe('recognizeUrl falls back to Other', () => {
   });
 
   it('cleans the link one rule at a time', () => {
-    expect(ok('HTTP://WWW.Example.COM/p').canonicalUrl).toBe('http://example.com/p');
+    expect(ok('HTTP://WWW.Example.COM/p').canonicalUrl).toBe('http://www.example.com/p');
     expect(ok('https://example.com/p/#frag').platformId).toBe('https://example.com/p');
     expect(ok('https://example.com/p/').platformId).toBe('https://example.com/p');
     expect(ok('https://example.com/p?utm_source=a&id=3&fbclid=z').platformId).toBe('https://example.com/p?id=3');
@@ -97,8 +97,8 @@ describe('recognizeUrl falls back to Other', () => {
     expect(first).toEqual({
       ok: true,
       platform: 'other',
-      platformId: 'https://hackerrank.com/challenges/solve-me-first/problem',
-      canonicalUrl: 'https://hackerrank.com/challenges/solve-me-first/problem',
+      platformId: 'https://www.hackerrank.com/challenges/solve-me-first/problem',
+      canonicalUrl: 'https://www.hackerrank.com/challenges/solve-me-first/problem',
     });
     expect(ok(first.canonicalUrl)).toEqual(first);
   });
