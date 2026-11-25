@@ -32,7 +32,8 @@ export function PlanRow({
   lock,
   focusTitle,
   onTitleFocused,
-  onSwapped,
+  neighborId,
+  onFocusRow,
   onChange,
   onError,
 }: {
@@ -48,7 +49,10 @@ export function PlanRow({
   /** True when this row just took the place of a swapped one: its title gets focus. */
   focusTitle: boolean;
   onTitleFocused: () => void;
-  onSwapped: (replacementId: number) => void;
+  /** The row that takes this one's place when it is removed: the next, or the previous for the last. */
+  neighborId: number | null;
+  /** Asks for focus on the title of a row, after a swap or a removal took the focused button away. */
+  onFocusRow: (problemId: number) => void;
   onChange: (plan: PlanView) => void;
   onError: (message: string) => void;
 }) {
@@ -147,7 +151,11 @@ export function PlanRow({
               iconOnly
               aria-label={`Remove ${name}`}
               disabled={busy}
-              onClick={() => void run(() => api().removePlanItem(ref))}
+              onClick={() =>
+                void run(() => api().removePlanItem(ref)).then((ok) => {
+                  if (ok && neighborId !== null) onFocusRow(neighborId);
+                })
+              }
               icon={<Trash2 className="h-3.5 w-3.5" />}
             />
           </span>
@@ -161,7 +169,7 @@ export function PlanRow({
           onClose={closeSwap}
           onPick={async (replacementId) => {
             // The row is replaced by the new problem's row: focus its title, not the gone button.
-            if (await run(() => api().swapPlanItem({ ...ref, replacementId }))) onSwapped(replacementId);
+            if (await run(() => api().swapPlanItem({ ...ref, replacementId }))) onFocusRow(replacementId);
           }}
         />
       )}

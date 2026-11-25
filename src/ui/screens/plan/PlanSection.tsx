@@ -77,7 +77,8 @@ export function PlanSection({
               lock={lock}
               focusTitle={focusTitleFor === item.problem.id}
               onTitleFocused={() => setFocusTitleFor(null)}
-              onSwapped={setFocusTitleFor}
+              neighborId={(section.items[index + 1] ?? section.items[index - 1])?.problem.id ?? null}
+              onFocusRow={setFocusTitleFor}
               isFirst={index === 0}
               isLast={index === section.items.length - 1}
               swapOpen={swapFor === item.problem.id}

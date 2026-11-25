@@ -42,7 +42,11 @@ export function ConfirmDialog({
   return (
     <Modal
       title={title}
-      onClose={onClose}
+      // While the command is in flight nothing closes the dialog (Escape, backdrop, close icon):
+      // a failure must land in a dialog the user can still see.
+      onClose={() => {
+        if (!sent.current) onClose();
+      }}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>

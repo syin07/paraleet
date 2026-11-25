@@ -260,6 +260,17 @@ test.describe('draft review', () => {
     await page.getByRole('button', { name: `Remove ${before[0]}` }).click();
     await expect(rows(page)).toHaveCount(before.length - 1);
     expect(await rowTitles(page)).toEqual(before.slice(1));
+    // Focus moves to the row that took its place, not to the page body.
+    await expect(rows(page).first().locator('button').first()).toBeFocused();
+  });
+
+  test('removing the last row of a group focuses the one before it', async ({ page }) => {
+    await openDraft(page);
+    const first = sections(page).first().getByTestId('plan-row');
+    const titles = await first.evaluateAll((nodes) => nodes.map((node) => node.querySelector('button')?.textContent ?? ''));
+    await page.getByRole('button', { name: `Remove ${titles.at(-1)}` }).click();
+    await expect(first).toHaveCount(titles.length - 1);
+    await expect(first.last().locator('button').first()).toBeFocused();
   });
 
   test('a problem moves up and down inside its group, and the ends are disabled', async ({ page }) => {
@@ -286,7 +297,7 @@ test.describe('draft review', () => {
     await expect(choices.first()).toBeVisible();
     const count = await choices.count();
     expect(count).toBeGreaterThan(0);
-    expect(count).toBeLessThanOrEqual(5 + 1);
+    expect(count).toBe(5);
     await captureBothSizes(page, 'plan-draft-swap');
     const pickedText = (await choices.first().locator('span').first().textContent()) ?? '';
     await choices.first().click();
@@ -327,7 +338,7 @@ test.describe('active plan', () => {
     await expect(sections(page).first()).toContainText('3 done · 0 pending');
     await expect(sections(page).nth(1)).toContainText('1 done · 1 skipped · 1 pending');
     await expect(page.getByRole('progressbar', { name: 'Overall progress' })).toBeVisible();
-    await expect(sections(page).nth(1).getByRole('progressbar')).toHaveAttribute('aria-valuenow', /^(33|67)$/);
+    await expect(sections(page).nth(1).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '67');
     // Exactly one Next badge, on a pending problem.
     const next = page.getByText('Next', { exact: true });
     await expect(next).toHaveCount(1);
@@ -724,5 +735,49 @@ test.describe('create form honesty', () => {
     await expect(page.getByText('About 12 problems from 1 topic')).toBeVisible();
     await page.getByRole('radio', { name: '10' }).click();
     await expect(page.getByText('About 10 problems from 1 topic')).toBeVisible();
+  });
+});
+
+test.describe('a confirmation in flight', () => {
+  test('Escape and a click outside do not close it, and the command is sent once', async ({ page }) => {
+    await openScreen(page, 'plan', 'plan-active');
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as { paraleet: Bridge }).paraleet;
+      const original = bridge['archivePlan'] as Bridge[string];
+      (globalThis as unknown as { __calls: number }).__calls = 0;
+      bridge['archivePlan'] = (...args: unknown[]) => {
+        (globalThis as unknown as { __calls: number }).__calls += 1;
+        return new Promise((resolve) => setTimeout(() => resolve(original(...args)), 800));
+      };
+    });
+    await page.getByRole('button', { name: 'Archive', exact: true }).click();
+    const dialog = confirmDialog(page, 'Archive this plan?');
+    await dialog.getByRole('button', { name: 'Archive plan' }).click();
+    await page.keyboard.press('Escape');
+    await page.mouse.click(5, 5);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    // The command finishes, and only then does the dialog go.
+    await expect(page.getByText('No active plan')).toBeVisible();
+    await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => (globalThis as unknown as { __calls: number }).__calls)).toBe(1);
+  });
+
+  test('a failure while Escape was pressed still lands in the dialog', async ({ page }) => {
+    await openScreen(page, 'plan', 'plan-active');
+    await replaceMethod(
+      page,
+      'archivePlan',
+      "return new Promise((resolve, reject) => setTimeout(() => reject(new Error('Could not archive.')), 600));",
+    );
+    await page.getByRole('button', { name: 'Archive', exact: true }).click();
+    const dialog = confirmDialog(page, 'Archive this plan?');
+    await dialog.getByRole('button', { name: 'Archive plan' }).click();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('alert')).toContainText('Could not archive.');
+    // Free again: Cancel works.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
   });
 });
