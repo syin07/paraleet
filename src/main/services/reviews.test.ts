@@ -217,7 +217,7 @@ describe('reconcile at launch', () => {
   it('changes nothing when the stored data already agrees with the attempts', async () => {
     app = createTestApp();
     await reportStarters(3, 'good');
-    expect(reconcile(app.ctx)).toEqual({ petFactsRepaired: false, cardsRebuilt: 0, accessoriesRestored: [] });
+    expect(reconcile(app.ctx)).toEqual({ petFactsRepaired: false, cardsRebuilt: 0, accessoriesRestored: [], planItemsCorrected: 0 });
   });
 
   it('corrects stored streak and totals that drifted from the attempts', async () => {
@@ -225,7 +225,7 @@ describe('reconcile at launch', () => {
     await reportStarters(3, 'good');
     app.db.run('UPDATE pet SET current_streak = 99, growth_solves = 0, last_fed_day = NULL WHERE id = 1');
 
-    expect(reconcile(app.ctx)).toEqual({ petFactsRepaired: true, cardsRebuilt: 0, accessoriesRestored: [] });
+    expect(reconcile(app.ctx)).toEqual({ petFactsRepaired: true, cardsRebuilt: 0, accessoriesRestored: [], planItemsCorrected: 0 });
     const pet = getPet(app.db);
     expect({
       growthSolves: pet.growthSolves,
@@ -246,7 +246,7 @@ describe('reconcile at launch', () => {
     const original = getCard(app.db, id);
     app.db.run('DELETE FROM review_cards');
 
-    expect(reconcile(app.ctx)).toEqual({ petFactsRepaired: false, cardsRebuilt: 1, accessoriesRestored: [] });
+    expect(reconcile(app.ctx)).toEqual({ petFactsRepaired: false, cardsRebuilt: 1, accessoriesRestored: [], planItemsCorrected: 0 });
     expect(getCard(app.db, id)).toEqual(original);
   });
 });

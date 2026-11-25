@@ -3,6 +3,7 @@
 // active; the daily loop draws from it; progress follows the attempts.
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PlanView } from '../../bridge/contract';
+import type { PlanRequest } from '../../core/plan';
 import { listPlanItems, listPlans } from '../../data/repos/plans';
 import { getNotes } from '../../data/repos/notes';
 import { getPet } from '../../data/repos/pet';
@@ -14,8 +15,10 @@ import { createTestApp, noonLA, type TestApp } from './testing';
 let app: TestApp;
 afterEach(() => app?.close());
 
-const request = { topics: ['binary-search'], platforms: ['leetcode'], level: 'some', targetSize: 12 } as const;
+const request: PlanRequest = { topics: ['binary-search'], platforms: ['leetcode'], level: 'some', targetSize: 12 };
 const json = (value: unknown): LlmAnswer => ({ kind: 'json', value, text: JSON.stringify(value) });
+/** Runs a handler on a later turn, as the bridge does, so one that throws at once is a rejection. */
+const later = <T>(work: () => T | Promise<T>): Promise<T> => Promise.resolve().then(work);
 
 function start(): TestApp {
   const created = createTestApp({ now: noonLA('2026-12-01') });
@@ -199,19 +202,19 @@ describe('editing a draft', () => {
     expect(swapped.sections[1]).toMatchObject({ groupName: 'Search on the answer' });
 
     // A swap to something that is not an offered candidate is refused.
-    await expect(app.handlers.swapPlanItem({ planId: plan.id, problemId: ids[4]!, replacementId: 987654321 })).rejects.toThrow(
+    await expect(later(() => app.handlers.swapPlanItem({ planId: plan.id, problemId: ids[4]!, replacementId: 987654321 }))).rejects.toThrow(
       'That problem cannot take this place. Pick one from the list.',
     );
-    await expect(app.handlers.swapPlanItem({ planId: plan.id, problemId: ids[4]!, replacementId: ids[5]! })).rejects.toThrow(/cannot take this place/);
+    await expect(later(() => app.handlers.swapPlanItem({ planId: plan.id, problemId: ids[4]!, replacementId: ids[5]! }))).rejects.toThrow(/cannot take this place/);
   });
 
   it('does not let the last problem be removed, or an active plan be edited', async () => {
     app = start();
     const { plan, ids } = await draft();
     for (const id of ids.slice(1)) await app.handlers.removePlanItem({ planId: plan.id, problemId: id });
-    await expect(app.handlers.removePlanItem({ planId: plan.id, problemId: ids[0]! })).rejects.toThrow(/at least one problem/);
+    await expect(later(() => app.handlers.removePlanItem({ planId: plan.id, problemId: ids[0]! }))).rejects.toThrow(/at least one problem/);
     await app.handlers.activatePlan({ planId: plan.id });
-    await expect(app.handlers.movePlanItem({ planId: plan.id, problemId: ids[0]!, direction: 'up' })).rejects.toThrow(
+    await expect(later(() => app.handlers.movePlanItem({ planId: plan.id, problemId: ids[0]!, direction: 'up' }))).rejects.toThrow(
       'Only a draft plan can be edited.',
     );
   });
@@ -221,7 +224,7 @@ describe('editing a draft', () => {
     const { plan } = await draft();
     const overview = await app.handlers.deletePlan({ planId: plan.id });
     expect(overview.drafts).toEqual([]);
-    await expect(app.handlers.getPlan({ planId: plan.id })).rejects.toThrow('That plan no longer exists.');
+    await expect(later(() => app.handlers.getPlan({ planId: plan.id }))).rejects.toThrow('That plan no longer exists.');
   });
 });
 
@@ -263,7 +266,7 @@ describe('an active plan', () => {
     const other = goodAnswer('binary-search', 0);
     app.modelAnswers.push(json({ topics: other.topics }));
     const solved = await app.handlers.generatePlan({ ...request, topics: ['binary-search'], platforms: ['leetcode'] });
-    await expect(app.handlers.activatePlan({ planId: solved.id })).rejects.toThrow(/already solved every problem/);
+    await expect(later(() => app.handlers.activatePlan({ planId: solved.id }))).rejects.toThrow(/already solved every problem/);
   });
 
   it('is the only active plan: activating another archives it', async () => {
@@ -308,7 +311,7 @@ describe('an active plan', () => {
     const overview = await app.handlers.getPlanOverview(undefined);
     expect(overview.active).toBeNull();
     expect(overview.past[0]).toMatchObject({ id: plan.id, status: 'done', progress: { done: 10, pending: 0 } });
-    await expect(app.handlers.deletePlan({ planId: plan.id })).rejects.toThrow('A finished plan is kept.');
+    await expect(later(() => app.handlers.deletePlan({ planId: plan.id }))).rejects.toThrow('A finished plan is kept.');
     // With no active plan the daily loop goes back to the starter list.
     app.clock.set(noonLA('2026-12-02'));
     expect((await app.handlers.getToday(undefined)).assignment?.reason).not.toBe('plan');
@@ -329,7 +332,7 @@ describe('an active plan', () => {
     app = start();
     const { plan } = await draft();
     await app.handlers.activatePlan({ planId: plan.id });
-    await expect(app.handlers.deletePlan({ planId: plan.id })).rejects.toThrow('Archive the active plan before deleting it.');
+    await expect(later(() => app.handlers.deletePlan({ planId: plan.id }))).rejects.toThrow('Archive the active plan before deleting it.');
     const archived = await app.handlers.archivePlan({ planId: plan.id });
     expect(archived.active).toBeNull();
     expect(archived.past[0]?.status).toBe('archived');
@@ -373,7 +376,7 @@ describe('the API key', () => {
   it('is not saved when this Mac cannot encrypt it', async () => {
     app = createTestApp();
     app.secrets.available = false;
-    await expect(Promise.resolve().then(() => app.handlers.saveApiKey({ apiKey: 'sk-ant-test-key-111111' }))).rejects.toThrow(
+    await expect(later(() => app.handlers.saveApiKey({ apiKey: 'sk-ant-test-key-111111' }))).rejects.toThrow(
       /cannot encrypt/,
     );
     expect(app.secrets.key).toBeNull();
