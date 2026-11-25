@@ -5,10 +5,18 @@ import { CHECKING_MS, celebrationEndsAt, deriveMood } from '../../core/pet';
 import { stageFor } from '../../core/petFacts';
 import { pickLine } from '../../core/petLines';
 import { displayedStreak, isFedOn, missedDays, type StreakState } from '../../core/streak';
-import { ACCESSORY_IDS, type AccessoryId, type Mood, type ParaDay, type Problem } from '../../core/types';
+import {
+  ACCESSORY_IDS,
+  type AccessoryId,
+  type GrowthStage,
+  type Mood,
+  type ParaDay,
+  type Problem,
+} from '../../core/types';
 import { getAssignment } from '../../data/repos/assignments';
-import { saveGreetedDay, type PetRecord } from '../../data/repos/pet';
+import { saveGreetedDay, saveHatched, type PetRecord } from '../../data/repos/pet';
 import { getProblem } from '../../data/repos/problems';
+import { updateSettings } from '../../data/repos/settings';
 import { PLATFORM_LABELS } from '../../platforms';
 import { currentMoment, type AppContext, type Moment } from './context';
 
@@ -76,6 +84,39 @@ export function petSummary(ctx: AppContext, moment: Moment, openProblem: Problem
   };
 }
 
+const MOOD_WORDS: Record<Mood, string> = {
+  sleeping: 'asleep',
+  content: 'content',
+  peckish: 'peckish',
+  hungry: 'hungry',
+  checking: 'checking your report',
+  eating: 'eating',
+  nibbling: 'nibbling',
+  missed_you: 'happy to see you',
+};
+
+/** What the menu bar icon shows: Para's look right now, the streak, and a line for the tooltip. */
+export function trayState(ctx: AppContext): {
+  seed: number;
+  stage: GrowthStage;
+  mood: Mood;
+  accessories: AccessoryId[];
+  streak: number;
+  tooltip: string;
+} {
+  const moment = currentMoment(ctx);
+  const summary = petSummary(ctx, moment, null);
+  const streak = displayedStreak(streakState(moment.pet), moment.today);
+  return {
+    seed: summary.seed,
+    stage: summary.stage,
+    mood: summary.mood,
+    accessories: summary.equippedAccessories,
+    streak,
+    tooltip: `Para is ${MOOD_WORDS[summary.mood]}${streak > 0 ? ` · ${streak}-day streak` : ''}`,
+  };
+}
+
 /** Today's problem while it is still to do, without assigning one. */
 export function openProblemToday(ctx: AppContext, moment: Moment): Problem | null {
   const assignment = getAssignment(ctx.db, moment.today);
@@ -93,6 +134,28 @@ export function acknowledgeGreeting(ctx: AppContext, buildToday: (ctx: AppContex
     saveGreetedDay(ctx.db, moment.today);
     ctx.notifyChanged();
   }
+  return buildToday(ctx);
+}
+
+/**
+ * The first-launch flow is finished: Para has hatched and the reminder times are chosen. Safe to
+ * call again; the first hatching time is kept.
+ */
+export function completeOnboarding(
+  ctx: AppContext,
+  input: { firstReminderTime: string; eveningReminderTime: string },
+  buildToday: (ctx: AppContext) => TodayView,
+): TodayView {
+  ctx.db.transaction(() => {
+    updateSettings(ctx.db, {
+      firstReminderTime: input.firstReminderTime,
+      eveningReminderTime: input.eveningReminderTime,
+    });
+    // Make sure the pet exists before marking it hatched.
+    const moment = currentMoment(ctx);
+    saveHatched(ctx.db, moment.now.toISOString());
+  });
+  ctx.notifyChanged();
   return buildToday(ctx);
 }
 

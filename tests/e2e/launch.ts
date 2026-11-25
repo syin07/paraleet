@@ -21,6 +21,24 @@ export interface PetWindowFacts {
   clickThrough: boolean;
 }
 
+/** What the main process reports about the menu bar icon. */
+export interface TrayFacts {
+  exists: boolean;
+  /** The streak beside the icon, as shown (" 3"), or "" when there is none. */
+  title: string;
+  tooltip: string;
+  /** Changes whenever the icon's picture does. */
+  key: string;
+}
+
+/** What the main process reports about the compact card. */
+export interface CardFacts {
+  exists: boolean;
+  visible: boolean;
+  anchor: 'pet' | 'tray' | null;
+  bounds: { x: number; y: number; width: number; height: number } | null;
+}
+
 export interface RunningApp {
   app: ElectronApplication;
   /** The main window. */
@@ -32,6 +50,14 @@ export interface RunningApp {
   clickPetMenu(label: string): Promise<void>;
   dockVisible(): Promise<boolean>;
   mainWindowOpen(): Promise<boolean>;
+  tray(): Promise<TrayFacts>;
+  /** What a click on the menu bar icon does. */
+  clickTray(): Promise<void>;
+  trayMenuLabels(): Promise<string[]>;
+  clickTrayMenu(label: string): Promise<void>;
+  card(): Promise<CardFacts>;
+  /** The compact card's page. Waits for it to open. */
+  cardPage(): Promise<Page>;
   /** Moves the app's clock. The app re-checks the ParaLeet day at once. */
   setNow(iso: string): Promise<void>;
   setTimeZone(timeZone: string): Promise<void>;
@@ -49,9 +75,16 @@ interface TestHooks {
   clickPetMenu(label: string): void;
   dockVisible(): boolean;
   mainWindowOpen(): boolean;
+  tray(): TrayFacts;
+  clickTray(): void;
+  trayMenuLabels(): string[];
+  clickTrayMenu(label: string): void;
+  card(): CardFacts;
 }
 
-const isPetPage = (page: Page): boolean => /#\/pet\b/.test(page.url());
+type WindowKind = 'main' | 'pet' | 'card';
+const kindOf = (page: Page): WindowKind =>
+  /#\/pet\b/.test(page.url()) ? 'pet' : /#\/card\b/.test(page.url()) ? 'card' : 'main';
 
 const isAppPage = (page: Page): boolean => /index\.html|localhost/.test(page.url());
 
@@ -59,19 +92,19 @@ const isAppPage = (page: Page): boolean => /index\.html|localhost/.test(page.url
  * Finds an open window of the wanted kind, waiting for it to appear if needed. It polls instead
  * of waiting for a "window" event, because the window may open between looking and listening.
  */
-async function findWindow(app: ElectronApplication, wantPet: boolean): Promise<Page> {
+async function findWindow(app: ElectronApplication, want: WindowKind): Promise<Page> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     for (const page of app.windows()) {
       // A window that has not loaded the app yet has no route to judge it by.
-      if (isAppPage(page) && isPetPage(page) === wantPet) {
+      if (!page.isClosed() && isAppPage(page) && kindOf(page) === want) {
         await page.waitForLoadState('domcontentloaded');
         return page;
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`The ${wantPet ? 'pet' : 'main'} window did not open`);
+  throw new Error(`The ${want} window did not open`);
 }
 
 export function makeUserDataDir(): { dir: string; remove(): void } {
@@ -79,7 +112,13 @@ export function makeUserDataDir(): { dir: string; remove(): void } {
   return { dir, remove: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-export async function launchApp(options: { userDataDir: string; now: string; timeZone?: string }): Promise<RunningApp> {
+export async function launchApp(options: {
+  userDataDir: string;
+  now: string;
+  timeZone?: string;
+  /** False to start before the egg has hatched, for the first-launch flow. Default: hatched. */
+  hatched?: boolean;
+}): Promise<RunningApp> {
   const app = await electron.launch({
     args: [ROOT],
     cwd: ROOT,
@@ -89,9 +128,10 @@ export async function launchApp(options: { userDataDir: string; now: string; tim
       PARALEET_USER_DATA_DIR: options.userDataDir,
       PARALEET_FAKE_NOW: options.now,
       PARALEET_FAKE_TZ: options.timeZone ?? TEST_ZONE,
+      PARALEET_E2E_UNHATCHED: options.hatched === false ? '1' : '0',
     },
   });
-  const page = await findWindow(app, false);
+  const page = await findWindow(app, 'main');
 
   const hooks = <T>(use: (hooks: TestHooks, arg: string) => T, arg = ''): Promise<T> =>
     app.evaluate((_electron, [body, value]) => {
@@ -106,12 +146,18 @@ export async function launchApp(options: { userDataDir: string; now: string; tim
     setNow: (iso) => hooks((h, value) => h.setNow(value), iso),
     setTimeZone: (timeZone) => hooks((h, value) => h.setTimeZone(value), timeZone),
     openedUrls: () => hooks((h) => h.openedUrls()),
-    petPage: () => findWindow(app, true),
+    petPage: () => findWindow(app, 'pet'),
     pet: () => hooks((h) => h.pet()),
     petMenuLabels: () => hooks((h) => h.petMenuLabels()),
     clickPetMenu: (label) => hooks((h, value) => h.clickPetMenu(value), label),
     dockVisible: () => hooks((h) => h.dockVisible()),
     mainWindowOpen: () => hooks((h) => h.mainWindowOpen()),
+    tray: () => hooks((h) => h.tray()),
+    clickTray: () => hooks((h) => h.clickTray()),
+    trayMenuLabels: () => hooks((h) => h.trayMenuLabels()),
+    clickTrayMenu: (label) => hooks((h, value) => h.clickTrayMenu(value), label),
+    card: () => hooks((h) => h.card()),
+    cardPage: () => findWindow(app, 'card'),
     close: () => app.close(),
   };
 }

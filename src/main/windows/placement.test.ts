@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultPosition, keepOnScreen, MIN_VISIBLE, type Rect } from './placement';
+import { defaultPosition, keepOnScreen, MIN_VISIBLE, placePopover, workAreaFor, type Rect } from './placement';
 
 const laptop: Rect = { x: 0, y: 25, width: 1728, height: 1002 };
 const external: Rect = { x: 1728, y: 0, width: 2560, height: 1440 };
@@ -94,5 +94,44 @@ describe('keepOnScreen', () => {
       const once = keepOnScreen(start, size, [laptop, external], bird);
       expect(keepOnScreen(once, size, [laptop, external], bird)).toEqual(once);
     }
+  });
+});
+
+describe('placePopover', () => {
+  const card = { width: 320, height: 240 };
+
+  it('sits above its anchor, centred, when there is room', () => {
+    const birdBox: Rect = { x: 800, y: 600, width: 128, height: 128 };
+    expect(placePopover(birdBox, card, laptop, 'above')).toEqual({ x: 800 + 64 - 160, y: 600 - 8 - 240 });
+  });
+
+  it('goes below when it does not fit above', () => {
+    const nearTop: Rect = { x: 800, y: 100, width: 128, height: 128 };
+    expect(placePopover(nearTop, card, laptop, 'above')).toEqual({ x: 704, y: 100 + 128 + 8 });
+  });
+
+  it('sits under a menu bar icon, pulled in from the screen edge', () => {
+    const trayIcon: Rect = { x: 1700, y: 0, width: 24, height: 24 };
+    expect(placePopover(trayIcon, card, laptop, 'below')).toEqual({ x: 1728 - 320, y: 32 });
+    const leftIcon: Rect = { x: 2, y: 0, width: 24, height: 24 };
+    expect(placePopover(leftIcon, card, laptop, 'below', 4)).toEqual({ x: 0, y: 28 });
+  });
+
+  it('stays inside the work area even when it fits on neither side', () => {
+    const tall = { width: 360, height: 640 };
+    const middle: Rect = { x: 600, y: 400, width: 128, height: 128 };
+    const placed = placePopover(middle, tall, laptop, 'above');
+    expect(placed.y).toBeGreaterThanOrEqual(laptop.y);
+    expect(placed.y + tall.height).toBeLessThanOrEqual(laptop.y + laptop.height);
+    expect(placed.x).toBe(600 + 64 - 180);
+  });
+});
+
+describe('workAreaFor', () => {
+  it('picks the screen the rectangle is on, or the nearest', () => {
+    expect(workAreaFor({ x: 100, y: 100, width: 50, height: 50 }, [laptop, external])).toBe(laptop);
+    expect(workAreaFor({ x: 3000, y: 100, width: 50, height: 50 }, [laptop, external])).toBe(external);
+    expect(workAreaFor({ x: 9000, y: 100, width: 50, height: 50 }, [laptop, external])).toBe(external);
+    expect(workAreaFor({ x: 0, y: 0, width: 1, height: 1 }, [])).toBeNull();
   });
 });

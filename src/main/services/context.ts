@@ -1,6 +1,6 @@
 // What the use-case layer needs from the outside world. Nothing in src/main/services imports
 // Electron, so every service runs under the unit-test runner with a real SQLite database.
-import type { MainScreen } from '../../bridge/contract';
+import type { CardAnchor, MainScreen } from '../../bridge/contract';
 import { effectiveToday, paraDayOf } from '../../core/day';
 import type { Celebration } from '../../core/pet';
 import type { Settings } from '../../core/settings';
@@ -18,6 +18,10 @@ export interface WindowPort {
   endPetDrag(): void;
   setPetInteractive(interactive: boolean): void;
   showPetMenu(): void;
+  /** Opens the compact card beside the pet or under the menu bar icon; a second call from the same place closes it. */
+  showCard(anchor: CardAnchor): void;
+  hideCard(): void;
+  setCardSize(width: number, height: number): void;
 }
 
 /** What the app remembers only while it is running. */

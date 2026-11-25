@@ -595,6 +595,29 @@ function createApi(state: MockState): ParaLeetApi {
       return { ok: true };
     },
 
+    showCard: async ({ anchor }) => {
+      state.windowCalls.push(`showCard:${anchor}`);
+      return { ok: true };
+    },
+    hideCard: async () => {
+      state.windowCalls.push('hideCard');
+      return { ok: true };
+    },
+    setCardSize: async ({ width, height }) => {
+      state.windowCalls.push(`setCardSize:${width}x${height}`);
+      return { ok: true };
+    },
+    completeOnboarding: async ({ firstReminderTime, eveningReminderTime }) => {
+      const time = /^([01]\d|2[0-3]):[0-5]\d$/;
+      if (!time.test(firstReminderTime) || !time.test(eveningReminderTime)) {
+        throw new Error('Use a 24-hour time like 16:00');
+      }
+      state.settings = { ...state.settings, firstReminderTime, eveningReminderTime };
+      state.hatched = true;
+      changed();
+      return todayView(state);
+    },
+
     getSettings: async () => ({ ...state.settings }),
 
     updateSettings: async (patch) => {
@@ -668,6 +691,11 @@ export const SCENARIOS: Record<string, (state: MockState) => void> = {
   },
   /** First launch: nothing logged, the first starter problem assigned. */
   fresh: (state) => assignToday(state),
+  /** The very first launch, before the egg has hatched: the first-launch flow shows. */
+  hatching: (state) => {
+    state.hatched = false;
+    assignToday(state);
+  },
   /** Today's problem already reported. */
   fed: (state) => {
     midway(state);

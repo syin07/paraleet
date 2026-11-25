@@ -3,7 +3,7 @@
 // the main process with the zod schemas below. Owned by the lead: do not change without the
 // lead's say.
 import { z } from 'zod';
-import { settingsPatchSchema, type Settings } from '../core/settings';
+import { settingsPatchSchema, timeOfDaySchema, type Settings } from '../core/settings';
 import { TOPIC_IDS, type TopicId } from '../core/topics';
 import {
   ACCESSORY_IDS,
@@ -29,6 +29,15 @@ import type { BridgeMethodName } from './channels';
 /** The main window's screens, as used in its URL hash. */
 export const MAIN_SCREENS = ['today', 'problems', 'plan', 'stats', 'settings'] as const;
 export type MainScreen = (typeof MAIN_SCREENS)[number];
+
+/** Where the compact card opens from. */
+export const CARD_ANCHORS = ['pet', 'tray'] as const;
+export type CardAnchor = (typeof CARD_ANCHORS)[number];
+/** The compact card is 320 points wide, 360 while it shows the report form. */
+export const CARD_WIDTH = 320;
+export const CARD_WIDTH_REPORT = 360;
+export const CARD_MIN_HEIGHT = 120;
+export const CARD_MAX_HEIGHT = 640;
 
 const problemId = z.number().int().positive();
 const problemRef = z.object({ problemId });
@@ -90,6 +99,23 @@ export const inputSchemas = {
   setPetInteractive: z.object({ interactive: z.boolean() }),
   /** Pet window only: opens the right-click menu at the pointer. */
   showPetMenu: z.undefined(),
+  /**
+   * Opens the compact card (today's problem, Open problem, I solved it) beside the floating pet
+   * or under the menu bar icon. Opening it again from the same place closes it.
+   */
+  showCard: z.object({ anchor: z.enum(CARD_ANCHORS) }),
+  /** Card window only: closes the card. */
+  hideCard: z.undefined(),
+  /** Card window only: the size its content needs, in points, so the window fits it. */
+  setCardSize: z.object({
+    width: z.union([z.literal(CARD_WIDTH), z.literal(CARD_WIDTH_REPORT)]),
+    height: z.number().int().min(CARD_MIN_HEIGHT).max(CARD_MAX_HEIGHT),
+  }),
+  /** First launch: Para has hatched and the reminder times are chosen. */
+  completeOnboarding: z.object({
+    firstReminderTime: timeOfDaySchema,
+    eveningReminderTime: timeOfDaySchema,
+  }),
   getSettings: z.undefined(),
   updateSettings: settingsPatchSchema,
 } as const satisfies Record<BridgeMethodName, z.ZodType>;
@@ -278,6 +304,10 @@ export interface BridgeOutputs {
   endPetDrag: Done;
   setPetInteractive: Done;
   showPetMenu: Done;
+  showCard: Done;
+  hideCard: Done;
+  setCardSize: Done;
+  completeOnboarding: TodayView;
   getSettings: Settings;
   updateSettings: Settings;
 }

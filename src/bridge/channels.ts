@@ -33,6 +33,10 @@ export const BRIDGE_METHODS = [
   'endPetDrag',
   'setPetInteractive',
   'showPetMenu',
+  'showCard',
+  'hideCard',
+  'setCardSize',
+  'completeOnboarding',
   'getSettings',
   'updateSettings',
 ] as const;

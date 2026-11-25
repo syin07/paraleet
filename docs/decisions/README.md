@@ -16,4 +16,5 @@ One short file per non-obvious choice: context, decision, alternatives rejected.
 | [0010](0010-pet-window.md) | The floating pet window |
 | [0011](0011-pet-rules.md) | Pet rules: stages, moods, voice, accessories, reminders |
 | [0012](0012-living-pet.md) | Wiring the living pet into the app |
+| [0013](0013-menu-bar-and-card.md) | The menu bar icon and the compact card window |
 | [0014](0014-catalog.md) | The problem catalog |

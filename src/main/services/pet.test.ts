@@ -7,7 +7,7 @@ import { CHECKING_MS, EATING_MS, NIBBLING_MS } from '../../core/pet';
 import type { Rating } from '../../core/types';
 import { listUnlockAttempts } from '../../data/repos/attempts';
 import { getPet, saveUnlockedAccessories } from '../../data/repos/pet';
-import { createMoodWatcher, nextCelebrationStep, reconcile } from './index';
+import { createMoodWatcher, nextCelebrationStep, reconcile, trayState } from './index';
 import { createTestApp, type TestApp } from './testing';
 
 let app: TestApp;
@@ -359,5 +359,37 @@ describe('accessories unlocked by reporting', () => {
     expect(reconcile(app.ctx).accessoriesRestored).toEqual(['bow_tie']);
     expect(getPet(app.db).unlockedAccessories).toEqual(['bow_tie', 'crown']);
     expect(reconcile(app.ctx).accessoriesRestored).toEqual([]);
+  });
+});
+
+describe('what the menu bar icon shows', () => {
+  it('follows the mood and the streak, with a plain tooltip', async () => {
+    app = createTestApp({ now: la('2026-12-01', '09:00') });
+    await app.handlers.getToday(undefined);
+    expect(trayState(app.ctx)).toMatchObject({ stage: 'egg', mood: 'sleeping', streak: 0, tooltip: 'Para is asleep' });
+    app.clock.set(la('2026-12-01', '17:00'));
+    expect(trayState(app.ctx)).toMatchObject({ mood: 'peckish', tooltip: 'Para is peckish' });
+    await report('good');
+    expect(trayState(app.ctx)).toMatchObject({
+      mood: 'checking',
+      streak: 1,
+      tooltip: 'Para is checking your report · 1-day streak',
+    });
+    afterCelebration();
+    expect(trayState(app.ctx)).toMatchObject({ mood: 'content', streak: 1, tooltip: 'Para is content · 1-day streak' });
+    // A missed day: the streak beside the icon goes away without a word about it.
+    app.clock.set(la('2026-12-04', '10:00'));
+    expect(trayState(app.ctx)).toMatchObject({ mood: 'missed_you', streak: 0, tooltip: 'Para is happy to see you' });
+  });
+
+  it('wears what Para wears', async () => {
+    app = createTestApp({ now: la('2026-12-01', '17:00') });
+    for (let day = 1; day <= 7; day += 1) {
+      app.clock.set(la(`2026-12-0${day}`, '17:00'));
+      await report('good');
+    }
+    expect(trayState(app.ctx).accessories).toEqual([]);
+    await app.handlers.setEquippedAccessories({ accessories: ['bow_tie'] });
+    expect(trayState(app.ctx).accessories).toEqual(['bow_tie']);
   });
 });

@@ -43,6 +43,9 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
       endPetDrag: () => windowCalls.push('endPetDrag'),
       setPetInteractive: (interactive) => windowCalls.push(`setPetInteractive:${interactive}`),
       showPetMenu: () => windowCalls.push('showPetMenu'),
+      showCard: (anchor) => windowCalls.push(`showCard:${anchor}`),
+      hideCard: () => windowCalls.push('hideCard'),
+      setCardSize: (width, height) => windowCalls.push(`setCardSize:${width}x${height}`),
     },
     notifyChanged: () => {
       changeCount += 1;

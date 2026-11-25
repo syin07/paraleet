@@ -60,7 +60,10 @@ export class PetWindowController {
       // Over, or the clock was set back so far that "an hour" would last longer than an hour.
       if (remaining <= 0 || remaining > HIDE_FOR_MS) this.hiddenUntil = null;
     }
-    const wanted = settings.petVisible && this.hiddenUntil === null;
+    // Para lives in its egg in the main window until the first-launch flow has hatched it.
+    const pet = this.db.get<{ hatched_at: string | null }>('SELECT hatched_at FROM pet WHERE id = 1');
+    const hatched = pet !== undefined && pet.hatched_at !== null;
+    const wanted = settings.petVisible && this.hiddenUntil === null && hatched;
     const wasVisible = this.isVisible();
 
     if (!wanted) {
@@ -83,6 +86,14 @@ export class PetWindowController {
 
   isVisible(): boolean {
     return this.window !== null && !this.window.isDestroyed() && this.window.isVisible();
+  }
+
+  /** Where the bird is on screen, or null while the pet is not showing. */
+  birdRect(): Rect | null {
+    const window = this.current();
+    if (!window || !window.isVisible()) return null;
+    const [x = 0, y = 0] = window.getPosition();
+    return { x: x + PET_BIRD_BOX.x, y: y + PET_BIRD_BOX.y, width: PET_BIRD_BOX.width, height: PET_BIRD_BOX.height };
   }
 
   /** The window, for the trusted-sender check and for tests. */

@@ -87,3 +87,36 @@ export function keepOnScreen(
     y: Math.round(clamp(drawn.y, nearest.y, nearest.y + nearest.height - body.height) - body.y),
   };
 }
+
+/**
+ * Where a popover goes: centred on its anchor, on the preferred side when it fits there and on
+ * the other side when it does not, and always fully inside the work area.
+ */
+export function placePopover(
+  anchor: Rect,
+  size: Size,
+  workArea: Rect,
+  prefer: 'above' | 'below',
+  gap = 8,
+): Point {
+  const above = anchor.y - gap - size.height;
+  const below = anchor.y + anchor.height + gap;
+  const fitsAbove = above >= workArea.y;
+  const fitsBelow = below + size.height <= workArea.y + workArea.height;
+  const y = prefer === 'above' ? (fitsAbove || !fitsBelow ? above : below) : fitsBelow || !fitsAbove ? below : above;
+  const x = anchor.x + anchor.width / 2 - size.width / 2;
+  return {
+    x: Math.round(clamp(x, workArea.x, workArea.x + workArea.width - size.width)),
+    y: Math.round(clamp(y, workArea.y, workArea.y + workArea.height - size.height)),
+  };
+}
+
+/** The work area that holds the centre of `rect`, or the nearest one, or the first as a last resort. */
+export function workAreaFor(rect: Rect, workAreas: readonly Rect[]): Rect | null {
+  const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  let best: Rect | null = null;
+  for (const area of workAreas) {
+    if (best === null || distance(centre, area) < distance(centre, best)) best = area;
+  }
+  return best;
+}

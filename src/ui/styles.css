@@ -160,9 +160,12 @@
   }
 }
 
-/* The floating pet window shows only the bird: no page background at all. */
+/* The floating pet window shows only the bird, and the compact card only its panel: no page
+   background at all. */
 html[data-window='pet'],
-html[data-window='pet'] body {
+html[data-window='pet'] body,
+html[data-window='card'],
+html[data-window='card'] body {
   background: transparent;
 }
 

@@ -5,7 +5,7 @@ import { getNotes } from '../../data/repos/notes';
 import { getProblem } from '../../data/repos/problems';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { AppContext } from './context';
-import { acknowledgeGreeting } from './pet';
+import { acknowledgeGreeting, completeOnboarding } from './pet';
 import {
   addProblem,
   getProblemDetail,
@@ -20,7 +20,7 @@ import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
 export { newSession, type AppContext, type SessionState, type WindowPort } from './context';
-export { createMoodWatcher, nextCelebrationStep } from './pet';
+export { createMoodWatcher, nextCelebrationStep, trayState } from './pet';
 export { reconcile, type ReconcileResult } from './reconcile';
 
 /**
@@ -76,6 +76,10 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     endPetDrag: () => done(() => ctx.windows.endPetDrag()),
     setPetInteractive: ({ interactive }) => done(() => ctx.windows.setPetInteractive(interactive)),
     showPetMenu: () => done(() => ctx.windows.showPetMenu()),
+    showCard: ({ anchor }) => done(() => ctx.windows.showCard(anchor)),
+    hideCard: () => done(() => ctx.windows.hideCard()),
+    setCardSize: ({ width, height }) => done(() => ctx.windows.setCardSize(width, height)),
+    completeOnboarding: (input) => completeOnboarding(ctx, input, getToday),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);
