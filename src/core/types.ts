@@ -163,7 +163,7 @@ export const ACCESSORY_IDS = ['scarf', 'bow_tie', 'crown', 'grad_cap'] as const;
 export type AccessoryId = (typeof ACCESSORY_IDS)[number];
 
 export const ACCESSORIES: Record<AccessoryId, { label: string; unlockedBy: string }> = {
-  scarf: { label: 'Scarf', unlockedBy: 'Your first attempt rated Hard' },
+  scarf: { label: 'Scarf', unlockedBy: 'Solving your first Hard problem' },
   bow_tie: { label: 'Bow tie', unlockedBy: 'A 7-day streak' },
   crown: { label: 'Crown', unlockedBy: 'A 30-day streak' },
   grad_cap: { label: 'Graduation cap', unlockedBy: 'Finishing your first plan' },
