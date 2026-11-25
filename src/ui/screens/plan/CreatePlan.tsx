@@ -11,13 +11,13 @@ import {
   type PlanLevel,
   type PlanPlatform,
 } from '../../../core/plan';
-import type { TopicId } from '../../../core/topics';
+import { topicLabel, type TopicId } from '../../../core/topics';
 import { api } from '../../bridge';
 import { Button } from '../../components/Button';
 import { Page } from '../../components/Layout';
 import { cx, PLATFORM_LABELS } from '../../lib/format';
 import { InlineError } from './notices';
-import { summaryLine, toggleTopic, topicProblemCount } from './planModel';
+import { droppedNote, summaryLine, toggleTopic, topicProblemCount } from './planModel';
 
 const SIZES = [10, 20, 30] as const;
 const LEVEL_LINES: Record<PlanLevel, string> = {
@@ -58,6 +58,8 @@ export function CreatePlan({
   const [size, setSize] = useState<number>(PLAN_SIZE_DEFAULT);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Topics a platform change unpicked, named once so it is not a silent change.
+  const [dropped, setDropped] = useState<string[]>([]);
 
   const countOf = (id: TopicId): number => {
     const topic = overview.topics.find((candidate) => candidate.id === id);
@@ -68,13 +70,13 @@ export function CreatePlan({
     const next = platforms.includes(platform) ? platforms.filter((p) => p !== platform) : PLAN_PLATFORMS.filter((p) => p === platform || platforms.includes(p));
     if (next.length === 0) return;
     setPlatforms(next);
-    // A chosen topic with nothing left on the new platforms drops out.
-    setTopics((current) =>
-      current.filter((id) => {
-        const topic = overview.topics.find((candidate) => candidate.id === id);
-        return topic ? topicProblemCount(topic.counts, next) > 0 : false;
-      }),
-    );
+    // A chosen topic with nothing left on the new platforms drops out, and the form says so.
+    const hasProblems = (id: TopicId): boolean => {
+      const topic = overview.topics.find((candidate) => candidate.id === id);
+      return topic ? topicProblemCount(topic.counts, next) > 0 : false;
+    };
+    setDropped(topics.filter((id) => !hasProblems(id)).map(topicLabel));
+    setTopics(topics.filter(hasProblems));
   }
 
   async function generate(): Promise<void> {
@@ -113,7 +115,10 @@ export function CreatePlan({
                   aria-pressed={selected}
                   disabled={generating || none || full}
                   title={none ? 'No problems on the chosen platforms' : full ? `Up to ${PLAN_MAX_TOPICS} topics` : undefined}
-                  onClick={() => setTopics(toggleTopic(topics, topic.id))}
+                  onClick={() => {
+                    setDropped([]);
+                    setTopics(toggleTopic(topics, topic.id));
+                  }}
                   className={cx(CHIP, chipTone(selected))}
                 >
                   {selected && <Check className="h-3.5 w-3.5 text-accent" aria-hidden />}
@@ -145,6 +150,7 @@ export function CreatePlan({
               );
             })}
           </div>
+          {dropped.length > 0 && <p className="mt-2 text-sm text-fg-muted">{droppedNote(dropped)}</p>}
         </Section>
 
         <Section title="Level">
@@ -205,7 +211,7 @@ export function CreatePlan({
             </div>
           )}
           <div className="flex items-center gap-3">
-            <span className="min-w-0 flex-1 text-base text-fg-muted">{summaryLine(topics.length, size)}</span>
+            <span className="min-w-0 flex-1 text-base text-fg-muted">{summaryLine(topics.map(countOf), size)}</span>
             <Button variant="primary" size="lg" loading={generating} disabled={topics.length === 0} onClick={() => void generate()}>
               {generating ? 'Para is picking problems…' : 'Generate plan'}
             </Button>

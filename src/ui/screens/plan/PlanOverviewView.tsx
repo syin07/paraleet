@@ -9,6 +9,8 @@ import { Card, EmptyState, Page } from '../../components/Layout';
 import { ConfirmDialog } from './ConfirmDialog';
 import { LoadFailed } from './notices';
 import { PlanBody } from './PlanBody';
+import { ProgressFigure } from './ProgressBar';
+import { useLock } from './useLock';
 import { formatCreated, STATUS_LABELS } from './planModel';
 
 function PlanRowButton({ plan, onOpen }: { plan: PlanSummary; onOpen: (id: number) => void }) {
@@ -21,9 +23,7 @@ function PlanRowButton({ plan, onOpen }: { plan: PlanSummary; onOpen: (id: numbe
       >
         <span className="min-w-0 flex-1 truncate text-base text-fg">{plan.title}</span>
         <NeutralBadge>{STATUS_LABELS[plan.status]}</NeutralBadge>
-        <span className="w-14 shrink-0 text-right text-sm tabular-nums text-fg-secondary">
-          {plan.progress.done + plan.progress.skipped} / {plan.progress.total}
-        </span>
+        <ProgressFigure progress={plan.progress} className="w-36 shrink-0 text-sm text-fg-secondary" />
         <span className="w-14 shrink-0 text-right text-sm text-fg-muted">{formatCreated(plan.createdAt)}</span>
       </button>
     </li>
@@ -92,6 +92,8 @@ export function PlanOverviewView({
   onOverview: (overview: PlanOverview) => void;
 }) {
   const [archiving, setArchiving] = useState(false);
+  // The active plan is never edited here; the lock is only there for the shared plan layout.
+  const lock = useLock();
   const { llm, active } = overview;
   const canCreate = llm.hasKey;
 
@@ -118,7 +120,7 @@ export function PlanOverviewView({
         </div>
       )}
       {active ? (
-        <PlanBody plan={active} editable={false} onChange={() => undefined} loggedIds={new Set()} />
+        <PlanBody plan={active} editable={false} onChange={() => undefined} loggedIds={new Set()} lock={lock} />
       ) : canCreate ? (
         <Card padding="none" large>
           <EmptyState

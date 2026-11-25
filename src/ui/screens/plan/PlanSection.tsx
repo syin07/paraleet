@@ -6,6 +6,7 @@ import { Card } from '../../components/Layout';
 import { PlanRow } from './PlanRow';
 import { startsCollapsed } from './planModel';
 import { ProgressBar } from './ProgressBar';
+import type { Lock } from './useLock';
 
 const STAGE_CAPS = { foundations: 'Foundations', patterns: 'Pattern', challenge: 'Challenge' } as const;
 
@@ -17,6 +18,9 @@ export function PlanSection({
   loggedIds,
   swapFor,
   setSwapFor,
+  lock,
+  focusTitleFor,
+  setFocusTitleFor,
   onChange,
   onError,
 }: {
@@ -26,6 +30,9 @@ export function PlanSection({
   loggedIds: ReadonlySet<number>;
   swapFor: number | null;
   setSwapFor: (problemId: number | null) => void;
+  lock: Lock;
+  focusTitleFor: number | null;
+  setFocusTitleFor: (problemId: number | null) => void;
   onChange: (plan: PlanView) => void;
   onError: (message: string) => void;
 }) {
@@ -65,7 +72,12 @@ export function PlanSection({
               planId={planId}
               item={item}
               editable={editable}
-              solvedBefore={editable && (item.state === 'skipped' || loggedIds.has(item.problem.id))}
+              // A draft item is never skipped (only activation sets that), so "solved before" comes from the log alone.
+              solvedBefore={editable && loggedIds.has(item.problem.id)}
+              lock={lock}
+              focusTitle={focusTitleFor === item.problem.id}
+              onTitleFocused={() => setFocusTitleFor(null)}
+              onSwapped={setFocusTitleFor}
               isFirst={index === 0}
               isLast={index === section.items.length - 1}
               swapOpen={swapFor === item.problem.id}

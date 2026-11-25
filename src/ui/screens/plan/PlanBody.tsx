@@ -9,7 +9,8 @@ import { NeutralBadge } from '../../components/Badges';
 import { InlineError } from './notices';
 import { PlanSection } from './PlanSection';
 import { formatCreated, groupByTopic, STATUS_LABELS } from './planModel';
-import { ProgressBar } from './ProgressBar';
+import { ProgressFigure, ProgressBar } from './ProgressBar';
+import type { Lock } from './useLock';
 
 export function PlanBody({
   plan,
@@ -17,6 +18,7 @@ export function PlanBody({
   banner,
   onChange,
   loggedIds,
+  lock,
 }: {
   plan: PlanView;
   /** True for a draft: rows get move, swap and remove buttons. */
@@ -26,10 +28,14 @@ export function PlanBody({
   onChange: (plan: PlanView) => void;
   /** Problems the user has attempted before, so a draft can tag them. */
   loggedIds: ReadonlySet<number>;
+  /** One edit at a time for the whole plan. */
+  lock: Lock;
 }) {
   const [error, setError] = useState<string | null>(null);
   // At most one row has its alternatives open.
   const [swapFor, setSwapFor] = useState<number | null>(null);
+  // After a swap the row is replaced: focus goes to the new row's title.
+  const [focusTitleFor, setFocusTitleFor] = useState<number | null>(null);
   const blocks = groupByTopic(plan.sections);
   const platforms = plan.platforms.map((platform) => PLATFORM_LABELS[platform]).join(', ');
 
@@ -46,9 +52,7 @@ export function PlanBody({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3" data-testid="plan-overall">
-          <span className="text-base tabular-nums text-fg-secondary">
-            {plan.progress.done + plan.progress.skipped} / {plan.progress.total}
-          </span>
+          <ProgressFigure progress={plan.progress} className="text-base text-fg-secondary" />
           <ProgressBar progress={plan.progress} width={120} label="Overall progress" />
         </div>
       </div>
@@ -70,6 +74,9 @@ export function PlanBody({
                   section={section}
                   editable={editable}
                   loggedIds={loggedIds}
+                  lock={lock}
+                  focusTitleFor={focusTitleFor}
+                  setFocusTitleFor={setFocusTitleFor}
                   swapFor={swapFor}
                   setSwapFor={setSwapFor}
                   onChange={(next) => {

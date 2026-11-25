@@ -1,10 +1,11 @@
 import { ArrowDown, ArrowUp, ArrowLeftRight, CircleCheck, Circle, Minus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PlanItemView, PlanView, ProblemSummary } from '../../../bridge/contract';
 import { api } from '../../bridge';
 import { DifficultyText, PlatformBadge, StatusBadge } from '../../components/Badges';
 import { Button } from '../../components/Button';
 import { cx, problemTitle } from '../../lib/format';
+import type { Lock } from './useLock';
 
 /** A draft shows at most this many alternatives for a swap. */
 const MAX_ALTERNATIVES = 5;
@@ -28,6 +29,10 @@ export function PlanRow({
   isLast,
   swapOpen,
   setSwapOpen,
+  lock,
+  focusTitle,
+  onTitleFocused,
+  onSwapped,
   onChange,
   onError,
 }: {
@@ -39,22 +44,43 @@ export function PlanRow({
   isLast: boolean;
   swapOpen: boolean;
   setSwapOpen: (open: boolean) => void;
+  lock: Lock;
+  /** True when this row just took the place of a swapped one: its title gets focus. */
+  focusTitle: boolean;
+  onTitleFocused: () => void;
+  onSwapped: (replacementId: number) => void;
   onChange: (plan: PlanView) => void;
   onError: (message: string) => void;
 }) {
   const { problem } = item;
-  const [busy, setBusy] = useState(false);
+  const { busy } = lock;
   const name = problemTitle(problem);
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const swapButton = useRef<HTMLButtonElement>(null);
 
-  async function run(work: () => Promise<PlanView>): Promise<void> {
-    setBusy(true);
-    try {
-      onChange(await work());
-    } catch (error) {
-      onError(message(error));
-    } finally {
-      setBusy(false);
-    }
+  useEffect(() => {
+    if (!focusTitle) return;
+    titleButton.current?.focus();
+    onTitleFocused();
+  }, [focusTitle, onTitleFocused]);
+
+  /** Sends one edit. Says whether it worked; a refused edit shows its message and changes nothing. */
+  async function run(work: () => Promise<PlanView>): Promise<boolean> {
+    const result = await lock.guard(async () => {
+      try {
+        onChange(await work());
+        return true;
+      } catch (error) {
+        onError(message(error));
+        return false;
+      }
+    });
+    return result.ran && result.value;
+  }
+
+  function closeSwap(): void {
+    setSwapOpen(false);
+    swapButton.current?.focus();
   }
 
   const ref = { planId, problemId: problem.id };
@@ -66,6 +92,7 @@ export function PlanRow({
         </span>
         <div className="min-w-0 flex-1">
           <button
+            ref={titleButton}
             type="button"
             onClick={() => void api().openProblem({ problemId: problem.id }).catch((error: unknown) => onError(message(error)))}
             className={cx(
@@ -81,7 +108,8 @@ export function PlanRow({
         <span className="w-16 shrink-0 text-right">
           <DifficultyText raw={problem.difficultyRaw} norm={problem.difficultyNorm} />
         </span>
-        {item.isNext && <StatusBadge>Next</StatusBadge>}
+        {/* A slot of its own, so "Next" never moves the columns before it. */}
+        {!editable && <span className="flex w-10 shrink-0 justify-end">{item.isNext && <StatusBadge>Next</StatusBadge>}</span>}
         {editable && (
           <span className="flex shrink-0 items-center gap-0.5">
             <Button
@@ -103,13 +131,14 @@ export function PlanRow({
               icon={<ArrowDown className="h-3.5 w-3.5" />}
             />
             <Button
+              ref={swapButton}
               variant="ghost"
               size="sm"
               iconOnly
               aria-label={`Swap ${name}`}
               aria-expanded={swapOpen}
               disabled={busy}
-              onClick={() => setSwapOpen(!swapOpen)}
+              onClick={() => (swapOpen ? closeSwap() : setSwapOpen(true))}
               icon={<ArrowLeftRight className="h-3.5 w-3.5" />}
             />
             <Button
@@ -128,8 +157,12 @@ export function PlanRow({
         <SwapOptions
           planId={planId}
           problemId={problem.id}
-          onClose={() => setSwapOpen(false)}
-          onPick={(replacementId) => run(() => api().swapPlanItem({ ...ref, replacementId }))}
+          busy={busy}
+          onClose={closeSwap}
+          onPick={async (replacementId) => {
+            // The row is replaced by the new problem's row: focus its title, not the gone button.
+            if (await run(() => api().swapPlanItem({ ...ref, replacementId }))) onSwapped(replacementId);
+          }}
         />
       )}
     </li>
@@ -140,16 +173,20 @@ export function PlanRow({
 function SwapOptions({
   planId,
   problemId,
+  busy,
   onClose,
   onPick,
 }: {
   planId: number;
   problemId: number;
+  busy: boolean;
   onClose: () => void;
   onPick: (replacementId: number) => Promise<void>;
 }) {
   const [options, setOptions] = useState<ProblemSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const first = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let current = true;
@@ -164,28 +201,40 @@ function SwapOptions({
     };
   }, [planId, problemId]);
 
+  // Opening the list moves focus into it: the first option, or Cancel when there is none.
+  const loaded = options !== null || error !== null;
+  useEffect(() => {
+    if (loaded) (first.current ?? cancel.current)?.focus();
+  }, [loaded]);
+
   return (
     <div
       role="group"
       aria-label="Alternatives"
-      onKeyDown={(event) => event.key === 'Escape' && onClose()}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        onClose();
+      }}
       className="mx-4 mb-3 rounded-sm border border-line bg-sunken p-1"
     >
       <div className="flex items-center justify-between px-2 py-1">
         <span className="section-label">Swap for</span>
-        <Button size="sm" variant="ghost" onClick={onClose}>
+        <Button ref={cancel} size="sm" variant="ghost" onClick={onClose}>
           Cancel
         </Button>
       </div>
       {error && <div className="px-2 py-1 text-sm text-hard-text">{error}</div>}
       {!error && !options && <div className="px-2 py-1 text-sm text-fg-muted">Loading…</div>}
       {options?.length === 0 && <div className="px-2 py-1 text-sm text-fg-muted">No alternatives for this problem.</div>}
-      {options?.map((option) => (
+      {options?.map((option, index) => (
         <button
           key={option.id}
+          ref={index === 0 ? first : undefined}
           type="button"
+          disabled={busy}
           onClick={() => void onPick(option.id)}
-          className="focus-ring app-no-drag flex h-8 w-full items-center gap-3 rounded-xs px-2 text-left text-base text-fg hover:bg-raised"
+          className="focus-ring app-no-drag flex h-8 w-full items-center gap-3 rounded-xs px-2 text-left text-base text-fg hover:bg-raised disabled:pointer-events-none disabled:opacity-60"
         >
           <span className="min-w-0 flex-1 truncate">{problemTitle(option)}</span>
           <PlatformBadge platform={option.platform} />

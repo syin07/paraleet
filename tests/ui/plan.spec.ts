@@ -171,7 +171,11 @@ test.describe('create', () => {
     await expect(chip(page, 'Arrays & hashing')).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('group', { name: 'Platforms' }).getByRole('button', { name: 'LeetCode' }).click();
     await expect(chip(page, 'Arrays & hashing')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByText('Arrays & hashing has no problems on the platforms left, so it was unpicked.')).toBeVisible();
     await expect(page.getByText('Pick at least one topic')).toBeVisible();
+    // The note goes away with the next choice.
+    await chip(page, 'Greedy').click();
+    await expect(page.getByText(/so it was unpicked/)).toHaveCount(0);
   });
 
   test('a fifth topic cannot be picked', async ({ page }) => {
@@ -295,7 +299,10 @@ test.describe('draft review', () => {
 
   test('Activate plan makes it the active plan, with a Next problem', async ({ page }) => {
     await openDraft(page);
+    await expect(page.getByText(/Activating this plan archives/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Activate plan' }).click();
+    // Nothing is active, so nothing is asked.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
     await expect(page.getByText('Draft plan. Remove, reorder')).toHaveCount(0);
     await expect(page.getByText('Next', { exact: true })).toHaveCount(1);
@@ -315,7 +322,8 @@ test.describe('active plan', () => {
     await expect(page.getByText('Foundations', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Challenge', { exact: true }).first()).toBeVisible();
     // Done and pending counts, and a bar, per card; an overall figure in the header.
-    await expect(page.getByTestId('plan-overall')).toContainText(/\d+ \/ \d+/);
+    await expect(page.getByTestId('plan-overall')).toContainText('5 / 22 · 1 skipped');
+    await expect(page.getByTestId('plan-overall').getByLabel('All finished')).toHaveCount(0);
     await expect(sections(page).first()).toContainText('3 done · 0 pending');
     await expect(sections(page).nth(1)).toContainText('1 done · 1 skipped · 1 pending');
     await expect(page.getByRole('progressbar', { name: 'Overall progress' })).toBeVisible();
@@ -477,5 +485,244 @@ test.describe('loading and failures', () => {
     await rows(page).first().getByRole('button', { name: /^Remove / }).click();
     await expect(page.getByRole('alert')).toContainText('A plan needs at least one problem.');
     await expect(rows(page)).toHaveCount(before);
+  });
+});
+
+test.describe('activating while another plan is active', () => {
+  async function generateDraft(page: Page): Promise<void> {
+    await openCreate(page, 'plan-active');
+    await pickTopics(page, ['Binary search']);
+    await page.getByRole('button', { name: 'Generate plan' }).click();
+    await expect(page.getByRole('button', { name: 'Activate plan' })).toBeVisible();
+  }
+
+  test('asks first, naming the plan it will archive; Cancel keeps both as they were', async ({ page }) => {
+    await generateDraft(page);
+    await expect(page.getByText('Activating this plan archives “Arrays & hashing, Sliding window”.')).toBeVisible();
+    await page.getByRole('button', { name: 'Activate plan' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Activate this plan?' });
+    await expect(dialog).toContainText('“Arrays & hashing, Sliding window” will be archived.');
+    await expect(dialog).toContainText('an archived plan cannot be made active again');
+    await captureBothSizes(page, 'plan-activate-confirm');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    // Still a draft.
+    await expect(page.getByRole('button', { name: 'Activate plan' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Arrays & hashing, Sliding window', level: 2 })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Drafts' }).getByRole('button')).toHaveCount(1);
+    await expect(page.getByRole('region', { name: 'Past plans' }).getByRole('button')).toHaveCount(2);
+  });
+
+  test('confirming makes the draft active and lists the old plan as archived', async ({ page }) => {
+    await generateDraft(page);
+    await page.getByRole('button', { name: 'Activate plan' }).click();
+    await page.getByRole('dialog', { name: 'Activate this plan?' }).getByRole('button', { name: 'Activate plan' }).click();
+    await expect(page.getByRole('heading', { name: 'Binary search', level: 2 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Drafts' })).toHaveCount(0);
+    const past = page.getByRole('region', { name: 'Past plans' });
+    await expect(past.getByRole('button')).toHaveCount(3);
+    await expect(past.getByRole('button').filter({ hasText: 'Arrays & hashing, Sliding window' })).toContainText('Archived');
+  });
+
+  test('an existing draft asks too, and a double-click on the confirm button activates once', async ({ page }) => {
+    await openScreen(page, 'plan', 'plan-active');
+    await page.evaluate(() => {
+      const bridge = (globalThis as unknown as { paraleet: Bridge }).paraleet;
+      const original = bridge['activatePlan'] as Bridge[string];
+      (globalThis as unknown as { __calls: number }).__calls = 0;
+      bridge['activatePlan'] = (...args: unknown[]) => {
+        (globalThis as unknown as { __calls: number }).__calls += 1;
+        return original(...args);
+      };
+    });
+    // The scenario has no draft: make one through the form.
+    await page.getByRole('button', { name: 'Create a plan' }).click();
+    await pickTopics(page, ['Greedy']);
+    await page.getByRole('button', { name: 'Generate plan' }).click();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('region', { name: 'Drafts' }).getByRole('button').click();
+    await page.getByRole('button', { name: 'Activate plan' }).click();
+    await page.getByRole('dialog', { name: 'Activate this plan?' }).getByRole('button', { name: 'Activate plan' }).dblclick();
+    await expect(page.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => (globalThis as unknown as { __calls: number }).__calls)).toBe(1);
+  });
+});
+
+test.describe('one command at a time', () => {
+  async function openDraft(page: Page): Promise<void> {
+    await openScreen(page, 'plan', 'plan-draft');
+    await page.getByRole('region', { name: 'Drafts' }).getByRole('button').click();
+    await expect(page.getByRole('button', { name: 'Activate plan' })).toBeVisible();
+  }
+  async function countCalls(page: Page, method: string): Promise<void> {
+    await page.evaluate((name) => {
+      const bridge = (globalThis as unknown as { paraleet: Bridge }).paraleet;
+      const original = bridge[name] as Bridge[string];
+      const counts = ((globalThis as unknown as { __counts?: Record<string, number> }).__counts ??= {});
+      counts[name] = 0;
+      bridge[name] = (...args: unknown[]) => {
+        counts[name] = (counts[name] ?? 0) + 1;
+        return original(...args);
+      };
+    }, method);
+  }
+  const calls = (page: Page, method: string) =>
+    page.evaluate((name) => (globalThis as unknown as { __counts: Record<string, number> }).__counts[name], method);
+
+  test('a double-click on a swap choice swaps once', async ({ page }) => {
+    await openDraft(page);
+    await countCalls(page, 'swapPlanItem');
+    await replaceMethod(page, 'swapPlanItem', 'return new Promise((resolve) => setTimeout(() => resolve(original(...args)), 400));');
+    const title = (await rows(page).first().locator('button').first().textContent()) ?? '';
+    await page.getByRole('button', { name: `Swap ${title}` }).click();
+    const options = page.getByRole('group', { name: 'Alternatives' });
+    const choice = options.getByRole('button').filter({ hasNot: page.getByText('Cancel', { exact: true }) }).first();
+    await choice.dblclick();
+    await expect(options).toHaveCount(0);
+    expect(await calls(page, 'swapPlanItem')).toBe(1);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('a double-click on Remove removes one problem', async ({ page }) => {
+    await openDraft(page);
+    await countCalls(page, 'removePlanItem');
+    // A slow answer, so the second click lands while the first command is still in flight.
+    await replaceMethod(page, 'removePlanItem', 'return new Promise((resolve) => setTimeout(() => resolve(original(...args)), 400));');
+    const before = await rows(page).count();
+    const title = (await rows(page).first().locator('button').first().textContent()) ?? '';
+    await page.getByRole('button', { name: `Remove ${title}` }).dblclick();
+    await expect(rows(page)).toHaveCount(before - 1);
+    expect(await calls(page, 'removePlanItem')).toBe(1);
+  });
+
+  test('every edit button is disabled while an edit is in flight', async ({ page }) => {
+    await openDraft(page);
+    await replaceMethod(page, 'movePlanItem', 'return new Promise((resolve) => { window.__finish = () => resolve(original(...args)); });');
+    const first = sections(page).first().getByTestId('plan-row').first();
+    const title = (await first.locator('button').first().textContent()) ?? '';
+    await page.getByRole('button', { name: `Move down ${title}` }).click();
+    await expect(page.getByRole('button', { name: /^Remove / }).first()).toBeDisabled();
+    await expect(page.getByRole('button', { name: /^Swap / }).first()).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Activate plan' })).toBeDisabled();
+    await page.evaluate(() => (globalThis as unknown as { __finish: () => void }).__finish());
+    await expect(page.getByRole('button', { name: /^Remove / }).first()).toBeEnabled();
+  });
+});
+
+test.describe('the swap list and focus', () => {
+  async function openDraft(page: Page): Promise<string> {
+    await openScreen(page, 'plan', 'plan-draft');
+    await page.getByRole('region', { name: 'Drafts' }).getByRole('button').click();
+    await expect(page.getByRole('button', { name: 'Activate plan' })).toBeVisible();
+    return (await rows(page).first().locator('button').first().textContent()) ?? '';
+  }
+  const choices = (page: Page) =>
+    page.getByRole('group', { name: 'Alternatives' }).getByRole('button').filter({ hasNot: page.getByText('Cancel', { exact: true }) });
+
+  test('opening the list focuses its first option and Escape closes it from the list', async ({ page }) => {
+    const title = await openDraft(page);
+    await page.getByRole('button', { name: `Swap ${title}` }).click();
+    await expect(choices(page).first()).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(choices(page).nth(1)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('group', { name: 'Alternatives' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: `Swap ${title}` })).toBeFocused();
+  });
+
+  test('Cancel returns focus to the row\'s swap button', async ({ page }) => {
+    const title = await openDraft(page);
+    await page.getByRole('button', { name: `Swap ${title}` }).click();
+    await page.getByRole('group', { name: 'Alternatives' }).getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('button', { name: `Swap ${title}` })).toBeFocused();
+  });
+
+  test('after a pick, focus is on the new row\'s title', async ({ page }) => {
+    const title = await openDraft(page);
+    await page.getByRole('button', { name: `Swap ${title}` }).click();
+    await choices(page).first().click();
+    const newTitle = rows(page).first().locator('button').first();
+    await expect(newTitle).not.toHaveText(title);
+    await expect(newTitle).toBeFocused();
+  });
+});
+
+test.describe('solved tags follow the data', () => {
+  test('a problem reported while the draft is open is tagged without reopening it', async ({ page }) => {
+    await openScreen(page, 'plan', 'plan-draft');
+    await page.getByRole('region', { name: 'Drafts' }).getByRole('button').click();
+    await expect(page.getByRole('button', { name: 'Activate plan' })).toBeVisible();
+    const tags = page.getByText('solved, will be offered as review');
+    const before = await tags.count();
+    expect(before).toBeLessThan(await rows(page).count());
+    // Pretend every problem of the plan is now in the log, then let the app say data changed.
+    const ids = await page.evaluate(async () => {
+      const bridge = (globalThis as unknown as { paraleet: Record<string, (input?: unknown) => Promise<unknown>> }).paraleet;
+      const overview = (await bridge['getPlanOverview']?.()) as { drafts: { id: number }[] };
+      const plan = (await bridge['getPlan']?.({ planId: overview.drafts[0]?.id })) as {
+        sections: { items: { problem: { id: number } }[] }[];
+      };
+      return plan.sections.flatMap((section) => section.items.map((item) => item.problem.id));
+    });
+    await replaceMethod(
+      page,
+      'listLoggedProblems',
+      `return original(...args).then((rows) => [...rows, ...${JSON.stringify(ids)}.map((id) => ({ problem: { id } }))]);`,
+    );
+    const title = (await rows(page).first().locator('button').first().textContent()) ?? '';
+    await page.getByRole('button', { name: `Remove ${title}` }).click();
+    await expect(tags).toHaveCount(await rows(page).count());
+  });
+});
+
+test.describe('progress and columns', () => {
+  test('the figure shows skipped items beside the count, in the header and in the lists', async ({ page }) => {
+    await openScreen(page, 'plan', 'plan-active');
+    await expect(page.getByTestId('plan-overall')).toContainText('5 / 22 · 1 skipped');
+    const past = page.getByRole('region', { name: 'Past plans' });
+    const finished = past.getByRole('button').filter({ hasText: 'Finished' });
+    await expect(finished).toContainText('11 / 11');
+    await expect(finished).not.toContainText('skipped');
+    await expect(finished.getByLabel('All finished')).toBeVisible();
+    await expect(past.getByRole('button').filter({ hasText: 'Archived' })).toContainText('0 / 11');
+    await expect(past.getByRole('button').filter({ hasText: 'Archived' }).getByLabel('All finished')).toHaveCount(0);
+    await finished.click();
+    await expect(page.getByTestId('plan-overall').getByLabel('All finished')).toBeVisible();
+  });
+
+  test('the Next badge does not move the platform and difficulty columns', async ({ page }) => {
+    await openScreen(page, 'plan', 'plan-active');
+    const section = sections(page).nth(1);
+    const next = section.getByTestId('plan-row').filter({ hasText: 'Next' });
+    const other = section.getByTestId('plan-row').filter({ hasNotText: 'Next' }).first();
+    await expect(next).toHaveCount(1);
+    const edge = async (row: typeof next, text: string): Promise<number> => {
+      const box = await row.getByText(text, { exact: true }).first().boundingBox();
+      return Math.round((box?.x ?? -1) + (box?.width ?? 0));
+    };
+    expect(await edge(next, 'LeetCode')).toBe(await edge(other, 'LeetCode'));
+    const difficulty = (row: typeof next) => row.locator('span.w-16');
+    const right = async (row: typeof next): Promise<number> => {
+      const box = await difficulty(row).boundingBox();
+      return Math.round((box?.x ?? -1) + (box?.width ?? 0));
+    };
+    expect(await right(next)).toBe(await right(other));
+  });
+});
+
+test.describe('create form honesty', () => {
+  test('the summary counts a thin topic by the problems it has', async ({ page }) => {
+    await openCreate(page);
+    const platforms = page.getByRole('group', { name: 'Platforms' });
+    await platforms.getByRole('button', { name: 'LeetCode' }).click();
+    await platforms.getByRole('button', { name: 'Codeforces' }).click();
+    // Two pointers has 12 problems on CSES in the mock: fewer than the 20 asked for.
+    await chip(page, 'Two pointers').click();
+    await expect(chip(page, 'Two pointers')).toContainText('12');
+    await expect(page.getByText('About 12 problems from 1 topic')).toBeVisible();
+    await page.getByRole('radio', { name: '10' }).click();
+    await expect(page.getByText('About 10 problems from 1 topic')).toBeVisible();
   });
 });

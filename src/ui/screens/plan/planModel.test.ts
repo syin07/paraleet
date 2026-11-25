@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanSectionView } from '../../../bridge/contract';
-import { groupByTopic, percentDone, startsCollapsed, summaryLine, toggleTopic, topicProblemCount } from './planModel';
+import { allFinished, droppedNote, groupByTopic, progressFigure, percentDone, startsCollapsed, summaryLine, toggleTopic, topicProblemCount } from './planModel';
 
 const progress = (done: number, skipped: number, pending: number) => ({ done, skipped, pending, total: done + skipped + pending });
 
@@ -24,10 +24,34 @@ describe('toggleTopic', () => {
 });
 
 describe('summaryLine', () => {
-  it('multiplies topics by size', () => {
-    expect(summaryLine(3, 20)).toBe('About 60 problems from 3 topics');
-    expect(summaryLine(1, 10)).toBe('About 10 problems from 1 topic');
-    expect(summaryLine(0, 20)).toBe('Pick at least one topic');
+  it('adds up the size of each topic', () => {
+    expect(summaryLine([100, 100, 100], 20)).toBe('About 60 problems from 3 topics');
+    expect(summaryLine([100], 10)).toBe('About 10 problems from 1 topic');
+    expect(summaryLine([], 20)).toBe('Pick at least one topic');
+  });
+  it('counts a thin topic by what it has, not by the size', () => {
+    expect(summaryLine([12, 100], 20)).toBe('About 32 problems from 2 topics');
+    expect(summaryLine([20, 5], 20)).toBe('About 25 problems from 2 topics');
+  });
+});
+
+describe('progressFigure and allFinished', () => {
+  it('adds the skipped count so the numbers add up', () => {
+    expect(progressFigure(progress(4, 1, 17))).toBe('5 / 22 · 1 skipped');
+    expect(progressFigure(progress(4, 0, 6))).toBe('4 / 10');
+  });
+  it('is finished only when nothing is pending', () => {
+    expect(allFinished(progress(3, 1, 0))).toBe(true);
+    expect(allFinished(progress(3, 0, 1))).toBe(false);
+    expect(allFinished(progress(0, 0, 0))).toBe(false);
+  });
+});
+
+describe('droppedNote', () => {
+  it('names the topics that were unpicked', () => {
+    expect(droppedNote([])).toBeNull();
+    expect(droppedNote(['Greedy'])).toBe('Greedy has no problems on the platforms left, so it was unpicked.');
+    expect(droppedNote(['Greedy', 'Math'])).toBe('Greedy and Math have no problems on the platforms left, so they were unpicked.');
   });
 });
 

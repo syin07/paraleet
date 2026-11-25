@@ -14,10 +14,33 @@ export function toggleTopic(selected: readonly TopicId[], topic: TopicId, max: n
   return selected.length >= max ? [...selected] : [...selected, topic];
 }
 
-/** "About 60 problems from 3 topics". */
-export function summaryLine(topicCount: number, sizePerTopic: number): string {
-  if (topicCount === 0) return 'Pick at least one topic';
-  return `About ${topicCount * sizePerTopic} problems from ${topicCount} ${topicCount === 1 ? 'topic' : 'topics'}`;
+/**
+ * "About 60 problems from 3 topics". `available` is how many catalog problems each chosen topic
+ * has on the chosen platforms: a thin topic cannot give the full size.
+ */
+export function summaryLine(available: readonly number[], sizePerTopic: number): string {
+  const topics = available.length;
+  if (topics === 0) return 'Pick at least one topic';
+  const total = available.reduce((sum, count) => sum + Math.min(sizePerTopic, count), 0);
+  return `About ${total} problems from ${topics} ${topics === 1 ? 'topic' : 'topics'}`;
+}
+
+/** "5 / 22", with " · 1 skipped" when some problems were skipped, so the numbers visibly add up. */
+export function progressFigure(progress: PlanProgress): string {
+  const base = `${finishedCount(progress)} / ${progress.total}`;
+  return progress.skipped > 0 ? `${base} · ${progress.skipped} skipped` : base;
+}
+
+/** True when nothing is pending in a plan that has problems. */
+export function allFinished(progress: PlanProgress): boolean {
+  return progress.total > 0 && progress.pending === 0;
+}
+
+/** "Greedy has no problems on the platforms left, so it was unpicked." */
+export function droppedNote(labels: readonly string[]): string | null {
+  if (labels.length === 0) return null;
+  const list = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+  return `${list} ${labels.length === 1 ? 'has' : 'have'} no problems on the platforms left, so ${labels.length === 1 ? 'it was' : 'they were'} unpicked.`;
 }
 
 /** Problems that need no more work: done, or skipped because they were solved before. */
