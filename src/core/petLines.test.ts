@@ -38,6 +38,24 @@ describe('LINES pools', () => {
     }
   });
 
+  it('keeps a template with no placeholder in both the even and the odd half of every pool', () => {
+    for (const mood of MOODS) {
+      for (const half of [0, 1]) {
+        const plain = LINES[mood].filter((t, index) => index % 2 === half && !t.includes('{'));
+        expect(plain.length, `${mood} half ${half}`).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it('spreads the placeholder templates over both halves', () => {
+    for (const mood of ['peckish', 'hungry', 'content'] as const) {
+      for (const marker of mood === 'content' ? ['{streak}'] : ['{title}']) {
+        const halves = new Set(LINES[mood].flatMap((t, index) => (t.includes(marker) ? [index % 2] : [])));
+        expect(halves.size, `${mood} ${marker}`).toBe(2);
+      }
+    }
+  });
+
   it('has no duplicate templates within a mood', () => {
     for (const mood of MOODS) expect(new Set(LINES[mood]).size).toBe(LINES[mood].length);
   });
@@ -145,6 +163,49 @@ describe('voice: banned words', () => {
 
 describe('pickLine', () => {
   const seeds = [0, 1, 42, 99999, 4294967295];
+
+  describe('never the same line two days running, whatever is eligible', () => {
+    type Facts = Pick<LineContext, 'problemTitle' | 'platformLabel' | 'streak'>;
+    const withProblem = { problemTitle: 'Two Sum', platformLabel: 'LeetCode' };
+    const noProblem = { problemTitle: null, platformLabel: null };
+
+    function check(name: string, factsFor: (seed: number, day: number) => Facts) {
+      it(name, () => {
+        for (const seed of seeds) {
+          for (const mood of MOODS) {
+            let previous: string | null = null;
+            for (let day = 0; day < 365; day += 1) {
+              const line = pickLine(context({ seed, mood, today: addDays('2026-01-01', day), ...factsFor(seed, day) }));
+              expect(line, `${mood} seed ${seed} day ${day}`).not.toBeNull();
+              expect(line, `${mood} seed ${seed} day ${day}`).not.toBe(previous);
+              previous = line;
+            }
+          }
+        }
+      });
+    }
+
+    check('with the problem present and absent on alternate days', (_seed, day) => ({
+      ...(day % 2 === 0 ? withProblem : noProblem),
+      streak: 5,
+    }));
+    check('with the problem present on the odd days only', (_seed, day) => ({
+      ...(day % 2 === 1 ? withProblem : noProblem),
+      streak: 5,
+    }));
+    check('with the streak crossing 2 every day', (_seed, day) => ({ ...withProblem, streak: day % 2 === 0 ? 1 : 2 }));
+    check('with a seeded irregular pattern of problem and streak', (seed, day) => {
+      const bits = hashBits(seed, day);
+      return { ...(bits & 1 ? withProblem : noProblem), streak: (bits >> 1) % 4 };
+    });
+
+    // A small integer mix, so the pattern is irregular but identical on every run.
+    function hashBits(seed: number, day: number): number {
+      let value = (seed ^ Math.imul(day + 1, 0x9e3779b1)) >>> 0;
+      value = Math.imul(value ^ (value >>> 15), 0x85ebca6b) >>> 0;
+      return (value ^ (value >>> 13)) >>> 0;
+    }
+  });
 
   it('is deterministic for the same context', () => {
     for (const mood of MOODS) {

@@ -24,7 +24,7 @@ export const LINES: Readonly<Record<Mood, readonly string[]>> = {
     'I have preened. I look incredible.',
     'Chirp! That was a tasty problem.',
     'Nothing left to do but be a lovely bird.',
-    'Today’s problem? Squashed. Nice work.',
+    'Problem squashed. Nice work.',
     'Just you, me, and a very full belly.',
     '{streak} days in a row. I am one lucky bird.',
     'Day {streak} of us being brilliant.',
@@ -119,18 +119,19 @@ export function fillTemplate(template: string, context: LineContext): string {
  *
  * The pick is a hash of seed, day and mood. To guarantee two days running never repeat without
  * looking at yesterday's pick (which would depend on the day before, and so on), even-numbered
- * days choose from the even-positioned eligible templates and odd-numbered days from the odd ones.
- * The guarantee holds while the eligible set is the same on both days; with a single eligible
- * template there is nothing else to say.
+ * days choose only from templates at even indexes of the full pool and odd-numbered days from odd
+ * indexes; eligibility then filters within that half. A template's index never changes, so the
+ * guarantee holds whatever is eligible on either day. Each half of each pool keeps a template
+ * with no placeholder (tested), so a half is never empty; the fallback to the other half is only
+ * a safety net.
  */
 export function pickLine(context: LineContext): string | null {
-  const eligible = (LINES[context.mood] ?? []).filter((template) => isEligible(template, context));
-  if (eligible.length === 0) return null;
-  let pool = eligible;
-  if (eligible.length >= 2) {
-    const parity = ((daysBetween('1970-01-01', context.today) % 2) + 2) % 2;
-    pool = eligible.filter((_, index) => index % 2 === parity);
-  }
+  const all = LINES[context.mood] ?? [];
+  const parity = ((daysBetween('1970-01-01', context.today) % 2) + 2) % 2;
+  const inHalf = (half: number) => all.filter((template, index) => index % 2 === half && isEligible(template, context));
+  let pool = inHalf(parity);
+  if (pool.length === 0) pool = inHalf(1 - parity);
+  if (pool.length === 0) return null;
   const index = hash(`${context.seed}|${context.today}|${context.mood}`) % pool.length;
   return fillTemplate(pool[index] as string, context);
 }
