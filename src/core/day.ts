@@ -7,6 +7,12 @@ import type { ParaDay } from './types';
 
 export const DEFAULT_BOUNDARY_HOUR = 4;
 
+/**
+ * How many days a last fed day can be ahead of the computed day and still be explained by a move
+ * to an earlier time zone. Further ahead is a wrong system clock, not travel.
+ */
+export const MAX_ZONE_SHIFT_DAYS = 2;
+
 interface LocalParts {
   year: number;
   month: number;
@@ -106,5 +112,5 @@ export function weekdayIndex(day: ParaDay): number {
 export function effectiveToday(computed: ParaDay, lastFedDay: ParaDay | null): ParaDay {
   if (lastFedDay === null) return computed;
   const ahead = daysBetween(computed, lastFedDay);
-  return ahead > 0 && ahead <= 2 ? lastFedDay : computed;
+  return ahead > 0 && ahead <= MAX_ZONE_SHIFT_DAYS ? lastFedDay : computed;
 }

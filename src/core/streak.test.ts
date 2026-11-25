@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAttempt, EMPTY_PET_FACTS, recomputePetFacts, stageFor } from './petFacts';
 import { capRatingAfterReveal } from './scheduler';
-import { effectiveToday, paraDayOf } from './day';
+import { addDays, effectiveToday, MAX_ZONE_SHIFT_DAYS, paraDayOf } from './day';
 import { applyFedDay, displayedStreak, EMPTY_STREAK, isFedOn, missedDays } from './streak';
 
 describe('streak', () => {
@@ -144,6 +144,37 @@ describe('streak: time-zone stories', () => {
     expect(displayedStreak(state, day)).toBe(2); // not yet missed
     state = applyFedDay(state, day);
     expect(state).toEqual({ current: 3, longest: 3, lastFedDay: '2026-11-25' });
+  });
+});
+
+describe('the 2-day limit', () => {
+  const today = '2026-11-25';
+  const stateAhead = (days: number) => ({ current: 4, longest: 6, lastFedDay: addDays(today, days) });
+
+  it('is 2 days', () => {
+    expect(MAX_ZONE_SHIFT_DAYS).toBe(2);
+  });
+
+  it('switches all five functions at the same point: 2 days ahead is a zone move, 3 is a clock error', () => {
+    const near = stateAhead(2);
+    const far = stateAhead(3);
+
+    expect(effectiveToday(today, near.lastFedDay)).toBe(near.lastFedDay);
+    expect(effectiveToday(today, far.lastFedDay)).toBe(today);
+
+    expect(isFedOn(near, today)).toBe(true);
+    expect(isFedOn(far, today)).toBe(false);
+
+    expect(displayedStreak(near, today)).toBe(4);
+    expect(displayedStreak(far, today)).toBe(0);
+
+    // A last fed day on or after today is never a missed day, near or far.
+    expect(missedDays(near, today)).toBe(0);
+    expect(missedDays(far, today)).toBe(0);
+
+    // An attempt dated today: unchanged for 2 days behind the last fed day, a restart for 3.
+    expect(applyFedDay(near, today)).toEqual(near);
+    expect(applyFedDay(far, today)).toEqual({ current: 1, longest: 6, lastFedDay: today });
   });
 });
 

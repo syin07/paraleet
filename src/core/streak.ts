@@ -1,6 +1,6 @@
 // Streak rules (PRD section 6). The streak counts consecutive ParaLeet days with at least one
 // attempt. A missed day resets it to zero. That is the only penalty in the app.
-import { daysBetween } from './day';
+import { daysBetween, MAX_ZONE_SHIFT_DAYS } from './day';
 import type { ParaDay } from './types';
 
 export interface StreakState {
@@ -15,9 +15,6 @@ export const EMPTY_STREAK: StreakState = {
   longest: 0,
   lastFedDay: null,
 };
-
-/** How far ahead of today a last fed day can be and still be explained by a time-zone move. */
-const MAX_ZONE_SHIFT_DAYS = 2;
 
 /**
  * The streak after an attempt on `day`. Later attempts on an already-fed day change nothing.

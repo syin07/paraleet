@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays } from './day';
+import { addDays, daysBetween } from './day';
 import {
   applyAttempt,
   EMPTY_PET_FACTS,
@@ -51,6 +51,47 @@ describe('stageFor and isGrowthSolve', () => {
     expect(isGrowthSolve('hard')).toBe(true);
     expect(isGrowthSolve('good')).toBe(true);
     expect(isGrowthSolve('easy')).toBe(true);
+  });
+});
+
+/**
+ * An independent reference for days that never go backwards: it reads the plain list of days and
+ * calls none of applyFedDay, applyAttempt or recomputePetFacts.
+ */
+function referenceStreaks(days: string[]) {
+  let run = 0;
+  let longest = 0;
+  let previous: string | null = null;
+  for (const day of days) {
+    if (previous === null || daysBetween(previous, day) > 1) run = 1;
+    else if (daysBetween(previous, day) === 1) run += 1;
+    longest = Math.max(longest, run);
+    previous = day;
+  }
+  return { currentStreak: run, longestStreak: longest, lastFedDay: previous };
+}
+
+describe('the fold against an independent reference', () => {
+  it.each([7, 8, 9, 100, 31337])('matches the streak read from the plain list of days (seed %i)', (seed) => {
+    const random = seeded(seed);
+    const attempts: AttemptFact[] = [];
+    const days: string[] = [];
+    let facts: PetFacts = EMPTY_PET_FACTS;
+    let day = '2026-02-20';
+    for (let i = 0; i < 300; i++) {
+      const roll = random();
+      if (roll < 0.3) day = addDays(day, 0);
+      else if (roll < 0.8) day = addDays(day, 1);
+      else day = addDays(day, 2 + Math.floor(random() * 4));
+      const attempt: AttemptFact = { paraDay: day, rating: RATINGS[Math.floor(random() * 4)] ?? 'good' };
+      attempts.push(attempt);
+      days.push(day);
+      facts = applyAttempt(facts, attempt);
+      expect(facts).toMatchObject(referenceStreaks(days));
+      expect(recomputePetFacts(attempts)).toMatchObject(referenceStreaks(days));
+    }
+    // The run must have been interesting: some streak of 5 or more and some resets.
+    expect(facts.longestStreak).toBeGreaterThanOrEqual(5);
   });
 });
 
