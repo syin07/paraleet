@@ -63,6 +63,23 @@ export class CardWindowController {
     else this.show(anchor);
   }
 
+  /**
+   * Opens the card at `anchor`, unless a card is already open: that one is brought forward where
+   * it is. A notification click must not throw away a report the user is halfway through.
+   */
+  open(anchor: CardAnchor): void {
+    const window = this.current();
+    if (!window) {
+      this.show(anchor);
+      return;
+    }
+    // Not shown yet means it is still loading and will show itself.
+    if (this.shown) {
+      app.focus({ steal: true });
+      window.focus();
+    }
+  }
+
   show(anchor: CardAnchor): void {
     this.hide();
     this.anchor = anchor;

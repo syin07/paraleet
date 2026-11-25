@@ -22,11 +22,19 @@ test('two reminders a day at the set times, never repeated, and a click opens th
     await running.setNow('2026-11-26T02:00:00.000Z');
     expect(await running.notifications()).toHaveLength(1);
 
-    // Clicking it opens the compact card.
+    // Clicking it opens the compact card, beside Para, who is on the desktop.
     expect((await running.card()).exists).toBe(false);
+    expect((await running.pet()).visible).toBe(true);
     await running.clickNotification(0);
-    await running.cardPage();
+    const firstCard = await running.cardPage();
     await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    expect((await running.card()).anchor).toBe('pet');
+
+    // A second click keeps the card that is open (and whatever is typed in it): no new window.
+    await running.clickNotification(0);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(firstCard.isClosed()).toBe(false);
+    expect(await running.card()).toMatchObject({ visible: true, anchor: 'pet' });
 
     // A restart does not send it again.
     await running.close();
@@ -42,6 +50,19 @@ test('two reminders a day at the set times, never repeated, and a click opens th
     await running.setNow('2026-11-26T09:00:00.000Z');
     await running.setNow('2026-11-26T11:59:00.000Z');
     expect(await running.notifications()).toHaveLength(1);
+
+    // With Para hidden from the desktop, a click opens the card under the menu bar icon instead.
+    await running.page.evaluate(() =>
+      (
+        globalThis as unknown as { paraleet: { updateSettings(patch: object): Promise<unknown> } }
+      ).paraleet.updateSettings({ petVisible: false }),
+    );
+    await expect.poll(async () => (await running?.pet())?.visible).toBe(false);
+    expect((await running.card()).exists).toBe(false);
+    await running.clickNotification(0);
+    await running.cardPage();
+    await expect.poll(async () => (await running?.card())?.visible).toBe(true);
+    expect((await running.card()).anchor).toBe('tray');
   } finally {
     await running?.close().catch(() => undefined);
     data.remove();

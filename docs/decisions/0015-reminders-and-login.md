@@ -20,7 +20,7 @@ Two system notifications a day at most, each naming the problem, both skipped on
 
 6. **Notifications go through a port** (`ctx.notify`). Main shows an Electron `Notification` and keeps it alive until clicked or closed. Unit tests collect notices; end-to-end runs record them and show nothing on the owner's Mac. The first real notification makes macOS ask for permission; if the user refuses, Para's mood on the desktop is still the main reminder (PRD: "notifications are the backup").
 
-7. **Clicking a notification opens the compact card** beside the floating pet when it is showing, otherwise under the menu bar icon (`WindowPort.openCard`, which opens and never toggles).
+7. **Clicking a notification opens the compact card** beside the floating pet when it is showing, otherwise under the menu bar icon (`WindowPort.openCard`, which opens and never toggles). If a card is already open it stays as it is and comes forward, so a click cannot throw away a report the user is halfway through.
 
 8. **Only a packaged app registers a login item.** `createLoginItemSync` calls `app.setLoginItemSettings` when the setting changes, and never in a development run, which would register the Electron binary itself.
 

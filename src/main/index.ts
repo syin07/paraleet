@@ -197,7 +197,7 @@ function start(): void {
         }, 0);
       },
       setCardSize: (width, height) => card.setSize(width, height),
-      openCard: () => card.show(pet.birdRect() ? 'pet' : 'tray'),
+      openCard: () => card.open(pet.birdRect() ? 'pet' : 'tray'),
     },
     notifyChanged: () => {
       // A settings change may show or hide the pet; a report changes the icon and the streak.
