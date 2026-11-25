@@ -3,7 +3,7 @@
 import type { BridgeHandlers } from '../../bridge/contract';
 import { openDatabase, type Db } from '../../data';
 import { FakeClock } from '../clock';
-import { newSession } from './context';
+import { newSession, type Notice } from './context';
 import { createHandlers, type AppContext } from './index';
 
 export interface TestApp {
@@ -15,6 +15,8 @@ export interface TestApp {
   openedUrls: string[];
   /** What the services asked of the windows, in order. */
   windowCalls: string[];
+  /** Notifications the app showed, in order. */
+  notices: Notice[];
   /** How many times the app told its windows that something changed. */
   changes: () => number;
   close(): void;
@@ -32,6 +34,7 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
   const { db } = openDatabase(options.path ?? ':memory:', clock.now().toISOString());
   const openedUrls: string[] = [];
   const windowCalls: string[] = [];
+  const notices: Notice[] = [];
   let changeCount = 0;
   const ctx: AppContext = {
     db,
@@ -39,6 +42,7 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
     session: newSession(),
     windows: {
       showMain: (screen) => windowCalls.push(`showMain:${screen ?? ''}`),
+      showSwap: () => windowCalls.push('showSwap'),
       movePetBy: (dx, dy) => windowCalls.push(`movePetBy:${dx},${dy}`),
       endPetDrag: () => windowCalls.push('endPetDrag'),
       setPetInteractive: (interactive) => windowCalls.push(`setPetInteractive:${interactive}`),
@@ -46,10 +50,12 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
       showCard: (anchor) => windowCalls.push(`showCard:${anchor}`),
       hideCard: () => windowCalls.push('hideCard'),
       setCardSize: (width, height) => windowCalls.push(`setCardSize:${width}x${height}`),
+      openCard: () => windowCalls.push('openCard'),
     },
     notifyChanged: () => {
       changeCount += 1;
     },
+    notify: (notice) => notices.push(notice),
     openExternal: async (url) => {
       openedUrls.push(url);
     },
@@ -62,6 +68,7 @@ export function createTestApp(options: { now?: string; timeZone?: string; path?:
     handlers: createHandlers(ctx),
     openedUrls,
     windowCalls,
+    notices,
     changes: () => changeCount,
     close: () => db.close(),
   };

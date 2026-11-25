@@ -145,6 +145,8 @@ export function completeOnboarding(
   ctx: AppContext,
   input: { firstReminderTime: string; eveningReminderTime: string },
   buildToday: (ctx: AppContext) => TodayView,
+  /** Runs once, inside the transaction, the first time Para hatches. */
+  afterHatching?: (ctx: AppContext) => void,
 ): TodayView {
   ctx.db.transaction(() => {
     updateSettings(ctx.db, {
@@ -153,7 +155,9 @@ export function completeOnboarding(
     });
     // Make sure the pet exists before marking it hatched.
     const moment = currentMoment(ctx);
+    const firstTime = moment.pet.hatchedAt === null;
     saveHatched(ctx.db, moment.now.toISOString());
+    if (firstTime) afterHatching?.(ctx);
   });
   ctx.notifyChanged();
   return buildToday(ctx);

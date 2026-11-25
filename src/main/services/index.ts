@@ -6,6 +6,7 @@ import { getProblem } from '../../data/repos/problems';
 import { getSettings, updateSettings } from '../../data/repos/settings';
 import type { AppContext } from './context';
 import { acknowledgeGreeting, completeOnboarding } from './pet';
+import { skipRemindersAlreadyPassed } from './reminders';
 import {
   addProblem,
   getProblemDetail,
@@ -19,9 +20,10 @@ import {
 import { getReportContext, revealKeyInsight, submitReport } from './report';
 import { getSwapCandidates, getToday, setEquippedAccessories, swapToday } from './today';
 
-export { newSession, type AppContext, type SessionState, type WindowPort } from './context';
+export { newSession, type AppContext, type Notice, type SessionState, type WindowPort } from './context';
 export { createMoodWatcher, nextCelebrationStep, trayState } from './pet';
 export { reconcile, type ReconcileResult } from './reconcile';
+export { sendDueReminder } from './reminders';
 
 /**
  * The UI never hands main a URL to open. Main opens only links stored in the database, and only
@@ -72,6 +74,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     setEquippedAccessories: ({ accessories }) => setEquippedAccessories(ctx, accessories),
     acknowledgeGreeting: () => acknowledgeGreeting(ctx, getToday),
     showMainWindow: ({ screen }) => done(() => ctx.windows.showMain(screen)),
+    showSwap: () => done(() => ctx.windows.showSwap()),
     movePetWindowBy: ({ dx, dy }) => done(() => ctx.windows.movePetBy(dx, dy)),
     endPetDrag: () => done(() => ctx.windows.endPetDrag()),
     setPetInteractive: ({ interactive }) => done(() => ctx.windows.setPetInteractive(interactive)),
@@ -79,7 +82,7 @@ export function createHandlers(ctx: AppContext): BridgeHandlers {
     showCard: ({ anchor }) => done(() => ctx.windows.showCard(anchor)),
     hideCard: () => done(() => ctx.windows.hideCard()),
     setCardSize: ({ width, height }) => done(() => ctx.windows.setCardSize(width, height)),
-    completeOnboarding: (input) => completeOnboarding(ctx, input, getToday),
+    completeOnboarding: (input) => completeOnboarding(ctx, input, getToday, skipRemindersAlreadyPassed),
     getSettings: () => getSettings(ctx.db),
     updateSettings: (patch) => {
       const settings = updateSettings(ctx.db, patch);

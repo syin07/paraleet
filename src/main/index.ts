@@ -2,7 +2,17 @@
 import { randomInt } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, powerMonitor, screen, shell, type MenuItemConstructorOptions } from 'electron';
+import { uptime } from 'node:os';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Notification,
+  powerMonitor,
+  screen,
+  shell,
+  type MenuItemConstructorOptions,
+} from 'electron';
 import { CHANGED_EVENT, NAVIGATE_EVENT } from '../bridge/channels';
 import { DATABASE_FILE_NAME, openDatabase, type Db } from '../data';
 import { ensurePet, saveHatched } from '../data/repos/pet';
@@ -16,10 +26,13 @@ import {
   newSession,
   nextCelebrationStep,
   reconcile,
+  sendDueReminder,
   trayState,
   type AppContext,
+  type Notice,
 } from './services';
 import { createMainWindow, isRendererUrl } from './windows/mainWindow';
+import { createLoginItemSync, startsQuietly } from './loginItem';
 import { TrayController } from './tray';
 import { CardWindowController } from './windows/cardWindow';
 import { PetWindowController } from './windows/petWindow';
@@ -37,6 +50,9 @@ if (process.env.PARALEET_USER_DATA_DIR) {
   // Development runs never touch the installed app's real data.
   app.setPath('userData', join(app.getPath('appData'), 'ParaLeet-dev'));
 }
+
+/** Until this moment, the app being activated does not open the main window (see the notifier). */
+let quietActivationUntil = 0;
 
 let mainWindow: BrowserWindow | null = null;
 let petWindow: PetWindowController | null = null;
@@ -113,7 +129,17 @@ function start(): void {
     return;
   }
 
+  const database = db;
+  // "Launch at login" in Settings. Only a packaged app registers itself with the system.
+  const loginItem = createLoginItemSync({
+    packaged: app.isPackaged,
+    read: () => getSettings(database).launchAtLogin,
+    apply: (openAtLogin) => app.setLoginItemSettings({ openAtLogin }),
+  });
+
   const openedUrls: string[] = [];
+  const notices: Notice[] = [];
+  const liveNotifications = new Set<Notification>();
   const pet = new PetWindowController(
     db,
     clock,
@@ -127,7 +153,9 @@ function start(): void {
   petWindow = pet;
 
   // The compact card hangs on the bird or on the menu bar icon, whichever asked for it.
-  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() }, () => updateDock());
+  const card = new CardWindowController({ pet: () => pet.birdRect(), tray: () => tray.bounds() }, () => updateDock(), {
+    closeOnBlur: !isE2E,
+  });
   const trayMenu = (): MenuItemConstructorOptions[] => [
     { label: 'Open ParaLeet', click: () => showMainWindow() },
     { label: "Swap today's problem…", click: () => showMainWindow('/today/swap') },
@@ -154,6 +182,7 @@ function start(): void {
     session: newSession(),
     windows: {
       showMain: (target) => showMainWindow(target ? `/${target}` : ''),
+      showSwap: () => showMainWindow('/today/swap'),
       movePetBy: (dx, dy) => pet.moveBy(dx, dy),
       endPetDrag: () => pet.endDrag(),
       setPetInteractive: (interactive) => pet.setInteractive(interactive),
@@ -168,20 +197,42 @@ function start(): void {
         }, 0);
       },
       setCardSize: (width, height) => card.setSize(width, height),
+      openCard: () => card.open(pet.birdRect() ? 'pet' : 'tray'),
     },
     notifyChanged: () => {
       // A settings change may show or hide the pet; a report changes the icon and the streak.
-      // Neither may stop the windows from hearing about a change that is already saved.
+      // None of these may stop the windows from hearing about a change that is already saved.
       try {
         pet.sync();
         tray.sync();
+        loginItem.sync();
       } catch (error) {
-        console.error('ParaLeet could not update the pet window or the menu bar icon:', error);
+        console.error('ParaLeet could not update the pet window, the menu bar icon or the login item:', error);
       }
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CHANGED_EVENT);
       }
       scheduleCelebrationStep();
+    },
+    notify: (notice) => {
+      // End-to-end runs record notifications and never show one on the owner's Mac.
+      if (isE2E) {
+        notices.push(notice);
+        return;
+      }
+      if (!Notification.isSupported()) return;
+      const notification = new Notification({ title: notice.title, body: notice.body });
+      // Held until it is clicked or goes away, or it could be collected with its click handler.
+      liveNotifications.add(notification);
+      notification.on('click', () => {
+        liveNotifications.delete(notification);
+        // Clicking a notification also "activates" the app, which normally opens the main window.
+        // Here the click means "show me the card": hold the main window back for a moment.
+        quietActivationUntil = Date.now() + 1500;
+        notice.onClick();
+      });
+      notification.on('close', () => liveNotifications.delete(notification));
+      notification.show();
     },
     openExternal: async (url) => {
       if (isE2E) {
@@ -246,6 +297,7 @@ function start(): void {
 
   const dayWatcher = createDayWatcher(ctx);
   const moodWatcher = createMoodWatcher(ctx);
+
   // One tick does everything that depends on the clock. Long timers are not trusted (PRD section 9).
   // Each step is guarded: one that fails is logged and must not stop the others, the next tick,
   // or the main window from opening.
@@ -262,6 +314,9 @@ function start(): void {
     step("check Para's mood", () => moodWatcher.check());
     step('update the pet window', () => pet.sync());
     step('update the menu bar icon', () => tray.sync());
+    step('update the login item', () => loginItem.sync());
+    // Last: a reminder names today's problem and may assign it.
+    step('send a reminder', () => sendDueReminder(ctx));
   };
   tick();
   setInterval(tick, TICK_MS);
@@ -303,13 +358,20 @@ function start(): void {
         if (!item?.click) throw new Error(`No pet menu item "${label}"`);
         (item.click as () => void)();
       },
+      notifications: () => notices.map((notice) => ({ title: notice.title, body: notice.body })),
+      clickNotification: (index: string) => {
+        const notice = notices[Number(index)];
+        if (!notice) throw new Error(`No notification ${index}`);
+        notice.onClick();
+      },
+      loginItemWanted: () => loginItem.wanted(),
       tray: () => tray.facts(),
       clickTray: () => card.toggle('tray'),
       // What losing focus does to the card. With `early`, the card is opened and loses focus in the
       // same breath, before it has been shown.
       blurCard: (early: string) => {
         if (early === 'early') card.show('tray');
-        card.current()?.emit('blur');
+        card.lostFocus();
       },
       trayMenuLabels: () => trayMenu().map((item) => item.label ?? item.type ?? ''),
       clickTrayMenu: (label: string) => {
@@ -331,7 +393,18 @@ function start(): void {
     };
   }
 
-  showMainWindow();
+  // Opened by the login item, the app starts with only Para and the menu bar icon.
+  const quiet = startsQuietly({
+    // End-to-end tests can say "this is the login launch"; a packaged app never reads this.
+    wasOpenedAtLogin:
+      app.getLoginItemSettings().wasOpenedAtLogin || (isE2E && process.env.PARALEET_E2E_AT_LOGIN === '1'),
+    packaged: app.isPackaged,
+    launchAtLogin: getSettings(ctx.db).launchAtLogin,
+    uptimeSeconds: uptime(),
+    hatched: ensurePet(database, ctx.randomSeed(), clock.now().toISOString()).hatchedAt !== null,
+  });
+  if (quiet) updateDock();
+  else showMainWindow();
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -339,7 +412,10 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => showMainWindow());
-  app.on('activate', () => showMainWindow());
+  app.on('activate', () => {
+    if (Date.now() < quietActivationUntil) return;
+    showMainWindow();
+  });
   app.on('window-all-closed', () => {
     // Stay running on macOS; the pet and the menu bar icon keep the app alive.
     if (process.platform !== 'darwin') app.quit();
