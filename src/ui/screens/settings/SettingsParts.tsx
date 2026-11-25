@@ -35,7 +35,7 @@ export function Row({
 }) {
   return (
     <div className="flex min-h-14 flex-col justify-center px-4 py-2.5">
-      <div className={cx('flex gap-4', stacked ? 'flex-col' : 'items-center justify-between')}>
+      <div className={cx('flex', stacked ? 'flex-col gap-2.5' : 'items-center justify-between gap-4')}>
         <div className="min-w-0">
           <div className="text-base text-fg">{label}</div>
           {description && <div className="text-sm text-fg-muted">{description}</div>}
@@ -49,6 +49,11 @@ export function Row({
       )}
     </div>
   );
+}
+
+/** One comparison for choosing a segment and for deciding whether a saved value is one of the choices. */
+export function sameValue(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-9;
 }
 
 export interface SegmentOption {
@@ -70,7 +75,7 @@ export function Segmented({
 }) {
   const selected = Math.max(
     0,
-    options.findIndex((option) => option.value === value),
+    options.findIndex((option) => sameValue(option.value, value)),
   );
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
@@ -136,8 +141,10 @@ export function DraftInput({
 
   async function commit(): Promise<void> {
     if (draft === null) return;
-    const saved = await onCommit(draft);
-    if (saved) setDraft(null);
+    const sent = draft;
+    const saved = await onCommit(sent);
+    // Keep anything typed while the save was running.
+    if (saved) setDraft((current) => (current === sent ? null : current));
   }
 
   return (

@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { ParaLeetApi } from '../../src/bridge/contract';
-import { captureBothSizes, openScreen } from './screenshots';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { captureBothSizes, openScreen, WINDOW_DEFAULT, WINDOW_MIN } from './screenshots';
 
 type Host = { paraleet: ParaLeetApi };
 
@@ -13,6 +15,38 @@ async function leaveAndReturn(page: Page): Promise<void> {
   await page.getByTestId('screen-today').waitFor();
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Settings' }).click();
   await page.getByTestId('screen-settings').waitFor();
+}
+
+/** Captures the bottom of the scrolled page at both sizes, as `<name>-lower-default.png` and `-min.png`. */
+async function captureLower(page: Page, name: string): Promise<void> {
+  const dir = resolve(import.meta.dirname, '../../artifacts/screenshots');
+  mkdirSync(dir, { recursive: true });
+  for (const [label, size] of [['min', WINDOW_MIN], ['default', WINDOW_DEFAULT]] as const) {
+    await page.setViewportSize(size);
+    await page.getByTestId('screen-settings').evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await page.screenshot({ path: resolve(dir, `${name}-lower-${label}.png`), animations: 'disabled' });
+  }
+}
+
+/** Makes the first call to `updateSettings` or `setEquippedAccessories` wait `ms` before it runs. */
+function slowFirst(page: Page, method: 'updateSettings' | 'setEquippedAccessories', ms: number): Promise<void> {
+  return page.evaluate(
+    ([name, delay]) => {
+      const api = (globalThis as unknown as Host).paraleet as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+      const original = api[name] as (...args: unknown[]) => Promise<unknown>;
+      let first = true;
+      api[name as string] = async (...args: unknown[]) => {
+        if (first) {
+          first = false;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+        return original(...args);
+      };
+    },
+    [method, ms] as const,
+  );
 }
 
 /** Makes the next call to a bridge method reject once. */
@@ -91,7 +125,6 @@ test.describe('day boundary', () => {
     await openScreen(page, 'settings');
     const select = page.getByRole('combobox', { name: 'Day starts at' });
     await expect(select).toHaveValue('4');
-    await captureBothSizes(page, 'settings-save-failed');
     await expect(select.locator('option')).toHaveText(['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00']);
     await expect(page.getByText('A solve before this hour counts for the previous day.')).toBeVisible();
     await select.selectOption('6');
@@ -174,6 +207,7 @@ test.describe('accessories', () => {
     await expect(scarf).toHaveAttribute('aria-pressed', 'false');
     await expect(bowTie).toHaveAttribute('aria-pressed', 'true');
     await captureBothSizes(page, 'settings-accessories');
+    await captureLower(page, 'settings-accessories');
   });
 
   test('a locked accessory cannot be chosen and shows what unlocks it', async ({ page }) => {
@@ -193,6 +227,7 @@ test.describe('accessories', () => {
     await expect(page.getByText('Bow tie: A 7-day streak')).toBeVisible();
     await expect(page.getByText('Crown: A 30-day streak')).toBeVisible();
     await captureBothSizes(page, 'settings-fresh');
+    await captureLower(page, 'settings-fresh');
   });
 });
 
@@ -356,6 +391,7 @@ test.describe('the screen', () => {
     const column = await page.getByTestId('screen-settings').locator('> div').boundingBox();
     expect(column?.width).toBeLessThanOrEqual(640);
     await captureBothSizes(page, 'settings-default');
+    await captureLower(page, 'settings-default');
   });
 
   test('has no horizontal scroll at the minimum window size', async ({ page }) => {
@@ -363,5 +399,77 @@ test.describe('the screen', () => {
     await openScreen(page, 'settings', 'fresh');
     const inner = await page.getByTestId('screen-settings').evaluate((element) => element.scrollWidth - element.clientWidth);
     expect(inner).toBe(0);
+  });
+});
+
+test.describe('review fixes', () => {
+  test('time inputs are 96px and the handle 200px wide at both window sizes', async ({ page }) => {
+    await openScreen(page, 'settings');
+    for (const size of [WINDOW_DEFAULT, WINDOW_MIN]) {
+      await page.setViewportSize(size);
+      for (const name of ['First reminder', 'Evening reminder']) {
+        expect((await field(page, name).boundingBox())?.width).toBe(96);
+      }
+      expect((await field(page, 'LeetCode handle').boundingBox())?.width).toBe(200);
+    }
+  });
+
+  test('a saved retention a hair off a choice marks that choice and adds no fifth segment', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await page.evaluate(() => (globalThis as unknown as Host).paraleet.updateSettings({ targetRetention: 0.9000000001 }));
+    const group = page.getByRole('radiogroup', { name: 'Target retention' });
+    await expect(group.getByRole('radio', { name: '90%' })).toHaveAttribute('aria-checked', 'true');
+    await expect(group.getByRole('radio')).toHaveCount(4);
+    await expect(group.getByRole('radio', { name: '85%' })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('two different settings changed during a slow first save both keep their new values', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await slowFirst(page, 'updateSettings', 500);
+    const show = page.getByRole('switch', { name: 'Show Para on the desktop' });
+    const launch = page.getByRole('switch', { name: 'Launch at login' });
+    await show.click();
+    await launch.click();
+    for (let i = 0; i < 5; i += 1) {
+      await expect(show).toHaveAttribute('aria-checked', 'false');
+      await expect(launch).toHaveAttribute('aria-checked', 'false');
+      await page.waitForTimeout(150);
+    }
+    await expect(toast(page)).toHaveText('Saved');
+    await expect(show).toHaveAttribute('aria-checked', 'false');
+    await expect(launch).toHaveAttribute('aria-checked', 'false');
+    const saved = await page.evaluate(() => (globalThis as unknown as Host).paraleet.getSettings());
+    expect([saved.petVisible, saved.launchAtLogin]).toEqual([false, false]);
+  });
+
+  test('text typed after Enter while the save is still running is not lost', async ({ page }) => {
+    await openScreen(page, 'settings');
+    await slowFirst(page, 'updateSettings', 500);
+    const handle = field(page, 'LeetCode handle');
+    await handle.fill('abc');
+    await handle.press('Enter');
+    await handle.click();
+    await handle.pressSequentially('def');
+    await page.waitForTimeout(900);
+    await expect(handle).toHaveValue('abcdef');
+    await handle.press('Enter');
+    await expect(toast(page)).toHaveText('Saved');
+    await expect.poll(() => page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getSettings()).leetcodeHandle)).toBe('abcdef');
+  });
+
+  test('a second accessory change builds on the first while it is in flight', async ({ page }) => {
+    await openScreen(page, 'settings', 'accessories');
+    await slowFirst(page, 'setEquippedAccessories', 500);
+    const group = page.getByRole('group', { name: 'Accessories' });
+    const bowTie = group.getByRole('button', { name: 'Bow tie' });
+    const scarf = group.getByRole('button', { name: 'Scarf' });
+    await bowTie.click();
+    await scarf.click();
+    await expect(bowTie).toHaveAttribute('aria-pressed', 'true');
+    await expect(scarf).toHaveAttribute('aria-pressed', 'false');
+    await page.waitForTimeout(900);
+    await expect(bowTie).toHaveAttribute('aria-pressed', 'true');
+    await expect(scarf).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.evaluate(async () => (await (globalThis as unknown as Host).paraleet.getToday()).pet.equippedAccessories)).toEqual(['bow_tie', 'crown']);
   });
 });

@@ -3,7 +3,7 @@ import { Select } from '../../components/Field';
 import { QueryNotice } from '../../components/Layout';
 import { Toast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
-import { AccessoryChips, DraftInput, Group, Row, Segmented, type SegmentOption } from './SettingsParts';
+import { AccessoryChips, DraftInput, Group, Row, Segmented, sameValue, type SegmentOption } from './SettingsParts';
 import { useSettingsModel, type RowKey } from './useSettingsModel';
 
 const TIME_MESSAGE = 'Use a 24-hour time like 16:00';
@@ -18,7 +18,7 @@ const percent = (value: number): string => `${Math.round(value * 1000) / 10}%`;
 
 /** The four clear choices, plus the saved value if it is none of them, so the screen never misstates it. */
 function retentionOptions(saved: number): SegmentOption[] {
-  const known = RETENTION_CHOICES.some((choice) => Math.abs(choice - saved) < 1e-9);
+  const known = RETENTION_CHOICES.some((choice) => sameValue(choice, saved));
   const values = known ? RETENTION_CHOICES : [...RETENTION_CHOICES, saved].sort((a, b) => a - b);
   return values.map((value) => ({ value, label: percent(value) }));
 }
@@ -38,13 +38,14 @@ export function SettingsScreen() {
 
   const timeRow = (key: 'firstReminderTime' | 'eveningReminderTime', label: string, description: string) => (
     <Row label={label} description={description} error={errors[key]}>
+      <div className="w-24 shrink-0">
       <DraftInput
         label={label}
         value={settings[key]}
         placeholder="HH:MM"
         maxLength={5}
         inputMode="numeric"
-        className="w-24 text-center tabular-nums"
+        className="text-center tabular-nums"
         invalid={errors[key] !== undefined}
         onEdit={() => model.clearError(key)}
         onCommit={async (text) => {
@@ -57,6 +58,7 @@ export function SettingsScreen() {
           return save(key, { [key]: time });
         }}
       />
+      </div>
     </Row>
   );
 
@@ -139,11 +141,11 @@ export function SettingsScreen() {
           description="Not used yet. Saved for checking solves automatically in a later version."
           error={rowError('leetcodeHandle')}
         >
+          <div className="w-[200px] shrink-0">
           <DraftInput
             label="LeetCode handle"
             value={settings.leetcodeHandle}
             maxLength={HANDLE_MAX}
-            className="w-[200px]"
             invalid={rowError('leetcodeHandle') !== undefined}
             onEdit={() => model.clearError('leetcodeHandle')}
             onCommit={async (text) => {
@@ -152,6 +154,7 @@ export function SettingsScreen() {
               return save('leetcodeHandle', { leetcodeHandle: handle });
             }}
           />
+          </div>
         </Row>
       </Group>
 

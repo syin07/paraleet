@@ -64,7 +64,11 @@ export function useSettingsModel() {
   const run = useCallback(
     (key: RowKey, shown: Overlay, task: () => Promise<void>): Promise<boolean> => {
       inFlight.current += 1;
-      setOverlay((previous) => ({ ...previous, ...shown }));
+      setOverlay((previous) => ({
+        ...previous,
+        ...shown,
+        settings: { ...previous.settings, ...shown.settings },
+      }));
       const result = chain.current.then(async () => {
         try {
           await task();
